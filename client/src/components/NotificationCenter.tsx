@@ -1,0 +1,310 @@
+'use client'
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { 
+  getNotifications, 
+  getUnreadNotificationCount,
+  markNotificationsAsRead,
+  subscribeToNotifications,
+  formatNotificationTime,
+  getNotificationColor
+} from '@/utils/notifications';
+import { Notification } from '@/types';
+
+interface NotificationCenterProps {
+  className?: string;
+}
+
+export default function NotificationCenter({ className = '' }: NotificationCenterProps) {
+  const { user } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch notifications with better error handling
+  const fetchNotifications = useCallback(async (reset = false) => {
+    if (!user) return;
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const offset = reset ? 0 : notifications.length;
+      const { data, error } = await getNotifications(user.id, 10, offset);
+
+      if (error) {
+        console.error('Error fetching notifications:', error);
+        setError('Failed to load notifications');
+        return;
+      }
+
+      if (data) {
+        if (reset) {
+          setNotifications(data);
+        } else {
+          setNotifications(prev => [...prev, ...data]);
+        }
+        setHasMore(data.length === 10);
+      } else {
+        // Handle null data case
+        if (reset) {
+          setNotifications([]);
+        }
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('Notification fetch error:', error);
+      setError('Failed to load notifications');
+    } finally {
+      setLoading(false);
+    }
+  }, [user, notifications.length]);
+
+  // Fetch unread count with error handling
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const count = await getUnreadNotificationCount(user.id);
+      setUnreadCount(count);
+    } catch (error) {
+      console.error('Error fetching unread count:', error);
+      // Don't show error for unread count, just default to 0
+      setUnreadCount(0);
+    }
+  }, [user]);
+
+  // Initial fetch
+  useEffect(() => {
+    if (user) {
+      fetchNotifications(true);
+      fetchUnreadCount();
+    }
+  }, [user]);
+
+  // Real-time subscription with error handling
+  useEffect(() => {
+    if (!user) return;
+
+    try {
+      const unsubscribe = subscribeToNotifications(
+        user.id,
+        (newNotification) => {
+          setNotifications(prev => [newNotification, ...prev]);
+          setUnreadCount(prev => prev + 1);
+        },
+        (updatedNotification) => {
+          setNotifications(prev => 
+            prev.map(n => 
+              n.id === updatedNotification.id ? updatedNotification : n
+            )
+          );
+          if (updatedNotification.read) {
+            setUnreadCount(prev => Math.max(0, prev - 1));
+          }
+        }
+      );
+
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up real-time notifications:', error);
+      // Continue without real-time updates
+    }
+  }, [user]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Mark notifications as read when dropdown opens
+  useEffect(() => {
+    if (isOpen && user && unreadCount > 0) {
+      const timer = setTimeout(async () => {
+        try {
+          await markNotificationsAsRead(user.id);
+          setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+          setUnreadCount(0);
+        } catch (error) {
+          console.error('Error marking notifications as read:', error);
+          // Don't show error to user, just fail silently
+        }
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, user, unreadCount]);
+
+  const toggleDropdown = () => {
+    setIsOpen(!isOpen);
+  };
+
+  const loadMore = () => {
+    if (!loading && hasMore && !error) {
+      fetchNotifications();
+    }
+  };
+
+  const retryFetch = () => {
+    setError(null);
+    fetchNotifications(true);
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className={`relative ${className}`} ref={dropdownRef}>
+      {/* Notification Bell */}
+      <button
+        onClick={toggleDropdown}
+        className="relative p-2 text-gray-400 hover:text-white transition-colors"
+        aria-label="Notifications"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" 
+          />
+        </svg>
+        
+        {/* Unread Badge */}
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-80 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 max-h-96 flex flex-col">
+          {/* Header */}
+          <div className="p-4 border-b border-gray-700">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Notifications</h3>
+              {notifications.length > 0 && !error && (
+                <button
+                  onClick={() => fetchNotifications(true)}
+                  className="text-blue-400 hover:text-blue-300 text-sm"
+                  disabled={loading}
+                >
+                  Refresh
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Notifications List */}
+          <div className="flex-1 overflow-y-auto">
+            {error ? (
+              <div className="p-8 text-center">
+                <div className="text-4xl mb-4">⚠️</div>
+                <p className="text-red-400 mb-2">Failed to load notifications</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  There was an issue loading your notifications. This might be temporary.
+                </p>
+                <button
+                  onClick={retryFetch}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : loading && notifications.length === 0 ? (
+              <div className="p-4 space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex items-start space-x-3 animate-pulse">
+                    <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-700 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="text-4xl mb-4">🔔</div>
+                <p className="text-gray-400 mb-2">No notifications yet</p>
+                <p className="text-sm text-gray-500">
+                  We'll notify you when someone likes your posts, follows you, or when there's community activity!
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-700">
+                {notifications.map((notification) => (
+                  <NotificationItem key={notification.id} notification={notification} />
+                ))}
+                
+                {hasMore && !error && (
+                  <div className="p-3 text-center">
+                    <button
+                      onClick={loadMore}
+                      disabled={loading}
+                      className="text-blue-400 hover:text-blue-300 text-sm"
+                    >
+                      {loading ? 'Loading...' : 'Load More'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Individual Notification Item
+interface NotificationItemProps {
+  notification: Notification;
+}
+
+function NotificationItem({ notification }: NotificationItemProps) {
+  const colorClass = getNotificationColor(notification.type, notification.priority || 1);
+  const timeAgo = formatNotificationTime(notification.created_at);
+
+  return (
+    <div className={`p-4 hover:bg-gray-750 transition-colors cursor-pointer ${
+      !notification.read ? 'bg-gray-800/50' : ''
+    }`}>
+      <div className="flex items-start space-x-3">
+        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border ${colorClass}`}>
+          <span className="text-sm">
+            {notification.icon || '📢'}
+          </span>
+        </div>
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <p className="text-white text-sm font-medium">
+              {notification.title}
+            </p>
+            {!notification.read && (
+              <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+            )}
+          </div>
+          
+          {notification.message && (
+            <p className="text-gray-400 text-sm mt-1 line-clamp-2">
+              {notification.message}
+            </p>
+          )}
+          
+          <p className="text-gray-500 text-xs mt-2">{timeAgo}</p>
+        </div>
+      </div>
+    </div>
+  );
+}

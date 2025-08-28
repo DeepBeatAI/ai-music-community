@@ -30,37 +30,14 @@ export default function SearchBar({
     }
   }, [currentQuery]);
 
-  // Handle search input with debouncing
-  const handleInputChange = useCallback((value: string) => {
-    setQuery(value);
-    
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    if (value.length > 2) {
-      debounceRef.current = setTimeout(() => {
-        performSearch(value);
-      }, 300);
-    } else if (value.length === 0) {
-      // Clear search when query is empty
-      setSuggestions({ posts: [], users: [] });
-      setShowSuggestions(false);
-      onSearch({ posts: [], users: [] }, '');
-    } else {
-      setSuggestions({ posts: [], users: [] });
-      setShowSuggestions(false);
-    }
-  }, [onSearch]);
-
-  // Perform search query with enhanced logic
+  // Enhanced search logic with better audio post handling
   const performSearch = async (searchQuery: string) => {
     if (searchQuery.length < 3) return;
     
     setIsLoading(true);
     try {
-      // Search posts (content AND audio filenames)
-      const { data: posts } = await supabase
+      // Search posts with improved logic for audio files
+      const { data: directPosts, error: postsError } = await supabase
         .from('posts')
         .select(`
           *,
@@ -68,42 +45,63 @@ export default function SearchBar({
         `)
         .or(`content.ilike.%${searchQuery}%,audio_filename.ilike.%${searchQuery}%`)
         .order('created_at', { ascending: false })
-        .limit(10); // Increased limit for better results
+        .limit(20);
+
+      if (postsError) throw postsError;
 
       // Search users
-      const { data: users } = await supabase
+      const { data: users, error: usersError } = await supabase
         .from('user_profiles')
         .select('*')
         .ilike('username', `%${searchQuery}%`)
-        .limit(5);
+        .limit(10);
 
-      // Also search for posts BY the found users
-      let additionalPosts: Post[] = [];
+      if (usersError) throw usersError;
+
+      // Get ALL posts from found users for accurate counting
+      let userSpecificPosts: Post[] = [];
       if (users && users.length > 0) {
-        const userIds = users.map(u => u.user_id);
-        const { data: userPosts } = await supabase
+        const userIds = users.map((u: UserProfile) => u.user_id);
+        const { data: allUserPosts, error: userPostsError } = await supabase
           .from('posts')
           .select(`
             *,
             user_profiles!posts_user_id_fkey (username)
           `)
           .in('user_id', userIds)
-          .order('created_at', { ascending: false })
-          .limit(5);
+          .order('created_at', { ascending: false });
         
-        additionalPosts = userPosts || [];
+        if (!userPostsError && allUserPosts) {
+          userSpecificPosts = allUserPosts;
+        }
       }
 
-      // Combine and deduplicate posts
-      const allFoundPosts = [...(posts || []), ...additionalPosts];
-      const uniquePosts = allFoundPosts.filter((post, index, self) =>
-        index === self.findIndex(p => p.id === post.id)
-      );
+      // Combine posts: direct matches + all posts from matching users
+      const combinedPosts = [...(directPosts || []), ...userSpecificPosts];
+      
+      // Remove duplicates based on post ID with proper TypeScript typing
+      const uniquePosts = combinedPosts.reduce((acc: Post[], post: Post) => {
+        if (!acc.find((p: Post) => p.id === post.id)) {
+          acc.push(post);
+        }
+        return acc;
+      }, [] as Post[]);
+
+      // Sort by creation date with proper TypeScript typing
+      uniquePosts.sort((a: Post, b: Post) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       const results = { 
         posts: uniquePosts, 
         users: users || [] 
       };
+      
+      console.log('Search results:', {
+        query: searchQuery,
+        totalPosts: results.posts.length,
+        audioPosts: results.posts.filter((p: Post) => p.post_type === 'audio').length,
+        textPosts: results.posts.filter((p: Post) => p.post_type === 'text').length,
+        users: results.users.length
+      });
       
       setSuggestions(results);
       setShowSuggestions(true);
@@ -118,10 +116,32 @@ export default function SearchBar({
     }
   };
 
+  // Handle search input with debouncing
+  const handleInputChange = useCallback((value: string) => {
+    setQuery(value);
+    
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    if (value.length >= 3) {
+      debounceRef.current = setTimeout(() => {
+        performSearch(value);
+      }, 300);
+    } else if (value.length === 0) {
+      setSuggestions({ posts: [], users: [] });
+      setShowSuggestions(false);
+      onSearch({ posts: [], users: [] }, '');
+    } else {
+      setSuggestions({ posts: [], users: [] });
+      setShowSuggestions(false);
+    }
+  }, [onSearch]);
+
   // Handle search submission
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    if (query.length > 0) {
+    if (query.length >= 3) {
       performSearch(query);
       setShowSuggestions(false);
     }
@@ -135,7 +155,7 @@ export default function SearchBar({
     onSearch({ posts: [], users: [] }, '');
   }, [onSearch]);
 
-  // Handle suggestion clicks
+  // Handle suggestion clicks with improved logic
   const handleSuggestionClick = useCallback((type: 'user' | 'post', item: UserProfile | Post) => {
     if (type === 'user') {
       const user = item as UserProfile;
@@ -143,8 +163,11 @@ export default function SearchBar({
       performSearch(user.username);
     } else {
       const post = item as Post;
-      const searchTerm = post.content || post.audio_filename || '';
-      setQuery(searchTerm.substring(0, 50)); // Limit length
+      // For audio posts, search by filename if available, otherwise by content
+      const searchTerm = post.post_type === 'audio' && post.audio_filename 
+        ? post.audio_filename 
+        : (post.content || '').substring(0, 50);
+      setQuery(searchTerm);
       performSearch(searchTerm);
     }
     setShowSuggestions(false);
@@ -202,35 +225,48 @@ export default function SearchBar({
         </div>
       </form>
 
-      {/* Search Suggestions */}
+      {/* Enhanced Search Suggestions */}
       {showSuggestions && (suggestions.posts.length > 0 || suggestions.users.length > 0) && (
         <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-          {/* Users Section */}
+          {/* Users Section with Post Counts */}
           {suggestions.users.length > 0 && (
             <div className="p-3 border-b border-gray-700">
               <h4 className="text-sm font-medium text-gray-300 mb-2">Creators</h4>
-              {suggestions.users.map((user) => (
-                <div 
-                  key={user.id} 
-                  className="flex items-center space-x-2 p-2 hover:bg-gray-700 rounded cursor-pointer transition-colors"
-                  onClick={() => handleSuggestionClick('user', user)}
-                >
-                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">
-                      {user.username.charAt(0).toUpperCase()}
-                    </span>
+              {suggestions.users.map((user: UserProfile) => {
+                const userPosts = suggestions.posts.filter((p: Post) => p.user_id === user.user_id);
+                const audioPosts = userPosts.filter((p: Post) => p.post_type === 'audio').length;
+                const textPosts = userPosts.filter((p: Post) => p.post_type === 'text').length;
+                
+                return (
+                  <div 
+                    key={user.id} 
+                    className="flex items-center justify-between p-2 hover:bg-gray-700 rounded cursor-pointer transition-colors"
+                    onClick={() => handleSuggestionClick('user', user)}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">
+                          {user.username.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="text-gray-200 text-sm">{user.username}</span>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {userPosts.length} posts ({audioPosts} audio, {textPosts} text)
+                    </div>
                   </div>
-                  <span className="text-gray-200 text-sm">{user.username}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
-          {/* Posts Section */}
+          {/* Posts Section with Better Audio Indicators */}
           {suggestions.posts.length > 0 && (
             <div className="p-3">
-              <h4 className="text-sm font-medium text-gray-300 mb-2">Posts</h4>
-              {suggestions.posts.map((post) => (
+              <h4 className="text-sm font-medium text-gray-300 mb-2">
+                Posts ({suggestions.posts.filter((p: Post) => p.post_type === 'audio').length} audio, {suggestions.posts.filter((p: Post) => p.post_type === 'text').length} text)
+              </h4>
+              {suggestions.posts.slice(0, 5).map((post: Post) => (
                 <div 
                   key={post.id} 
                   className="p-2 hover:bg-gray-700 rounded cursor-pointer transition-colors"
@@ -243,9 +279,14 @@ export default function SearchBar({
                     <span className="text-gray-400 text-xs">
                       {post.user_profiles?.username}
                     </span>
+                    {post.post_type === 'audio' && post.audio_filename && (
+                      <span className="text-green-400 text-xs bg-green-900/20 px-1 rounded">
+                        {post.audio_filename.substring(0, 15)}...
+                      </span>
+                    )}
                   </div>
                   <p className="text-gray-200 text-sm line-clamp-2">
-                    {post.content || post.audio_filename}
+                    {post.content || post.audio_filename || 'Audio post'}
                   </p>
                 </div>
               ))}

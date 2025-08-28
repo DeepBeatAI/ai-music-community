@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { ApiResponse, PostLike, UserFollow } from '@/types';
+import { triggerStatsUpdate } from './userStats';
 
 // Post Likes
 export const togglePostLike = async (
@@ -7,51 +8,72 @@ export const togglePostLike = async (
   userId: string, 
   isCurrentlyLiked: boolean
 ): Promise<ApiResponse<{ liked: boolean; likeCount: number }>> => {
+  const requestId = Math.random().toString(36).substr(2, 9);
+  console.log(`[LIKE-${requestId}] Starting togglePostLike:`, { postId, userId, isCurrentlyLiked });
+  
   try {
+    // Get post owner to know which users' stats will be affected
+    const { data: post, error: postError } = await supabase
+      .from('posts')
+      .select('user_id')
+      .eq('id', postId)
+      .single();
+
+    if (postError) throw postError;
+
     if (isCurrentlyLiked) {
-      // Remove like
+      console.log(`[LIKE-${requestId}] Attempting DELETE from post_likes`);
       const { error } = await supabase
         .from('post_likes')
         .delete()
         .eq('post_id', postId)
         .eq('user_id', userId);
 
+      console.log(`[LIKE-${requestId}] DELETE result:`, { error });
       if (error) throw error;
-
-      // Get updated count
-      const { count } = await supabase
-        .from('post_likes')
-        .select('*', { count: 'exact', head: true })
-        .eq('post_id', postId);
-
-      return { 
-        data: { liked: false, likeCount: count || 0 }, 
-        error: null 
-      };
     } else {
-      // Add like
+      console.log(`[LIKE-${requestId}] Attempting INSERT into post_likes`);
       const { error } = await supabase
         .from('post_likes')
         .insert({ post_id: postId, user_id: userId });
 
+      console.log(`[LIKE-${requestId}] INSERT result:`, { error });
       if (error) throw error;
-
-      // Get updated count
-      const { count } = await supabase
-        .from('post_likes')
-        .select('*', { count: 'exact', head: true })
-        .eq('post_id', postId);
-
-      return { 
-        data: { liked: true, likeCount: count || 0 }, 
-        error: null 
-      };
     }
+
+    console.log(`[LIKE-${requestId}] Getting updated count`);
+    const { count, error: countError } = await supabase
+      .from('post_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('post_id', postId);
+
+    console.log(`[LIKE-${requestId}] Count result:`, { count, countError });
+    if (countError) throw countError;
+
+    // Trigger stats update for both the liker and post owner
+    triggerStatsUpdate([userId, post.user_id]).catch(err => 
+      console.error('Failed to update stats after like action:', err)
+    );
+
+    console.log(`[LIKE-${requestId}] SUCCESS - Returning result`);
+    return { 
+      data: { liked: !isCurrentlyLiked, likeCount: count || 0 }, 
+      error: null 
+    };
   } catch (error) {
-    console.error('Error toggling post like:', error);
+    console.error(`[LIKE-${requestId}] ERROR CAUGHT:`, error);
+    console.error(`[LIKE-${requestId}] Error object details:`, {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+      name: error?.name
+    });
+    const errorMessage = error instanceof Error ? error.message : 
+                        (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
     return { 
       data: null, 
-      error: 'Failed to update like status' 
+      error: `Failed to update like status: ${errorMessage}` 
     };
   }
 };
@@ -121,15 +143,29 @@ export const toggleUserFollow = async (
       .select('*', { count: 'exact', head: true })
       .eq('following_id', followingId);
 
+    // Trigger stats update for both the follower and the followed user
+    triggerStatsUpdate([followerId, followingId]).catch(err => 
+      console.error('Failed to update stats after follow action:', err)
+    );
+
     return { 
       data: { following: !isCurrentlyFollowing, followerCount: count || 0 }, 
       error: null 
     };
   } catch (error) {
     console.error('Error toggling user follow:', error);
+    console.error('Error object details:', {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+      name: error?.name
+    });
+    const errorMessage = error instanceof Error ? error.message : 
+                        (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
     return { 
       data: null, 
-      error: 'Failed to update follow status' 
+      error: `Failed to update follow status: ${errorMessage}` 
     };
   }
 };
@@ -156,7 +192,7 @@ export const getUserFollowStatus = async (
         .eq('follower_id', followingId)
     ]);
 
-             return {
+    return {
       data: {
         following: !followStatus.error,
         followerCount: followerCount.count || 0,

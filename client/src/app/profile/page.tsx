@@ -6,6 +6,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import UserStatsCard from '@/components/UserStatsCard';
 import { supabase } from '@/lib/supabase';
 import { validateUsername } from '@/utils/validation';
+import { syncMyStatsToDatabase } from '@/utils/userStats';
 
 export default function ProfilePage() {
   const { user, profile, loading, refreshProfile } = useAuth();
@@ -29,6 +30,39 @@ export default function ProfilePage() {
       setUsername(profile.username);
     }
   }, [user, profile, loading, router]);
+
+  // Sync user stats when profile loads to ensure accuracy
+  useEffect(() => {
+    const syncStats = async () => {
+      if (user && profile) {
+        try {
+          await syncMyStatsToDatabase();
+          console.log('User stats synced on profile load');
+        } catch (error) {
+          console.error('Failed to sync user stats on profile load:', error);
+        }
+      }
+    };
+
+    syncStats();
+  }, [user, profile]);
+
+  // Refresh user statistics when profile loads
+  // useEffect(() => {
+  //   const refreshStats = async () => {
+  //     if (user && profile) {
+  //       // Refresh stats when profile loads to ensure accurate display
+  //       try {
+  //         await refreshUserStats(user.id);
+  //         console.log('User stats refreshed for profile display');
+  //       } catch (error) {
+  //         console.error('Failed to refresh user stats:', error);
+  //       }
+  //     }
+  //   };
+
+  //   refreshStats();
+  // }, [user, profile]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();

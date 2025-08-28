@@ -41,9 +41,10 @@ export default function UserStatsCard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Memoize follow status to prevent unnecessary re-renders
+  // Get real-time follow status from context
   const followStatus = useMemo(() => getFollowStatus(userId), [getFollowStatus, userId]);
 
+  // Load initial stats from database
   useEffect(() => {
     const loadUserStats = async () => {
       setLoading(true);
@@ -90,7 +91,18 @@ export default function UserStatsCard({
     };
 
     loadUserStats();
-  }, [userId, user, refreshFollowStatus, followStatus.followerCount, followStatus.followingCount]);
+  }, [userId, user, refreshFollowStatus]);
+
+  // FIXED: Update stats when follow status changes in real-time
+  useEffect(() => {
+    if (!loading && followStatus.followerCount !== undefined) {
+      setStats(prev => ({
+        ...prev,
+        followers_count: followStatus.followerCount,
+        following_count: followStatus.followingCount
+      }));
+    }
+  }, [followStatus.followerCount, followStatus.followingCount, loading]);
 
   // Show loading state
   if (loading) {

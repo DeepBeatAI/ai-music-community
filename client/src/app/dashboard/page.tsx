@@ -8,6 +8,7 @@ import AudioUpload from '@/components/AudioUpload';
 import SearchBar from '@/components/SearchBar';
 import FilterBar from '@/components/FilterBar';
 import ActivityFeed from '@/components/ActivityFeed';
+import FollowButton from '@/components/FollowButton';
 import { supabase } from '@/lib/supabase';
 import { Post, UserProfile } from '@/types';
 import { validatePostContent } from '@/utils/validation';
@@ -685,31 +686,57 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Search Results Users */}
+        {/* Search Results Users - UPDATED WITH FOLLOW BUTTON */}
         {hasUserResults && (
           <div className="max-w-2xl mx-auto mb-8">
             <h3 className="text-lg font-semibold mb-4 text-gray-200">Search Results: Creators</h3>
             <div className="grid gap-4">
-              {searchResults.users.map((user) => (
-                <div key={user.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                      <span className="text-white font-bold text-sm">
-                        {user.username.charAt(0).toUpperCase()}
-                      </span>
+              {searchResults.users.map((searchUser) => {
+                // Count posts for this user from current search results
+                const userPosts = searchResults.posts.filter(p => p.user_id === searchUser.user_id);
+                const audioPosts = userPosts.filter(p => p.post_type === 'audio').length;
+                const textPosts = userPosts.filter(p => p.post_type === 'text').length;
+                
+                return (
+                  <div key={searchUser.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">
+                          {searchUser.username.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-gray-200 font-medium">{searchUser.username}</p>
+                        <p className="text-gray-400 text-sm">
+                          {userPosts.length} posts ({audioPosts} audio, {textPosts} text)
+                        </p>
+                        <p className="text-gray-500 text-xs">
+                          Member since {new Date(searchUser.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-gray-200 font-medium">{user.username}</p>
-                      <p className="text-gray-400 text-sm">
-                        Member since {new Date(user.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
+                    
+                    {/* Replace "Follow feature coming soon" with actual FollowButton */}
+                    {user && user.id !== searchUser.user_id ? (
+                      <FollowButton
+                        userId={searchUser.user_id}
+                        username={searchUser.username}
+                        size="sm"
+                        variant="secondary"
+                        showFollowerCount={false}
+                      />
+                    ) : user && user.id === searchUser.user_id ? (
+                      <div className="text-gray-500 text-sm px-3 py-1 bg-gray-700 rounded">
+                        That's you!
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm px-3 py-1">
+                        Sign in to follow
+                      </div>
+                    )}
                   </div>
-                  <div className="text-blue-400 text-sm">
-                    Follow feature coming soon
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

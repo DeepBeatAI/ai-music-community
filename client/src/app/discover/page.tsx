@@ -72,37 +72,47 @@ export default function DiscoverPage() {
 
             {/* User Results */}
             {searchResults.users.length > 0 && (
-              <div>
-                <h3 className="text-lg font-medium text-white mb-4 flex items-center">
-                  <span className="mr-2">👥</span>
-                  Creators ({searchResults.users.length})
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {searchResults.users.map((userProfile) => (
-                    <div
-                      key={userProfile.id}
-                      className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer border border-gray-700 hover:border-gray-600"
-                      onClick={() => router.push(`/profile/${userProfile.username}`)}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                          <span className="text-white font-bold">
-                            {userProfile.username[0].toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-white truncate">{userProfile.username}</h4>
-                          <div className="flex space-x-4 text-sm text-gray-400">
-                            <span>{userProfile.post_count || 0} posts</span>
-                            <span>{userProfile.follower_count || 0} followers</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div>
+            <h3 className="text-lg font-medium text-white mb-4 flex items-center">
+            <span className="mr-2">👥</span>
+            Creators ({searchResults.users.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {searchResults.users.map((userProfile) => {
+            // Calculate post counts from search results (same logic as SearchBar suggestions)
+            const userPosts = searchResults.posts.filter((p: Post) => p.user_id === userProfile.user_id);
+            const totalPosts = userPosts.length;
+            const audioPosts = userPosts.filter((p: Post) => p.post_type === 'audio').length;
+            const textPosts = userPosts.filter((p: Post) => p.post_type === 'text').length;
+            
+            return (
+            <div
+            key={userProfile.id}
+            className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer border border-gray-700 hover:border-gray-600"
+            onClick={() => router.push(`/profile/${userProfile.username}`)}
+            >
+            <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-white font-bold">
+              {userProfile.username[0].toUpperCase()}
+              </span>
               </div>
-            )}
+                <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-white truncate">{userProfile.username}</h4>
+                      <div className="flex space-x-4 text-sm text-gray-400">
+                          <span>{totalPosts} posts</span>
+                            {totalPosts > 0 && (
+                                <span>({audioPosts} audio, {textPosts} text)</span>
+                                 )}
+                               </div>
+                             </div>
+                           </div>
+                         </div>
+                       );
+                     })}
+                   </div>
+                 </div>
+               )}
 
             {/* Post Results */}
             {searchResults.posts.length > 0 && (

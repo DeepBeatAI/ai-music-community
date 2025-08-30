@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   getNotifications, 
@@ -17,6 +18,7 @@ interface NotificationCenterProps {
 
 export default function NotificationCenter({ className = '' }: NotificationCenterProps) {
   const { user } = useAuth();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -34,7 +36,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     
     try {
       const offset = reset ? 0 : notifications.length;
-      const { data, error } = await getNotifications(user.id, 10, offset);
+      const { data, error } = await getNotifications(user.id, 5, offset);
 
       if (error) {
         console.error('Error fetching notifications:', error);
@@ -48,7 +50,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
         } else {
           setNotifications(prev => [...prev, ...data]);
         }
-        setHasMore(data.length === 10);
+        setHasMore(data.length === 5);
       } else {
         // Handle null data case
         if (reset) {
@@ -161,6 +163,36 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     fetchNotifications(true);
   };
 
+  const handleNotificationClick = async (notification: Notification) => {
+    // Mark notification as read if it's unread
+    if (!notification.read && user) {
+      try {
+        await markNotificationsAsRead(user.id, [notification.id]);
+        setNotifications(prev => 
+          prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+        );
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+      }
+    }
+
+    // Close the dropdown
+    setIsOpen(false);
+
+    // Navigate based on notification type and data
+    if (notification.related_post_id) {
+      // Navigate to dashboard where posts are displayed
+      router.push('/dashboard');
+    } else if (notification.type === 'follow' && notification.related_user_id) {
+      // For follow notifications, navigate to dashboard to see activity
+      router.push('/dashboard');
+    } else {
+      // Default navigation for system notifications
+      router.push('/dashboard');
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -243,22 +275,27 @@ export default function NotificationCenter({ className = '' }: NotificationCente
             ) : (
               <div className="divide-y divide-gray-700">
                 {notifications.map((notification) => (
-                  <NotificationItem key={notification.id} notification={notification} />
+                  <NotificationItem 
+                    key={notification.id} 
+                    notification={notification} 
+                    onNotificationClick={handleNotificationClick}
+                  />
                 ))}
-                
-                {hasMore && !error && (
-                  <div className="p-3 text-center">
-                    <button
-                      onClick={loadMore}
-                      disabled={loading}
-                      className="text-blue-400 hover:text-blue-300 text-sm"
-                    >
-                      {loading ? 'Loading...' : 'Load More'}
-                    </button>
-                  </div>
-                )}
               </div>
             )}
+          </div>
+          
+          {/* View All Link */}
+          <div className="p-3 border-t border-gray-700">
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                router.push('/notifications');
+              }}
+              className="w-full text-center text-blue-400 hover:text-blue-300 text-sm transition-colors py-1"
+            >
+              View All Notifications
+            </button>
           </div>
         </div>
       )}
@@ -269,16 +306,20 @@ export default function NotificationCenter({ className = '' }: NotificationCente
 // Individual Notification Item
 interface NotificationItemProps {
   notification: Notification;
+  onNotificationClick: (notification: Notification) => void;
 }
 
-function NotificationItem({ notification }: NotificationItemProps) {
+function NotificationItem({ notification, onNotificationClick }: NotificationItemProps) {
   const colorClass = getNotificationColor(notification.type, notification.priority || 1);
   const timeAgo = formatNotificationTime(notification.created_at);
 
   return (
-    <div className={`p-4 hover:bg-gray-750 transition-colors cursor-pointer ${
-      !notification.read ? 'bg-gray-800/50' : ''
-    }`}>
+    <div 
+      className={`p-4 hover:bg-gray-750 transition-colors cursor-pointer ${
+        !notification.read ? 'bg-gray-800/50' : ''
+      }`}
+      onClick={() => onNotificationClick(notification)}
+    >
       <div className="flex items-start space-x-3">
         <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border ${colorClass}`}>
           <span className="text-sm">

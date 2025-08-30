@@ -55,6 +55,26 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       Discover
                     </Link>
                     <Link 
+                      href="/feed" 
+                      className={`text-sm font-medium transition-colors ${
+                        pathname === '/feed' 
+                          ? 'text-blue-400' 
+                          : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      Feed
+                    </Link>
+                    <Link 
+                      href="/notifications" 
+                      className={`text-sm font-medium transition-colors ${
+                        pathname === '/notifications' 
+                          ? 'text-blue-400' 
+                          : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      Notifications
+                    </Link>
+                    <Link 
                       href="/dashboard" 
                       className={`text-sm font-medium transition-colors ${
                         pathname === '/dashboard' 

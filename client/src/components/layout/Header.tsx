@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import NotificationCenter from '@/components/NotificationCenter'
 
 export default function Header() {
   const [isMenuOpen, setlsMenuOpen] = useState(false)
@@ -33,6 +34,12 @@ export default function Header() {
               Discover
             </Link>
             {user && (
+                <Link href="/feed" className="text-gray-300 hover:text-white transition-colors">
+                  Feed
+                </Link>
+            )}
+
+            {user && (
                 <Link href="/dashboard" className="text-gray-300 hover:text-white transition-colors">
                   Dashboard
                 </Link>
@@ -46,6 +53,7 @@ export default function Header() {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
+                <NotificationCenter />
                 <Link href="/profile" className="btn-secondary">
                   Profile
                 </Link>
@@ -92,6 +100,10 @@ export default function Header() {
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
             <Link href="/" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Home</Link>
             <Link href="/discover" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Discover</Link>
+            {user && (
+                <Link href="/feed" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Feed</Link>
+            )}
+
             {user && (
                 <Link href="/dashboard" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Dashboard</Link>
             )}

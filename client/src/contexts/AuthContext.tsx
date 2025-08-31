@@ -104,7 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Redirect logic for unauthenticated users
       const publicRoutes = ['/login', '/signup', '/', '/verify-email', '/discover'];
       if (!publicRoutes.includes(pathname)) {
-        router.replace('/login');
+        // Use push instead of replace to maintain browser history
+        router.push('/login');
       }
     }
 

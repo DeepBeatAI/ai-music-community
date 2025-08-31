@@ -1,6 +1,7 @@
 'use client'
 
 import MainLayout from '@/components/layout/MainLayout';
+import AuthenticatedHome from '@/components/AuthenticatedHome';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
@@ -36,53 +37,13 @@ export default function HomePage() {
 
   return (
     <MainLayout>
-      {/* Hero Section - Content changes based on auth status */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center">
-          {user ? (
-            // Authenticated User Content
-            <div>
-              <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
-                Welcome back{profile?.username ? `, ${profile.username}` : ''}!
-              </h1>
-              <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
-                Ready to share your latest AI music creations? Your community is waiting to hear what you've been working on.
-              </p>
-              
-              <div className="space-y-4 sm:space-y-0 sm:space-x-4 sm:flex sm:justify-center">
-                <Link
-                  href="/dashboard"
-                  className="block sm:inline-block px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-                >
-                  Go to Dashboard
-                </Link>
-                <Link
-                  href="/upload"
-                  className="block sm:inline-block px-8 py-3 border border-gray-600 hover:border-gray-500 text-gray-300 hover:text-white font-medium rounded-lg transition-colors"
-                >
-                  Upload Track
-                </Link>
-              </div>
-
-              {/* Quick Stats for Authenticated Users */}
-              <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-2xl mx-auto">
-                <div className="bg-gray-800 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-400">🎵</div>
-                  <div className="text-sm text-gray-400 mt-1">Your tracks are inspiring creators worldwide</div>
-                </div>
-                <div className="bg-gray-800 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-green-400">🔥</div>
-                  <div className="text-sm text-gray-400 mt-1">New AI tools to explore</div>
-                </div>
-                <div className="bg-gray-800 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-400">🤝</div>
-                  <div className="text-sm text-gray-400 mt-1">Connect with fellow creators</div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            // Unauthenticated User Content (Marketing)
-            <div>
+      {user ? (
+        <AuthenticatedHome />
+      ) : (
+        <>
+          {/* Hero Section for Unauthenticated Users */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+            <div className="text-center">
               <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
                 Share Your <span className="text-blue-400">AI Music</span> Creations
               </h1>
@@ -124,111 +85,85 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Features Section - Same for both user types but different emphasis */}
-      <div className="bg-gray-800 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white mb-4">
-              {user ? 'What You Can Do' : 'Why AI Music Community?'}
-            </h2>
-            <p className="text-gray-300 text-lg">
-              {user 
-                ? 'Make the most of your creative platform' 
-                : 'The perfect platform for AI music creators and enthusiasts'
-              }
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">🎵</span>
+          {/* Features Section */}
+          <div className="bg-gray-800 py-20">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="text-center mb-16">
+                <h2 className="text-3xl font-bold text-white mb-4">
+                  Why AI Music Community?
+                </h2>
+                <p className="text-gray-300 text-lg">
+                  The perfect platform for AI music creators and enthusiasts
+                </p>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">
-                {user ? 'Upload & Share' : 'Create & Share'}
-              </h3>
-              <p className="text-gray-300">
-                {user 
-                  ? 'Upload your latest AI-generated music and get instant feedback from the community.'
-                  : 'Upload your AI-generated music and share it with a community that understands your craft.'
-                }
-              </p>
-              {user && (
-                <Link href="/upload" className="inline-block mt-3 text-blue-400 hover:text-blue-300 text-sm">
-                  Upload now →
-                </Link>
-              )}
-            </div>
 
-            <div className="text-center">
-              <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">🔍</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="text-center">
+                  <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">🎵</span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Create & Share</h3>
+                  <p className="text-gray-300">
+                    Upload your AI-generated music and share it with a community that understands your craft.
+                  </p>
+                </div>
+
+                <div className="text-center">
+                  <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">🔍</span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Discover</h3>
+                  <p className="text-gray-300">
+                    Explore cutting-edge AI music from creators around the world and find your next inspiration.
+                  </p>
+                  <Link href="/discover" className="inline-block mt-3 text-blue-400 hover:text-blue-300 text-sm">
+                    Explore now →
+                  </Link>
+                </div>
+
+                <div className="text-center">
+                  <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">🤝</span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Connect</h3>
+                  <p className="text-gray-300">
+                    Network with fellow AI music creators, collaborate, and grow your audience.
+                  </p>
+                </div>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Discover</h3>
-              <p className="text-gray-300">
-                {user
-                  ? 'Find new inspiration from the latest AI music trends and techniques.'
-                  : 'Explore cutting-edge AI music from creators around the world and find your next inspiration.'
-                }
+            </div>
+          </div>
+
+          {/* Call-to-Action Section */}
+          <div className="bg-gradient-to-r from-blue-900 to-purple-900 py-16">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+              <h2 className="text-3xl font-bold text-white mb-4">
+                Ready to Share Your AI Music?
+              </h2>
+              <p className="text-xl text-gray-200 mb-8">
+                Join our growing community of AI music creators and start sharing your creations today.
               </p>
-              <Link href="/discover" className="inline-block mt-3 text-blue-400 hover:text-blue-300 text-sm">
-                Explore now →
+              <Link
+                href="/signup"
+                className="inline-block px-8 py-4 bg-white text-blue-900 font-bold rounded-lg hover:bg-gray-100 transition-colors text-lg"
+              >
+                Get Started Free
               </Link>
             </div>
+          </div>
 
-            <div className="text-center">
-              <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">🤝</span>
+          {/* Footer */}
+          <footer className="bg-gray-800 border-t border-gray-700 mt-20">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <div className="text-center text-sm text-gray-400">
+                <p>&copy; 2025 AI Music Community. Share your AI-generated music with the world.</p>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Connect</h3>
-              <p className="text-gray-300">
-                {user
-                  ? 'Collaborate with other creators and grow your audience.'
-                  : 'Network with fellow AI music creators, collaborate, and grow your audience.'
-                }
-              </p>
-              {user && (
-                <Link href="/dashboard" className="inline-block mt-3 text-blue-400 hover:text-blue-300 text-sm">
-                  View dashboard →
-                </Link>
-              )}
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Call-to-Action Section - Only for unauthenticated users */}
-      {!user && (
-        <div className="bg-gradient-to-r from-blue-900 to-purple-900 py-16">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-3xl font-bold text-white mb-4">
-              Ready to Share Your AI Music?
-            </h2>
-            <p className="text-xl text-gray-200 mb-8">
-              Join our growing community of AI music creators and start sharing your creations today.
-            </p>
-            <Link
-              href="/signup"
-              className="inline-block px-8 py-4 bg-white text-blue-900 font-bold rounded-lg hover:bg-gray-100 transition-colors text-lg"
-            >
-              Get Started Free
-            </Link>
-          </div>
-        </div>
+          </footer>
+        </>
       )}
-
-      {/* Footer */}
-      <footer className="bg-gray-800 border-t border-gray-700 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center text-sm text-gray-400">
-            <p>&copy; 2025 AI Music Community. Share your AI-generated music with the world.</p>
-          </div>
-        </div>
-      </footer>
     </MainLayout>
   );
 }

@@ -16,19 +16,23 @@ export async function middleware(request: NextRequest) {
       return response;
     }
 
-    // Define public routes that don't require authentication
+    // Define routes that don't require authentication
     const publicRoutes = [
       '/',
       '/login', 
       '/signup', 
-      '/verify-email',
-      '/discover' // Make discover public for marketing
+      '/verify-email'
     ];
 
-    // Check if current path is public
-    const isPublicRoute = publicRoutes.includes(pathname);
+    // Define routes that are accessible both publicly and when authenticated
+    const hybridRoutes = ['/discover'];
 
-    if (!session && !isPublicRoute) {
+    // Check if current path is public or hybrid
+    const isPublicRoute = publicRoutes.includes(pathname);
+    const isHybridRoute = hybridRoutes.includes(pathname);
+
+    // Only redirect if no session AND route requires authentication
+    if (!session && !isPublicRoute && !isHybridRoute) {
       console.log('Middleware: No session found, redirecting to /login');
       const url = new URL('/login', request.url);
       url.searchParams.set('redirectedFrom', pathname);

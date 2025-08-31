@@ -6,11 +6,12 @@ import MainLayout from '@/components/layout/MainLayout';
 import PostItem from '@/components/PostItem';
 import AudioUpload from '@/components/AudioUpload';
 import SearchBar from '@/components/SearchBar';
-import FilterBar from '@/components/FilterBar';
+
 import ActivityFeed from '@/components/ActivityFeed';
 import FollowButton from '@/components/FollowButton';
 import { supabase } from '@/lib/supabase';
 import { Post, UserProfile } from '@/types';
+import { SearchResults } from '@/utils/search';
 import { validatePostContent } from '@/utils/validation';
 import { uploadAudioFile } from '@/utils/audio';
 
@@ -41,14 +42,13 @@ export default function DashboardPage() {
   
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<{ posts: Post[]; users: UserProfile[] }>({ posts: [], users: [] });
+  const [searchResults, setSearchResults] = useState<SearchResults>({ posts: [], users: [], totalResults: 0 });
   const [filters, setFilters] = useState<FilterOptions>({
     postType: 'all',
     sortBy: 'newest',
     timeRange: 'all'
   });
   const [isSearchActive, setIsSearchActive] = useState(false);
-  const [hasFiltersApplied, setHasFiltersApplied] = useState(false);
 
   // Auth and initial data loading
   useEffect(() => {
@@ -65,6 +65,9 @@ export default function DashboardPage() {
   useEffect(() => {
     applyFiltersAndSearch();
   }, [allPosts, filters, searchResults, isSearchActive]);
+
+  // Add missing state variable
+  const [hasFiltersApplied, setHasFiltersApplied] = useState(false);
 
   // Track if filters are applied
   useEffect(() => {
@@ -204,36 +207,28 @@ export default function DashboardPage() {
     setDisplayPosts(filtered);
   }, [allPosts, filters, searchResults, isSearchActive]);
 
-  const handleSearch = useCallback((results: { posts: Post[]; users: UserProfile[] }, query: string) => {
-    setSearchResults(results);
-    setSearchQuery(query);
-    setIsSearchActive(query.length > 0);
-  }, []);
-
-  const handleFilterChange = useCallback((newFilters: FilterOptions) => {
-    setFilters(newFilters);
-    // Don't clear search when filters change - let them work together
+  const handleSearch = useCallback((results: SearchResults, query: string) => {
+    // Ensure results is always a valid object
+    const safeResults = results || { posts: [], users: [], totalResults: 0 };
+    
+    // Ensure arrays exist
+    const safePosts = Array.isArray(safeResults.posts) ? safeResults.posts : [];
+    const safeUsers = Array.isArray(safeResults.users) ? safeResults.users : [];
+    
+    setSearchResults({
+      posts: safePosts,
+      users: safeUsers,
+      totalResults: safeResults.totalResults || (safePosts.length + safeUsers.length)
+    });
+    setSearchQuery(query || '');
+    setIsSearchActive((query || '').length > 0);
   }, []);
 
   const clearSearch = useCallback(() => {
     setSearchQuery('');
-    setSearchResults({ posts: [], users: [] });
+    setSearchResults({ posts: [], users: [], totalResults: 0 });
     setIsSearchActive(false);
   }, []);
-
-  const clearFilters = useCallback(() => {
-    setFilters({
-      postType: 'all',
-      sortBy: 'newest',
-      timeRange: 'all'
-    });
-    // Don't clear search when clearing filters
-  }, []);
-
-  const clearAll = useCallback(() => {
-    clearSearch();
-    clearFilters();
-  }, [clearSearch, clearFilters]);
 
   // Post creation handlers
   const handleAudioFileSelect = (file: File, duration?: number) => {
@@ -638,49 +633,23 @@ export default function DashboardPage() {
             currentQuery={searchQuery}
             className="w-full" 
           />
-          <FilterBar onFilterChange={handleFilterChange} currentFilters={filters} />
           
           {/* Control Buttons */}
-          {(isSearchActive || hasFiltersApplied) && (
+          {isSearchActive && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center space-x-2 text-sm text-gray-300">
-                {isSearchActive && (
-                  <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
-                    Search: "{searchQuery}"
-                  </span>
-                )}
-                {hasFiltersApplied && (
-                  <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
-                    Filters Active
-                  </span>
-                )}
+                <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
+                  Search: "{searchQuery}"
+                </span>
               </div>
               
               <div className="flex items-center space-x-2">
-                {isSearchActive && (
-                  <button
-                    onClick={clearSearch}
-                    className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-900/20 transition-colors"
-                  >
-                    Clear Search
-                  </button>
-                )}
-                {hasFiltersApplied && (
-                  <button
-                    onClick={clearFilters}
-                    className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 rounded hover:bg-purple-900/20 transition-colors"
-                  >
-                    Clear Filters
-                  </button>
-                )}
-                {(isSearchActive || hasFiltersApplied) && (
-                  <button
-                    onClick={clearAll}
-                    className="text-xs text-gray-400 hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-700 transition-colors"
-                  >
-                    Clear All
-                  </button>
-                )}
+                <button
+                  onClick={clearSearch}
+                  className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-900/20 transition-colors"
+                >
+                  Clear Search
+                </button>
               </div>
             </div>
           )}
@@ -692,10 +661,10 @@ export default function DashboardPage() {
             <h3 className="text-lg font-semibold mb-4 text-gray-200">Search Results: Creators</h3>
             <div className="grid gap-4">
               {searchResults.users.map((searchUser) => {
-                // Count posts for this user from current search results
-                const userPosts = searchResults.posts.filter(p => p.user_id === searchUser.user_id);
-                const audioPosts = userPosts.filter(p => p.post_type === 'audio').length;
-                const textPosts = userPosts.filter(p => p.post_type === 'text').length;
+                // Use real stats from search results instead of filtering current results
+                const totalPosts = searchUser.posts_count || 0;
+                const audioPosts = searchUser.audio_posts_count || 0;
+                const textPosts = searchUser.text_posts_count || 0;
                 
                 return (
                   <div key={searchUser.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between">
@@ -708,7 +677,7 @@ export default function DashboardPage() {
                       <div>
                         <p className="text-gray-200 font-medium">{searchUser.username}</p>
                         <p className="text-gray-400 text-sm">
-                          {userPosts.length} posts ({audioPosts} audio, {textPosts} text)
+                          {totalPosts} posts ({audioPosts} audio, {textPosts} text)
                         </p>
                         <p className="text-gray-500 text-xs">
                           Member since {new Date(searchUser.created_at).toLocaleDateString()}

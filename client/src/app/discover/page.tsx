@@ -6,37 +6,68 @@ import MainLayout from '@/components/layout/MainLayout';
 import SearchBar from '@/components/SearchBar';
 import PostItem from '@/components/PostItem';
 import { useAuth } from '@/contexts/AuthContext';
-import { Post, UserProfile } from '@/types';
+import { searchContent, getTrendingContent, getFeaturedCreators, SearchFilters, SearchResults } from '@/utils/search';
 
 export default function DiscoverPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [searchResults, setSearchResults] = useState<{ posts: Post[]; users: UserProfile[] }>({ posts: [], users: [] });
-  const [currentQuery, setCurrentQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResults>({ posts: [], users: [], totalResults: 0 });
+  const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
+  const [featuredCreators, setFeaturedCreators] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [currentFilters, setCurrentFilters] = useState<SearchFilters>({});
 
   useEffect(() => {
-    if (!user) {
-      router.push('/');
-      return;
-    }
-  }, [user, router]);
+    // Allow discover page to work without authentication
+    loadDefaultContent();
+  }, []);
 
-  const handleSearch = (results: { posts: Post[]; users: UserProfile[] }, query: string) => {
-    setSearchResults(results);
-    setCurrentQuery(query);
-    setHasSearched(query.length > 0);
+  const loadDefaultContent = async () => {
+    setLoading(true);
+    try {
+      const [trending, creators] = await Promise.all([
+        getTrendingContent(8),
+        getFeaturedCreators(6),
+      ]);
+      setTrendingPosts(trending);
+      setFeaturedCreators(creators);
+    } catch (error) {
+      console.error('Error loading default content:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async (results: SearchResults, query: string) => {
+    setCurrentFilters({ query });
+    try {
+      // Ensure we have valid results
+      const safeResults = {
+        posts: Array.isArray(results.posts) ? results.posts : [],
+        users: Array.isArray(results.users) ? results.users : [],
+        totalResults: results.totalResults || 0
+      };
+      
+      setSearchResults(safeResults);
+      setHasSearched(query.length > 0);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults({ posts: [], users: [], totalResults: 0 });
+      setHasSearched(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const clearSearch = () => {
-    setSearchResults({ posts: [], users: [] });
-    setCurrentQuery('');
+    setSearchResults({ posts: [], users: [], totalResults: 0 });
     setHasSearched(false);
+    setCurrentFilters({});
+    loadDefaultContent();
   };
 
-  if (!user) {
-    return null;
-  }
+  // Remove this authentication barrier - discover should work for everyone
 
   return (
     <MainLayout>
@@ -47,20 +78,42 @@ export default function DiscoverPage() {
           <p className="text-gray-400">Find amazing creators and AI-generated music</p>
         </div>
 
-        {/* Search Interface - Using Your Existing Component */}
-        <SearchBar 
-          onSearch={handleSearch}
-          currentQuery={currentQuery}
-          placeholder="Search creators, music, or content..."
-          className="w-full max-w-2xl mx-auto"
-        />
+        {/* Search Interface */}
+        <SearchBar onSearch={handleSearch} initialFilters={currentFilters} />
+        
+        {/* Search Status Line - same as Dashboard */}
+        {hasSearched && (
+          <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="flex items-center space-x-2 text-sm text-gray-300">
+              <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
+                Search: "{currentFilters.query || ''}"
+              </span>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={clearSearch}
+                className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-900/20 transition-colors"
+              >
+                Clear Search
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+          </div>
+        )}
 
         {/* Search Results Section */}
         {hasSearched && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-white">
-                Search Results ({searchResults.posts.length + searchResults.users.length})
+                Search Results ({searchResults.totalResults})
               </h2>
               <button
                 onClick={clearSearch}
@@ -70,62 +123,52 @@ export default function DiscoverPage() {
               </button>
             </div>
 
-            {/* User Results */}
+            {/* Creator Results */}
             {searchResults.users.length > 0 && (
-            <div>
-            <h3 className="text-lg font-medium text-white mb-4 flex items-center">
-            <span className="mr-2">👥</span>
-            Creators ({searchResults.users.length})
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {searchResults.users.map((userProfile) => {
-            // Calculate post counts from search results (same logic as SearchBar suggestions)
-            const userPosts = searchResults.posts.filter((p: Post) => p.user_id === userProfile.user_id);
-            const totalPosts = userPosts.length;
-            const audioPosts = userPosts.filter((p: Post) => p.post_type === 'audio').length;
-            const textPosts = userPosts.filter((p: Post) => p.post_type === 'text').length;
-            
-            return (
-            <div
-            key={userProfile.id}
-            className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer border border-gray-700 hover:border-gray-600"
-            onClick={() => router.push(`/profile/${userProfile.username}`)}
-            >
-            <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold">
-              {userProfile.username[0].toUpperCase()}
-              </span>
+              <div>
+                <h3 className="text-lg font-medium text-white mb-4">Creators</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {searchResults.users.map((userProfile) => (
+                    <div
+                      key={userProfile.id}
+                      className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/profile/${userProfile.username}`)}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                          <span className="text-white font-semibold">
+                            {userProfile.username[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-white">{userProfile.username}</h4>
+                          <div className="flex space-x-4 text-sm text-gray-400">
+                            <span>{userProfile.posts_count || 0} posts</span>
+                            <span>{userProfile.followers_count || 0} followers</span>
+                          </div>
+                          {userProfile.audio_posts_count !== undefined && userProfile.text_posts_count !== undefined && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {userProfile.audio_posts_count || 0} audio, {userProfile.text_posts_count || 0} text
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-                <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-white truncate">{userProfile.username}</h4>
-                      <div className="flex space-x-4 text-sm text-gray-400">
-                          <span>{totalPosts} posts</span>
-                            {totalPosts > 0 && (
-                                <span>({audioPosts} audio, {textPosts} text)</span>
-                                 )}
-                               </div>
-                             </div>
-                           </div>
-                         </div>
-                       );
-                     })}
-                   </div>
-                 </div>
-               )}
+            )}
 
             {/* Post Results */}
             {searchResults.posts.length > 0 && (
               <div>
-                <h3 className="text-lg font-medium text-white mb-4 flex items-center">
-                  <span className="mr-2">📝</span>
-                  Posts ({searchResults.posts.length})
-                </h3>
+                <h3 className="text-lg font-medium text-white mb-4">Posts</h3>
                 <div className="space-y-4">
                   {searchResults.posts.map((post) => (
                     <PostItem
                       key={post.id}
                       post={post}
+                      currentUserId={user?.id || ''}
                       onDelete={() => {}}
                     />
                   ))}
@@ -134,24 +177,75 @@ export default function DiscoverPage() {
             )}
 
             {/* No Results State */}
-            {searchResults.posts.length === 0 && searchResults.users.length === 0 && (
-              <div className="text-center py-12 bg-gray-800 rounded-lg">
-                <div className="text-4xl mb-4">🔍</div>
-                <p className="text-gray-400 mb-2">No results found for "{currentQuery}"</p>
-                <p className="text-sm text-gray-500">Try different search terms or check your spelling</p>
+            {searchResults.totalResults === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-400 mb-2">No results found</p>
+                <p className="text-sm text-gray-500">Try adjusting your search terms or filters</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Default Discover Content */}
+        {/* Default Discovery Content */}
         {!hasSearched && (
           <div className="space-y-8">
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🎵</div>
-              <h2 className="text-xl font-semibold text-white mb-2">Start Exploring!</h2>
-              <p className="text-gray-400 mb-6">Use the search bar above to discover creators and content</p>
-              <div className="flex justify-center space-x-4">
+            {/* Trending Section */}
+            {trendingPosts.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-white mb-4">🔥 Trending This Week</h2>
+                <div className="space-y-4">
+                  {trendingPosts.map((post) => (
+                    <PostItem
+                      key={post.id}
+                      post={post}
+                      currentUserId={user?.id || ''}
+                      onDelete={() => {}}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Featured Creators */}
+            {featuredCreators.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-white mb-4">⭐ Featured Creators</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {featuredCreators.map((creator) => (
+                    <div
+                      key={creator.id}
+                      className="bg-gray-800 p-6 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/profile/${creator.username}`)}
+                    >
+                      <div className="text-center">
+                        <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <span className="text-white font-bold text-xl">
+                            {creator.username[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <h3 className="font-medium text-white mb-2">{creator.username}</h3>
+                        <div className="text-sm text-gray-400 space-y-1">
+                          <div className="flex justify-center space-x-4">
+                            <span>{creator.user_stats?.posts_count || 0} posts</span>
+                            <span>{creator.user_stats?.followers_count || 0} followers</span>
+                          </div>
+                          <div>
+                            <span>{creator.user_stats?.likes_received || 0} likes received</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {trendingPosts.length === 0 && featuredCreators.length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🎵</div>
+                <h2 className="text-xl font-semibold text-white mb-2">Start Exploring!</h2>
+                <p className="text-gray-400 mb-6">Use the search bar above to discover creators and content</p>
                 <button
                   onClick={() => router.push('/dashboard')}
                   className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-500 transition-colors"
@@ -159,30 +253,7 @@ export default function DiscoverPage() {
                   Create Your First Post
                 </button>
               </div>
-            </div>
-
-            {/* Search Tips */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">💡 Search Tips</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-300">
-                <div>
-                  <h4 className="font-medium text-white mb-2">🎵 Find Audio</h4>
-                  <p>Search by audio filename or content description to find specific tracks</p>
-                </div>
-                <div>
-                  <h4 className="font-medium text-white mb-2">👤 Find Creators</h4>
-                  <p>Search by username to discover new creators and their content</p>
-                </div>
-                <div>
-                  <h4 className="font-medium text-white mb-2">📝 Find Posts</h4>
-                  <p>Search in post content to find discussions and descriptions</p>
-                </div>
-                <div>
-                  <h4 className="font-medium text-white mb-2">🔍 Smart Search</h4>
-                  <p>Results appear as you type with intelligent suggestions</p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )}
       </div>

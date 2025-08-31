@@ -40,7 +40,6 @@ export default function DiscoverPage() {
   };
 
   const handleSearch = async (results: SearchResults, query: string) => {
-    setCurrentFilters({ query });
     try {
       // Ensure we have valid results
       const safeResults = {
@@ -50,14 +49,17 @@ export default function DiscoverPage() {
       };
       
       setSearchResults(safeResults);
-      setHasSearched(query.length > 0);
+      setHasSearched(query.length > 0 || currentFilters.postType !== 'all' || currentFilters.sortBy !== 'recent' || currentFilters.timeRange !== 'all');
     } catch (error) {
       console.error('Search error:', error);
       setSearchResults({ posts: [], users: [], totalResults: 0 });
       setHasSearched(false);
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const handleFiltersChange = (filters: SearchFilters) => {
+    setCurrentFilters(filters);
+    // The search will be triggered automatically by the SearchBar component
   };
 
   const clearSearch = () => {
@@ -66,8 +68,6 @@ export default function DiscoverPage() {
     setCurrentFilters({});
     loadDefaultContent();
   };
-
-  // Remove this authentication barrier - discover should work for everyone
 
   return (
     <MainLayout>
@@ -78,16 +78,37 @@ export default function DiscoverPage() {
           <p className="text-gray-400">Find amazing creators and AI-generated music</p>
         </div>
 
-        {/* Search Interface */}
-        <SearchBar onSearch={handleSearch} initialFilters={currentFilters} />
+        {/* Search Interface with dynamic filtering */}
+        <SearchBar 
+          onSearch={handleSearch} 
+          onFiltersChange={handleFiltersChange}
+          initialFilters={currentFilters} 
+        />
         
-        {/* Search Status Line - same as Dashboard */}
+        {/* Search Status Line */}
         {hasSearched && (
           <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
             <div className="flex items-center space-x-2 text-sm text-gray-300">
-              <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
-                Search: "{currentFilters.query || ''}"
-              </span>
+              {currentFilters.query && (
+                <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
+                  Search: "{currentFilters.query}"
+                </span>
+              )}
+              {currentFilters.postType && currentFilters.postType !== 'all' && (
+                <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded text-xs">
+                  Type: {currentFilters.postType}
+                </span>
+              )}
+              {currentFilters.sortBy && currentFilters.sortBy !== 'recent' && (
+                <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
+                  Sort: {currentFilters.sortBy}
+                </span>
+              )}
+              {currentFilters.timeRange && currentFilters.timeRange !== 'all' && (
+                <span className="bg-orange-900/30 text-orange-400 px-2 py-1 rounded text-xs">
+                  Time: {currentFilters.timeRange}
+                </span>
+              )}
             </div>
             
             <div className="flex items-center space-x-2">
@@ -95,7 +116,7 @@ export default function DiscoverPage() {
                 onClick={clearSearch}
                 className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-900/20 transition-colors"
               >
-                Clear Search
+                Clear All
               </button>
             </div>
           </div>
@@ -241,7 +262,7 @@ export default function DiscoverPage() {
             )}
 
             {/* Empty State */}
-            {trendingPosts.length === 0 && featuredCreators.length === 0 && (
+            {trendingPosts.length === 0 && featuredCreators.length === 0 && !loading && (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">🎵</div>
                 <h2 className="text-xl font-semibold text-white mb-2">Start Exploring!</h2>

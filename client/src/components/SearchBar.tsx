@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { SearchFilters, searchContent, SearchResults } from '@/utils/search';
 
 interface SearchBarProps {
-  onSearch: (results: SearchResults, query: string) => void; // Updated for dashboard compatibility
+  onSearch: (results: SearchResults, query: string) => void;
+  onFiltersChange?: (filters: SearchFilters) => void; // For dynamic filtering
   initialFilters?: SearchFilters;
   className?: string;
   currentQuery?: string;
@@ -13,6 +14,7 @@ interface SearchBarProps {
 
 export default function SearchBar({ 
   onSearch, 
+  onFiltersChange,
   initialFilters = {}, 
   className = '',
   currentQuery = '',
@@ -22,7 +24,6 @@ export default function SearchBar({
   const [postType, setPostType] = useState<SearchFilters['postType']>(initialFilters.postType || 'all');
   const [sortBy, setSortBy] = useState<SearchFilters['sortBy']>(initialFilters.sortBy || 'recent');
   const [timeRange, setTimeRange] = useState<SearchFilters['timeRange']>(initialFilters.timeRange || 'all');
-  const [showFilters, setShowFilters] = useState(false);
   const [suggestions, setSuggestions] = useState<SearchResults>({ posts: [], users: [], totalResults: 0 });
   const [showSuggestionDropdown, setShowSuggestionDropdown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -44,23 +45,20 @@ export default function SearchBar({
       return;
     }
 
-    // Clear previous timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // Set new timeout for debounced search
     searchTimeoutRef.current = setTimeout(async () => {
       setIsLoading(true);
       try {
         const results = await searchContent({ 
           query, 
-          postType: 'all', // Don't apply filters to suggestions
+          postType: 'all',
           sortBy: 'recent', 
           timeRange: 'all' 
-        }, 0, 3); // Limit suggestions to 3 results each
+        }, 0, 3);
         
-        // Ensure we have valid results
         const safeSuggestions = {
           posts: Array.isArray(results.posts) ? results.posts.slice(0, 3) : [],
           users: Array.isArray(results.users) ? results.users.slice(0, 3) : [],
@@ -83,25 +81,35 @@ export default function SearchBar({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [query, showSuggestions]); // Remove other dependencies to avoid infinite loops
+  }, [query, showSuggestions]);
 
-  const handleSearch = async () => {
+  // Dynamic filter changes - trigger search immediately when filters change
+  useEffect(() => {
+    const currentFilters = { query, postType, sortBy, timeRange };
+    
+    // Notify parent of filter changes for any external handling
+    if (onFiltersChange) {
+      onFiltersChange(currentFilters);
+    }
+
+    // If we have a query or any non-default filters, trigger search automatically
+    if (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') {
+      performSearch(currentFilters);
+    }
+  }, [query, postType, sortBy, timeRange]);
+
+  const performSearch = async (filters: SearchFilters = { query, postType, sortBy, timeRange }) => {
     setShowSuggestionDropdown(false);
-    if (!query.trim()) {
+    
+    if (!filters.query?.trim() && filters.postType === 'all' && filters.sortBy === 'recent' && filters.timeRange === 'all') {
       onSearch({ posts: [], users: [], totalResults: 0 }, '');
       return;
     }
 
     setIsLoading(true);
     try {
-      const results = await searchContent({ 
-        query, 
-        postType, 
-        sortBy, 
-        timeRange 
-      });
+      const results = await searchContent(filters);
       
-      // Ensure results is always a valid object
       const safeResults = results || { posts: [], users: [], totalResults: 0 };
       const safePosts = Array.isArray(safeResults.posts) ? safeResults.posts : [];
       const safeUsers = Array.isArray(safeResults.users) ? safeResults.users : [];
@@ -110,13 +118,17 @@ export default function SearchBar({
         posts: safePosts,
         users: safeUsers,
         totalResults: safeResults.totalResults || (safePosts.length + safeUsers.length)
-      }, query);
+      }, filters.query || '');
     } catch (error) {
       console.error('Error searching:', error);
-      onSearch({ posts: [], users: [], totalResults: 0 }, query);
+      onSearch({ posts: [], users: [], totalResults: 0 }, filters.query || '');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearch = async () => {
+    await performSearch();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -130,10 +142,7 @@ export default function SearchBar({
   const handleSuggestionClick = (suggestion: string) => {
     setQuery(suggestion);
     setShowSuggestionDropdown(false);
-    // Trigger search with the selected suggestion
-    setTimeout(() => {
-      handleSearch();
-    }, 100);
+    // The useEffect will trigger search automatically
   };
 
   const handleInputFocus = () => {
@@ -143,171 +152,163 @@ export default function SearchBar({
   };
 
   const handleInputBlur = () => {
-    // Delay hiding to allow clicking on suggestions
     setTimeout(() => {
       setShowSuggestionDropdown(false);
     }, 200);
   };
 
+  const handleClearAll = () => {
+    setQuery('');
+    setPostType('all');
+    setSortBy('recent');
+    setTimeRange('all');
+    // The useEffect will trigger search automatically to clear results
+  };
+
   return (
-    <div className={`bg-gray-800 rounded-lg p-4 ${className}`}>
-      <div className="flex flex-col space-y-4">
-        {/* Main search input */}
-        <div className="flex space-x-2">
-          <div className="flex-1 relative">
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Search creators, music, or content..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={handleKeyPress}
-              onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
-              className="w-full bg-gray-700 text-white placeholder-gray-400 rounded-lg px-4 py-2 pr-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
-              {/* Clear button - only show when there's text */}
-              {query.length > 0 && (
-                <button
-                  onClick={() => {
-                    setQuery('');
-                    setShowSuggestionDropdown(false);
-                    onSearch({ posts: [], users: [], totalResults: 0 }, '');
-                  }}
-                  className="text-gray-400 hover:text-white transition-colors p-1"
-                  title="Clear search"
-                >
-                  ✕
-                </button>
-              )}
-              {/* Search button */}
+    <div className={`bg-gray-800 rounded-lg p-4 space-y-4 ${className}`}>
+      {/* Search input section with Search button */}
+      <div className="flex space-x-2">
+        <div className="flex-1 relative">
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Search creators, music, or content..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyPress={handleKeyPress}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            className="w-full bg-gray-700 text-white placeholder-gray-400 rounded-lg px-4 py-2 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
+            {query.length > 0 && (
               <button
-                onClick={handleSearch}
-                disabled={isLoading}
-                className="text-gray-400 hover:text-white transition-colors disabled:opacity-50 p-1"
-                title="Search"
+                onClick={() => setQuery('')}
+                className="text-gray-400 hover:text-white transition-colors p-1"
+                title="Clear search"
               >
-                {isLoading ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full" />
-                ) : (
-                  '🔍'
-                )}
+                ✕
               </button>
-            </div>
-            
-            {/* Fixed Search Suggestions Dropdown */}
-            {showSuggestions && showSuggestionDropdown && suggestions.totalResults > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-gray-700 rounded-lg border border-gray-600 shadow-lg z-50 max-h-80 overflow-y-auto">
-                {/* User suggestions */}
-                {suggestions.users.length > 0 && (
-                  <div className="p-2">
-                    <div className="text-xs text-gray-400 px-2 py-1 uppercase tracking-wide">Creators</div>
-                    {suggestions.users.map((user) => (
-                      <div
-                        key={user.id}
-                        onClick={() => handleSuggestionClick(user.username)}
-                        className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-600 rounded cursor-pointer"
-                      >
-                        <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                          <span className="text-xs text-white font-semibold">
-                            {user.username[0].toUpperCase()}
-                          </span>
-                        </div>
-                        <span className="text-sm text-gray-200">{user.username}</span>
+            )}
+          </div>
+          
+          {/* Search Suggestions Dropdown */}
+          {showSuggestions && showSuggestionDropdown && suggestions.totalResults > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-gray-700 rounded-lg border border-gray-600 shadow-lg z-50 max-h-80 overflow-y-auto">
+              {suggestions.users.length > 0 && (
+                <div className="p-2">
+                  <div className="text-xs text-gray-400 px-2 py-1 uppercase tracking-wide">Creators</div>
+                  {suggestions.users.map((user) => (
+                    <div
+                      key={user.id}
+                      onClick={() => handleSuggestionClick(user.username)}
+                      className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-600 rounded cursor-pointer"
+                    >
+                      <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                        <span className="text-xs text-white font-semibold">
+                          {user.username[0].toUpperCase()}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Post suggestions */}
-                {suggestions.posts.length > 0 && (
-                  <div className="p-2 border-t border-gray-600">
-                    <div className="text-xs text-gray-400 px-2 py-1 uppercase tracking-wide">Posts</div>
-                    {suggestions.posts.slice(0, 3).map((post) => (
-                      <div
-                        key={post.id}
-                        onClick={() => handleSuggestionClick(post.content.slice(0, 50))}
-                        className="px-3 py-2 hover:bg-gray-600 rounded cursor-pointer"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">{post.post_type === 'audio' ? '🎵' : '📝'}</span>
-                          <div>
-                            <div className="text-sm text-gray-200 truncate">
-                              {post.content.length > 40 ? 
-                                `${post.content.slice(0, 40)}...` : 
-                                post.content}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              by {post.user_profile?.username || 'Unknown'}
-                            </div>
+                      <span className="text-sm text-gray-200">{user.username}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {suggestions.posts.length > 0 && (
+                <div className="p-2 border-t border-gray-600">
+                  <div className="text-xs text-gray-400 px-2 py-1 uppercase tracking-wide">Posts</div>
+                  {suggestions.posts.slice(0, 3).map((post) => (
+                    <div
+                      key={post.id}
+                      onClick={() => handleSuggestionClick(post.content.slice(0, 50))}
+                      className="px-3 py-2 hover:bg-gray-600 rounded cursor-pointer"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg">{post.post_type === 'audio' ? '🎵' : '📝'}</span>
+                        <div>
+                          <div className="text-sm text-gray-200 truncate">
+                            {post.content.length > 40 ? 
+                              `${post.content.slice(0, 40)}...` : 
+                              post.content}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            by {post.user_profile?.username || 'Unknown'}
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`px-4 py-2 rounded-lg transition-colors ${
-              showFilters 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Search Button - Always visible */}
+        <button
+          onClick={handleSearch}
+          disabled={isLoading}
+          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+        >
+          {isLoading ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+
+      {/* Always visible filters - no toggle button */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-700 rounded-lg">
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Content Type</label>
+          <select
+            value={postType}
+            onChange={(e) => setPostType(e.target.value as SearchFilters['postType'])}
+            className="w-full bg-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            Filters
-          </button>
+            <option value="all">All Content</option>
+            <option value="audio">Audio Posts</option>
+            <option value="text">Text Posts</option>
+            <option value="creators">Creators</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SearchFilters['sortBy'])}
+            className="w-full bg-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="recent">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="popular">Most Popular</option>
+            <option value="likes">Most Liked</option>
+            <option value="relevance">Most Relevant</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Time Range</label>
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value as SearchFilters['timeRange'])}
+            className="w-full bg-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+          </select>
         </div>
 
-        {/* Advanced filters panel */}
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-700 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Content Type</label>
-              <select
-                value={postType}
-                onChange={(e) => setPostType(e.target.value as SearchFilters['postType'])}
-                className="w-full bg-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Content</option>
-                <option value="audio">Audio Posts</option>
-                <option value="text">Text Posts</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SearchFilters['sortBy'])}
-                className="w-full bg-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="recent">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="popular">Most Popular</option>
-                <option value="likes">Most Liked</option>
-                <option value="relevance">Most Relevant</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Time Range</label>
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value as SearchFilters['timeRange'])}
-                className="w-full bg-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Time</option>
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-              </select>
-            </div>
-          </div>
-        )}
+        <div className="flex items-end">
+          <button
+            onClick={handleClearAll}
+            className="w-full px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm transition-colors"
+          >
+            Reset All
+          </button>
+        </div>
       </div>
     </div>
   );

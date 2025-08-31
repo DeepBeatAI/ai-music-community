@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import SearchBar from '@/components/SearchBar';
@@ -57,10 +57,10 @@ export default function DiscoverPage() {
     }
   };
 
-  const handleFiltersChange = (filters: SearchFilters) => {
+  const handleFiltersChange = useCallback((filters: SearchFilters) => {
     setCurrentFilters(filters);
     // The search will be triggered automatically by the SearchBar component
-  };
+  }, []);
 
   const clearSearch = () => {
     setSearchResults({ posts: [], users: [], totalResults: 0 });

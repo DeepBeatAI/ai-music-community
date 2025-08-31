@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Post, UserProfile } from '@/types';
+import { searchCache } from './searchCache';
 
 export interface SearchFilters {
   query?: string;
@@ -20,6 +21,13 @@ export async function searchContent(
   page: number = 0,
   limit: number = 10
 ): Promise<SearchResults> {
+  // Check cache first
+  const cachedResults = searchCache.get(filters, page, limit);
+  if (cachedResults) {
+    console.log('Returning cached search results');
+    return cachedResults;
+  }
+
   try {
     const offset = page * limit;
     
@@ -261,11 +269,16 @@ export async function searchContent(
       })
     );
 
-    return {
+    const results = {
       posts: sortedPosts,
       users: transformedUsers,
       totalResults: sortedPosts.length + transformedUsers.length,
     };
+
+    // Cache the results
+    searchCache.set(filters, results, page, limit);
+    
+    return results;
   } catch (error) {
     console.error('Search error:', error);
     // Always return a valid SearchResults object

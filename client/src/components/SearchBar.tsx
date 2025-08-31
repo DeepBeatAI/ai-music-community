@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { SearchFilters, searchContent, SearchResults } from '@/utils/search';
 
 interface SearchBarProps {
   onSearch: (results: SearchResults, query: string) => void;
-  onFiltersChange?: (filters: SearchFilters) => void; // For dynamic filtering
+  onFiltersChange?: (filters: SearchFilters) => void;
   initialFilters?: SearchFilters;
   className?: string;
   currentQuery?: string;
@@ -29,24 +29,68 @@ export default function SearchBar({
   const [isLoading, setIsLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastFiltersRef = useRef<string>('');
+  const previousCurrentQueryRef = useRef(currentQuery);
 
-  // Sync with external query changes
+  // FIXED: Sync with external query changes without creating loops
   useEffect(() => {
-    if (currentQuery !== query) {
+    // Only update if currentQuery actually changed from external source
+    if (currentQuery !== previousCurrentQueryRef.current && currentQuery !== query) {
       setQuery(currentQuery);
+      previousCurrentQueryRef.current = currentQuery;
     }
-  }, [currentQuery]);
+  }, [currentQuery]); // Remove query from dependencies
 
-  // Debounced search for both suggestions and query-based searches
+  // Memoized filter change callback
+  const notifyFiltersChange = useCallback((filters: SearchFilters) => {
+    const filtersString = JSON.stringify(filters);
+    if (lastFiltersRef.current !== filtersString && onFiltersChange) {
+      lastFiltersRef.current = filtersString;
+      onFiltersChange(filters);
+    }
+  }, [onFiltersChange]);
+
+  // Memoized search function - FIXED dependencies
+  const performSearch = useCallback(async (searchFilters: SearchFilters) => {
+    setShowSuggestionDropdown(false);
+    
+    if (!searchFilters.query?.trim() && searchFilters.postType === 'all' && searchFilters.sortBy === 'recent' && searchFilters.timeRange === 'all') {
+      onSearch({ posts: [], users: [], totalResults: 0 }, '');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const results = await searchContent(searchFilters);
+      
+      const safeResults = results || { posts: [], users: [], totalResults: 0 };
+      const safePosts = Array.isArray(safeResults.posts) ? safeResults.posts : [];
+      const safeUsers = Array.isArray(safeResults.users) ? safeResults.users : [];
+      
+      onSearch({
+        posts: safePosts,
+        users: safeUsers,
+        totalResults: safeResults.totalResults || (safePosts.length + safeUsers.length)
+      }, searchFilters.query || '');
+    } catch (error) {
+      console.error('Error searching:', error);
+      onSearch({ posts: [], users: [], totalResults: 0 }, searchFilters.query || '');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onSearch]);
+
+  // FIXED: Debounced search effect without circular dependencies
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
     searchTimeoutRef.current = setTimeout(async () => {
+      const currentFilters = { query, postType, sortBy, timeRange };
+      
       // Handle suggestions if enabled and query is long enough
       if (showSuggestions && query.length >= 2) {
-        setIsLoading(true);
         try {
           const results = await searchContent({ 
             query, 
@@ -75,97 +119,64 @@ export default function SearchBar({
 
       // Trigger search if we have content or active filters
       if (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') {
-        await performSearch({ query, postType, sortBy, timeRange });
+        await performSearch(currentFilters);
       } else {
         // Clear results if no query and no filters
         onSearch({ posts: [], users: [], totalResults: 0 }, '');
       }
-      
-      setIsLoading(false);
-    }, 500); // Increased debounce time to reduce flicker
+    }, 300);
 
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [query, postType, sortBy, timeRange, showSuggestions]);
+  }, [query, postType, sortBy, timeRange, showSuggestions, performSearch, onSearch]);
 
-  // Notify parent of filter changes for external handling
+  // FIXED: Notify parent of filter changes without causing loops
   useEffect(() => {
     const currentFilters = { query, postType, sortBy, timeRange };
-    
-    if (onFiltersChange) {
-      onFiltersChange(currentFilters);
-    }
-  }, [query, postType, sortBy, timeRange, onFiltersChange]);
+    notifyFiltersChange(currentFilters);
+  }, [query, postType, sortBy, timeRange, notifyFiltersChange]);
 
-  const performSearch = async (filters: SearchFilters = { query, postType, sortBy, timeRange }) => {
-    setShowSuggestionDropdown(false);
-    
-    if (!filters.query?.trim() && filters.postType === 'all' && filters.sortBy === 'recent' && filters.timeRange === 'all') {
-      onSearch({ posts: [], users: [], totalResults: 0 }, '');
-      return;
-    }
+  const handleSearch = useCallback(async () => {
+    const currentFilters = { query, postType, sortBy, timeRange };
+    await performSearch(currentFilters);
+  }, [query, postType, sortBy, timeRange, performSearch]);
 
-    setIsLoading(true);
-    try {
-      const results = await searchContent(filters);
-      
-      const safeResults = results || { posts: [], users: [], totalResults: 0 };
-      const safePosts = Array.isArray(safeResults.posts) ? safeResults.posts : [];
-      const safeUsers = Array.isArray(safeResults.users) ? safeResults.users : [];
-      
-      onSearch({
-        posts: safePosts,
-        users: safeUsers,
-        totalResults: safeResults.totalResults || (safePosts.length + safeUsers.length)
-      }, filters.query || '');
-    } catch (error) {
-      console.error('Error searching:', error);
-      onSearch({ posts: [], users: [], totalResults: 0 }, filters.query || '');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSearch = async () => {
-    await performSearch();
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSearch();
     } else if (e.key === 'Escape') {
       setShowSuggestionDropdown(false);
     }
-  };
+  }, [handleSearch]);
 
-  const handleSuggestionClick = (suggestion: string) => {
+  const handleSuggestionClick = useCallback((suggestion: string) => {
     setQuery(suggestion);
     setShowSuggestionDropdown(false);
     // The useEffect will trigger search automatically
-  };
+  }, []);
 
-  const handleInputFocus = () => {
+  const handleInputFocus = useCallback(() => {
     if (suggestions.totalResults > 0 && query.length >= 2) {
       setShowSuggestionDropdown(true);
     }
-  };
+  }, [suggestions.totalResults, query.length]);
 
-  const handleInputBlur = () => {
+  const handleInputBlur = useCallback(() => {
     setTimeout(() => {
       setShowSuggestionDropdown(false);
     }, 200);
-  };
+  }, []);
 
-  const handleClearAll = () => {
+  const handleClearAll = useCallback(() => {
     setQuery('');
     setPostType('all');
     setSortBy('recent');
     setTimeRange('all');
     // The useEffect will trigger search automatically to clear results
-  };
+  }, []);
 
   return (
     <div className={`bg-gray-800 rounded-lg p-4 space-y-4 ${className}`}>

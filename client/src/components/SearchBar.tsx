@@ -37,66 +37,68 @@ export default function SearchBar({
     }
   }, [currentQuery]);
 
-  // Fixed debounced search for suggestions
+  // Debounced search for both suggestions and query-based searches
   useEffect(() => {
-    if (!showSuggestions || query.length < 2) {
-      setSuggestions({ posts: [], users: [], totalResults: 0 });
-      setShowSuggestionDropdown(false);
-      return;
-    }
-
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
     searchTimeoutRef.current = setTimeout(async () => {
-      setIsLoading(true);
-      try {
-        const results = await searchContent({ 
-          query, 
-          postType: 'all',
-          sortBy: 'recent', 
-          timeRange: 'all' 
-        }, 0, 3);
-        
-        const safeSuggestions = {
-          posts: Array.isArray(results.posts) ? results.posts.slice(0, 3) : [],
-          users: Array.isArray(results.users) ? results.users.slice(0, 3) : [],
-          totalResults: results.totalResults || 0
-        };
-        
-        setSuggestions(safeSuggestions);
-        setShowSuggestionDropdown(safeSuggestions.totalResults > 0);
-      } catch (error) {
-        console.error('Error fetching suggestions:', error);
+      // Handle suggestions if enabled and query is long enough
+      if (showSuggestions && query.length >= 2) {
+        setIsLoading(true);
+        try {
+          const results = await searchContent({ 
+            query, 
+            postType: 'all',
+            sortBy: 'recent', 
+            timeRange: 'all' 
+          }, 0, 3);
+          
+          const safeSuggestions = {
+            posts: Array.isArray(results.posts) ? results.posts.slice(0, 3) : [],
+            users: Array.isArray(results.users) ? results.users.slice(0, 3) : [],
+            totalResults: results.totalResults || 0
+          };
+          
+          setSuggestions(safeSuggestions);
+          setShowSuggestionDropdown(safeSuggestions.totalResults > 0);
+        } catch (error) {
+          console.error('Error fetching suggestions:', error);
+          setSuggestions({ posts: [], users: [], totalResults: 0 });
+          setShowSuggestionDropdown(false);
+        }
+      } else {
         setSuggestions({ posts: [], users: [], totalResults: 0 });
         setShowSuggestionDropdown(false);
-      } finally {
-        setIsLoading(false);
       }
-    }, 300);
+
+      // Trigger search if we have content or active filters
+      if (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') {
+        await performSearch({ query, postType, sortBy, timeRange });
+      } else {
+        // Clear results if no query and no filters
+        onSearch({ posts: [], users: [], totalResults: 0 }, '');
+      }
+      
+      setIsLoading(false);
+    }, 500); // Increased debounce time to reduce flicker
 
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [query, showSuggestions]);
+  }, [query, postType, sortBy, timeRange, showSuggestions]);
 
-  // Dynamic filter changes - trigger search immediately when filters change
+  // Notify parent of filter changes for external handling
   useEffect(() => {
     const currentFilters = { query, postType, sortBy, timeRange };
     
-    // Notify parent of filter changes for any external handling
     if (onFiltersChange) {
       onFiltersChange(currentFilters);
     }
-
-    // If we have a query or any non-default filters, trigger search automatically
-    if (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') {
-      performSearch(currentFilters);
-    }
-  }, [query, postType, sortBy, timeRange]);
+  }, [query, postType, sortBy, timeRange, onFiltersChange]);
 
   const performSearch = async (filters: SearchFilters = { query, postType, sortBy, timeRange }) => {
     setShowSuggestionDropdown(false);

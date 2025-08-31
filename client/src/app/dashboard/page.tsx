@@ -11,7 +11,7 @@ import ActivityFeed from '@/components/ActivityFeed';
 import FollowButton from '@/components/FollowButton';
 import { supabase } from '@/lib/supabase';
 import { Post, UserProfile } from '@/types';
-import { SearchResults } from '@/utils/search';
+import { SearchResults, SearchFilters } from '@/utils/search';
 import { validatePostContent } from '@/utils/validation';
 import { uploadAudioFile } from '@/utils/audio';
 
@@ -222,6 +222,11 @@ export default function DashboardPage() {
     });
     setSearchQuery(query || '');
     setIsSearchActive((query || '').length > 0);
+  }, []);
+
+  const handleFiltersChange = useCallback((filters: SearchFilters) => {
+    // The SearchBar will trigger search automatically with dynamic filtering
+    // We don't need to do anything here since the search results will be passed to handleSearch
   }, []);
 
   const clearSearch = useCallback(() => {
@@ -630,6 +635,7 @@ export default function DashboardPage() {
         <div className="max-w-2xl mx-auto mb-8 space-y-4">
           <SearchBar 
             onSearch={handleSearch} 
+            onFiltersChange={handleFiltersChange}
             currentQuery={searchQuery}
             className="w-full" 
           />

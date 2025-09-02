@@ -126,7 +126,7 @@ export default function UserRecommendations({
                 {rec.username}
               </h4>
               
-              {showReason && (
+              {showReason && rec.reason && (
                 <p className="text-xs text-gray-400 truncate">{rec.reason}</p>
               )}
               

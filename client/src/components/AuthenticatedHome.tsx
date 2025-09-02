@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import UserRecommendations from './UserRecommendations';
+import FollowButton from './FollowButton';
 import { getTrendingContent, getFeaturedCreators } from '@/utils/recommendations';
 import { getActivityFeed } from '@/utils/activityFeed';
 
@@ -26,7 +27,7 @@ export default function AuthenticatedHome() {
     try {
       const [trending, featured, activity] = await Promise.all([
         getTrendingContent(4),
-        getFeaturedCreators(3),
+        getFeaturedCreators(3, user!.id),
         getActivityFeed(user!.id, { following: true }, 0, 6),
       ]);
       setTrendingPosts(trending);
@@ -199,19 +200,36 @@ export default function AuthenticatedHome() {
           {featuredCreators.length > 0 && (
             <div className="bg-gray-800 rounded-lg p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Featured Creators</h3>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {featuredCreators.map((creator) => (
-                  <div key={creator.id} className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
-                      <span className="text-white font-semibold text-xs">
+                  <div key={creator.id} className="flex items-start space-x-3 p-3 bg-gray-700 rounded-lg">
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                         onClick={() => router.push(`/profile/${creator.username}`)}>
+                      <span className="text-white font-semibold text-sm">
                         {creator.username[0].toUpperCase()}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white text-sm truncate">{creator.username}</p>
-                      <p className="text-xs text-gray-400">
-                        {creator.user_stats?.followers_count || 0} followers
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium text-white text-sm truncate cursor-pointer hover:text-blue-300 transition-colors"
+                           onClick={() => router.push(`/profile/${creator.username}`)}>
+                          {creator.username}
+                        </p>
+                        <FollowButton 
+                          userId={creator.user_id}
+                          username={creator.username}
+                          size="sm"
+                          variant="secondary"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {creator.user_stats?.followers_count || 0} followers • {creator.user_stats?.posts_count || 0} posts
                       </p>
+                      {creator.reason && (
+                        <p className="text-xs text-blue-400 mt-1 truncate">
+                          {creator.reason}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}

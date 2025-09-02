@@ -43,6 +43,7 @@ export default function DashboardPage() {
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResults>({ posts: [], users: [], totalResults: 0 });
+  const [currentSearchFilters, setCurrentSearchFilters] = useState<SearchFilters>({}); // Track SearchBar filters
   const [filters, setFilters] = useState<FilterOptions>({
     postType: 'all',
     sortBy: 'newest',
@@ -166,17 +167,24 @@ export default function DashboardPage() {
       filtered = allPosts.filter(post => searchPostIds.has(post.id));
     }
 
-    // Apply filters to the current set (either all posts or search results)
-    if (filters.postType !== 'all') {
-      filtered = filtered.filter(post => post.post_type === filters.postType);
+    // If we have search filters, use those instead of local filters
+    const activeFilters = isSearchActive ? {
+      postType: currentSearchFilters.postType || 'all',
+      sortBy: currentSearchFilters.sortBy || 'recent',
+      timeRange: currentSearchFilters.timeRange || 'all'
+    } : filters;
+
+    // Apply post type filter
+    if (activeFilters.postType !== 'all') {
+      filtered = filtered.filter(post => post.post_type === activeFilters.postType);
     }
 
     // Apply time range filter
-    if (filters.timeRange !== 'all') {
+    if (activeFilters.timeRange !== 'all') {
       const now = new Date();
       const cutoff = new Date();
       
-      switch (filters.timeRange) {
+      switch (activeFilters.timeRange) {
         case 'today':
           cutoff.setHours(0, 0, 0, 0);
           break;
@@ -191,13 +199,21 @@ export default function DashboardPage() {
       filtered = filtered.filter(post => new Date(post.created_at) >= cutoff);
     }
 
-    // Apply sorting
+    // Apply sorting - map SearchBar sortBy values to local values
+    const sortBy = activeFilters.sortBy;
     filtered.sort((a, b) => {
-      switch (filters.sortBy) {
+      switch (sortBy) {
         case 'oldest':
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         case 'popular':
-          return (b.like_count || 0) - (a.like_count || 0);
+        case 'likes':
+          const likeDiff = (b.like_count || 0) - (a.like_count || 0);
+          if (likeDiff === 0) {
+            // If same likes, sort by most recent
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }
+          return likeDiff;
+        case 'recent':
         case 'newest':
         default:
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -205,7 +221,7 @@ export default function DashboardPage() {
     });
 
     setDisplayPosts(filtered);
-  }, [allPosts, filters, searchResults, isSearchActive]);
+  }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
 
   const handleSearch = useCallback((results: SearchResults, query: string) => {
     // Ensure results is always a valid object
@@ -224,14 +240,15 @@ export default function DashboardPage() {
     setIsSearchActive((query || '').length > 0);
   }, []);
 
-  const handleFiltersChange = useCallback((filters: SearchFilters) => {
-    // The SearchBar will trigger search automatically with dynamic filtering
-    // We don't need to do anything here since the search results will be passed to handleSearch
+  const handleFiltersChange = useCallback((searchFilters: SearchFilters) => {
+    // Update the current search filters state
+    setCurrentSearchFilters(searchFilters);
   }, []);
 
   const clearSearch = useCallback(() => {
     setSearchQuery('');
     setSearchResults({ posts: [], users: [], totalResults: 0 });
+    setCurrentSearchFilters({}); // Clear search filters
     setIsSearchActive(false);
   }, []);
 
@@ -640,13 +657,36 @@ export default function DashboardPage() {
             className="w-full" 
           />
           
-          {/* Control Buttons */}
-          {isSearchActive && (
+          {/* Control Buttons - Updated to show search filters */}
+          {(isSearchActive || Object.keys(currentSearchFilters).some(key => currentSearchFilters[key] && currentSearchFilters[key] !== 'all' && currentSearchFilters[key] !== 'recent')) && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
-              <div className="flex items-center space-x-2 text-sm text-gray-300">
-                <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
-                  Search: "{searchQuery}"
-                </span>
+              <div className="flex items-center space-x-2 text-sm text-gray-300 flex-wrap gap-2">
+                {currentSearchFilters.query && (
+                  <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
+                    Search: "{currentSearchFilters.query}"
+                  </span>
+                )}
+                {currentSearchFilters.postType && currentSearchFilters.postType !== 'all' && (
+                  <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded text-xs">
+                    Type: {currentSearchFilters.postType === 'creators' ? 'Creators' : currentSearchFilters.postType === 'audio' ? 'Audio Posts' : 'Text Posts'}
+                  </span>
+                )}
+                {currentSearchFilters.sortBy && currentSearchFilters.sortBy !== 'recent' && (
+                  <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
+                    Sort: {currentSearchFilters.sortBy === 'recent' ? 'Newest First' : 
+                           currentSearchFilters.sortBy === 'oldest' ? 'Oldest First' : 
+                           currentSearchFilters.sortBy === 'popular' ? 'Most Popular' : 
+                           currentSearchFilters.sortBy === 'likes' ? 'Most Liked' : 
+                           currentSearchFilters.sortBy === 'relevance' ? 'Most Relevant' : currentSearchFilters.sortBy}
+                  </span>
+                )}
+                {currentSearchFilters.timeRange && currentSearchFilters.timeRange !== 'all' && (
+                  <span className="bg-orange-900/30 text-orange-400 px-2 py-1 rounded text-xs">
+                    Time: {currentSearchFilters.timeRange === 'today' ? 'Today' : 
+                           currentSearchFilters.timeRange === 'week' ? 'This Week' : 
+                           currentSearchFilters.timeRange === 'month' ? 'This Month' : currentSearchFilters.timeRange}
+                  </span>
+                )}
               </div>
               
               <div className="flex items-center space-x-2">
@@ -654,7 +694,7 @@ export default function DashboardPage() {
                   onClick={clearSearch}
                   className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-900/20 transition-colors"
                 >
-                  Clear Search
+                  Clear All
                 </button>
               </div>
             </div>

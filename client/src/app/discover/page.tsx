@@ -7,6 +7,7 @@ import SearchBar from '@/components/SearchBar';
 import PostItem from '@/components/PostItem';
 import { useAuth } from '@/contexts/AuthContext';
 import { searchContent, getTrendingContent, getFeaturedCreators, SearchFilters, SearchResults } from '@/utils/search';
+import UserRecommendations from '@/components/UserRecommendations';
 
 export default function DiscoverPage() {
   const { user } = useAuth();
@@ -210,6 +211,15 @@ export default function DiscoverPage() {
         {/* Default Discovery Content */}
         {!hasSearched && (
           <div className="space-y-8">
+            {/* Personalized Recommendations for Authenticated Users */}
+            {user && (
+              <UserRecommendations 
+                title="Recommended for You" 
+                limit={6} 
+                className="mb-8" 
+              />
+            )}
+
             {/* Trending Section */}
             {trendingPosts.length > 0 && (
               <div>

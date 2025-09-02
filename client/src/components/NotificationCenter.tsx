@@ -181,15 +181,41 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     setIsOpen(false);
 
     // Navigate based on notification type and data
-    if (notification.related_post_id) {
-      // Navigate to dashboard where posts are displayed
-      router.push('/dashboard');
-    } else if (notification.type === 'follow' && notification.related_user_id) {
-      // For follow notifications, navigate to dashboard to see activity
-      router.push('/dashboard');
-    } else {
-      // Default navigation for system notifications
-      router.push('/dashboard');
+    switch (notification.type) {
+      case 'like':
+        if (notification.related_post_id) {
+          // TODO: Navigate to post page when implemented
+          // For now, go to dashboard where post is visible
+          router.push('/dashboard');
+        } else {
+          router.push('/notifications');
+        }
+        break;
+      case 'follow':
+        if (notification.related_user_id) {
+          // TODO: Navigate to user profile when implemented
+          // For now, go to notifications to see the follow activity
+          router.push('/notifications');
+        } else {
+          router.push('/notifications');
+        }
+        break;
+      case 'comment':
+        if (notification.related_post_id) {
+          // TODO: Navigate to post page with comments when implemented
+          router.push('/dashboard');
+        } else {
+          router.push('/notifications');
+        }
+        break;
+      case 'post':
+        // System notifications about posts
+        router.push('/notifications');
+        break;
+      default:
+        // Default to notifications page for all other cases
+        router.push('/notifications');
+        break;
     }
   };
 

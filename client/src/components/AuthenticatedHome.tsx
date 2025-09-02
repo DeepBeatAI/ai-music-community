@@ -4,14 +4,14 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import UserRecommendations from './UserRecommendations';
-import PostItem from './PostItem';
-import { getTrendingContent } from '@/utils/search';
+import { getTrendingContent, getFeaturedCreators } from '@/utils/recommendations';
 import { getActivityFeed } from '@/utils/activityFeed';
 
 export default function AuthenticatedHome() {
   const { user, profile } = useAuth();
   const router = useRouter();
   const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
+  const [featuredCreators, setFeaturedCreators] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,11 +24,13 @@ export default function AuthenticatedHome() {
   const loadHomeContent = async () => {
     setLoading(true);
     try {
-      const [trending, activity] = await Promise.all([
+      const [trending, featured, activity] = await Promise.all([
         getTrendingContent(4),
+        getFeaturedCreators(3),
         getActivityFeed(user!.id, { following: true }, 0, 6),
       ]);
       setTrendingPosts(trending);
+      setFeaturedCreators(featured);
       setRecentActivity(activity);
     } catch (error) {
       console.error('Error loading home content:', error);
@@ -36,6 +38,16 @@ export default function AuthenticatedHome() {
       setLoading(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="flex justify-center py-12">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-8">
@@ -122,13 +134,31 @@ export default function AuthenticatedHome() {
                 </button>
               </div>
               <div className="space-y-4">
-                {trendingPosts.slice(0, 3).map((post) => (
-                  <PostItem
-                    key={post.id}
-                    post={post}
-                    currentUserId={user!.id}
-                    onDelete={() => {}}
-                  />
+                {trendingPosts.slice(0, 2).map((post) => (
+                  <div key={post.id} className="bg-gray-800 p-4 rounded-lg">
+                    <div className="flex items-start space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <span className="text-white font-semibold text-sm">
+                          {post.user_profiles?.username?.[0]?.toUpperCase() || 'U'}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <span className="font-medium text-white">{post.user_profiles?.username || 'Unknown'}</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(post.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-gray-300 mb-2">{post.content}</p>
+                        {post.post_type === 'audio' && (
+                          <div className="flex items-center space-x-2 text-blue-400">
+                            <span>🎵</span>
+                            <span className="text-sm">{post.audio_filename || 'Audio Track'}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -162,8 +192,32 @@ export default function AuthenticatedHome() {
 
         {/* Sidebar Column */}
         <div className="space-y-6">
-          {/* User Recommendations */}
+          {/* Personalized User Recommendations */}
           <UserRecommendations limit={4} />
+
+          {/* Featured Creators */}
+          {featuredCreators.length > 0 && (
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Featured Creators</h3>
+              <div className="space-y-3">
+                {featuredCreators.map((creator) => (
+                  <div key={creator.id} className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
+                      <span className="text-white font-semibold text-xs">
+                        {creator.username[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-white text-sm truncate">{creator.username}</p>
+                      <p className="text-xs text-gray-400">
+                        {creator.user_stats?.followers_count || 0} followers
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Quick Actions */}
           <div className="bg-gray-800 rounded-lg p-6">

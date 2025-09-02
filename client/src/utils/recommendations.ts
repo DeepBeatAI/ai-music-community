@@ -7,6 +7,7 @@ export interface RecommendedUser extends UserProfile {
   followers_count?: number;
   recent_activity?: boolean;
   reason?: string;
+  score?: number;
 }
 
 export async function getRecommendedUsers(
@@ -14,127 +15,52 @@ export async function getRecommendedUsers(
   limit: number = 8
 ): Promise<RecommendedUser[]> {
   try {
-    // Step 1: Get users the current user is already following
-    const { data: followingData, error: followingError } = await supabase
+    // Get users the current user is already following
+    const { data: followingData } = await supabase
       .from('user_follows')
       .select('following_id')
       .eq('follower_id', currentUserId);
 
-    if (followingError) {
-      console.error('Error fetching following data:', followingError);
-      // Continue with empty array if follows table doesn't exist or has issues
-    }
-
     const followingIds = followingData?.map(f => f.following_id) || [];
 
-    // Step 2: Get all user profiles except current user and followed users
-    let query = supabase
+    // Get potential recommendations - simple query first
+    const { data: recommendations, error } = await supabase
       .from('user_profiles')
       .select('*')
-      .neq('user_id', currentUserId)
-      .limit(limit * 3); // Get more than needed for filtering
+      .not('user_id', 'in', `(${[currentUserId, ...followingIds].join(',')})`)
+      .limit(limit * 2); // Get more to filter and rank
 
-    // If user follows people, exclude them
-    if (followingIds.length > 0) {
-      // Use NOT IN with individual conditions to avoid SQL syntax issues
-      for (const followingId of followingIds) {
-        query = query.neq('user_id', followingId);
+    if (error) throw error;
+    if (!recommendations) return [];
+
+    // Enhanced recommendations with simple scoring
+    const enhancedRecommendations = recommendations.map(user => {
+      let score = Math.random() * 5; // Random baseline score
+      let reason = 'Active creator in the community';
+
+      // Simple scoring based on creation date (newer users get bonus)
+      const userAge = Date.now() - new Date(user.created_at).getTime();
+      const monthInMs = 30 * 24 * 60 * 60 * 1000;
+      if (userAge < monthInMs) {
+        score += 2;
+        reason = 'New creator to welcome';
       }
-    }
 
-    const { data: users, error: usersError } = await query;
+      return {
+        ...user,
+        mutual_follows: 0,
+        posts_count: 0,
+        followers_count: 0,
+        recent_activity: false,
+        reason,
+        score
+      };
+    });
 
-    if (usersError) {
-      console.error('Error getting users:', usersError);
-      throw usersError;
-    }
-    
-    if (!users || users.length === 0) {
-      return [];
-    }
-
-    // Step 3: Enhance recommendations with additional data
-    const enhancedRecommendations = await Promise.all(
-      users.slice(0, limit).map(async (user) => {
-        // Check for mutual follows (only if we have following data and no error)
-        let mutualCount = 0;
-        if (followingIds.length > 0 && !followingError) {
-          try {
-            const { data: mutualData, error: mutualError } = await supabase
-              .from('user_follows')
-              .select('following_id')
-              .eq('follower_id', user.user_id);
-
-            if (!mutualError && mutualData) {
-              const userFollowingIds = mutualData.map(f => f.following_id);
-              mutualCount = followingIds.filter(id => userFollowingIds.includes(id)).length;
-            }
-          } catch (mutualError) {
-            console.error('Error checking mutual follows:', mutualError);
-            // Continue without mutual follow data
-          }
-        }
-
-        // Get user stats
-        let userStats = { posts_count: 0, followers_count: 0, last_active: null };
-        try {
-          const { data: statsData, error: statsError } = await supabase
-            .from('user_stats')
-            .select('posts_count, followers_count, last_active')
-            .eq('user_id', user.user_id)
-            .single();
-
-          if (!statsError && statsData) {
-            userStats = statsData;
-          }
-        } catch (statsError) {
-          console.error('Error fetching user stats:', statsError);
-          // Continue with default stats
-        }
-
-        // Check recent activity (last 7 days)
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const recentActivity = userStats.last_active && 
-          new Date(userStats.last_active) > weekAgo;
-
-        // Determine recommendation reason
-        let reason = 'New creator in the community';
-        if (mutualCount > 0) {
-          reason = `${mutualCount} mutual connection${mutualCount > 1 ? 's' : ''}`;
-        } else if (recentActivity) {
-          reason = 'Recently active creator';
-        } else if (userStats.followers_count > 10) {
-          reason = 'Popular creator';
-        }
-
-        return {
-          ...user,
-          mutual_follows: mutualCount,
-          posts_count: userStats.posts_count || 0,
-          followers_count: userStats.followers_count || 0,
-          recent_activity: recentActivity,
-          reason,
-        };
-      })
-    );
-
-    // Step 4: Sort by recommendation quality
-    const sortedRecommendations = enhancedRecommendations
-      .sort((a, b) => {
-        // Prioritize mutual follows
-        if (a.mutual_follows !== b.mutual_follows) {
-          return (b.mutual_follows || 0) - (a.mutual_follows || 0);
-        }
-        // Then recent activity
-        if (a.recent_activity !== b.recent_activity) {
-          return a.recent_activity ? -1 : 1;
-        }
-        // Finally follower count
-        return (b.followers_count || 0) - (a.followers_count || 0);
-      })
+    // Sort by score and return limited results
+    return enhancedRecommendations
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, limit);
-
-    return sortedRecommendations;
   } catch (error) {
     console.error('Error getting recommendations:', error);
     return [];
@@ -151,6 +77,17 @@ export async function followUser(currentUserId: string, targetUserId: string): P
       });
 
     if (error) throw error;
+
+    // Create activity for the follow action
+    await supabase
+      .from('user_activities')
+      .insert({
+        user_id: currentUserId,
+        activity_type: 'user_followed',
+        target_user_id: targetUserId,
+        is_public: true
+      });
+
     return true;
   } catch (error) {
     console.error('Error following user:', error);
@@ -189,5 +126,81 @@ export async function checkIfFollowing(
     return !error && !!data;
   } catch (error) {
     return false;
+  }
+}
+
+// Get trending content for the "Trending This Week" section
+export async function getTrendingContent(limit: number = 10) {
+  try {
+    const { data, error } = await supabase
+      .from('posts')
+      .select(`
+        *,
+        user_profiles!posts_user_id_fkey(id, username),
+        post_likes(count)
+      `)
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Trending content error:', error);
+    return [];
+  }
+}
+
+// Get featured creators based on activity and engagement
+export async function getFeaturedCreators(limit: number = 6) {
+  try {
+    console.log('getFeaturedCreators');
+    
+    // First, get user profiles
+    const { data: profiles, error: profilesError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (profilesError) {
+      console.error('Featured creators error:', profilesError);
+      throw profilesError;
+    }
+
+    if (!profiles || profiles.length === 0) {
+      return [];
+    }
+
+    // Get user IDs for stats lookup
+    const userIds = profiles.map(p => p.user_id);
+
+    // Get user stats for these profiles
+    const { data: stats, error: statsError } = await supabase
+      .from('user_stats')
+      .select('user_id, posts_count, audio_posts_count, followers_count, likes_received')
+      .in('user_id', userIds);
+
+    if (statsError) {
+      console.error('User stats error:', statsError);
+      // Continue without stats rather than failing completely
+    }
+
+    // Merge profiles with stats
+    const statsMap = new Map((stats || []).map(s => [s.user_id, s]));
+    const result = profiles.map(profile => ({
+      ...profile,
+      user_stats: statsMap.get(profile.user_id) || {
+        posts_count: 0,
+        audio_posts_count: 0,
+        followers_count: 0,
+        likes_received: 0
+      }
+    }));
+
+    return result;
+  } catch (error) {
+    console.error('Featured creators error:', error);
+    return [];
   }
 }

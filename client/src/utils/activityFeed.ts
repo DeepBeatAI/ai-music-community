@@ -110,8 +110,8 @@ export async function getActivityFeed(
     const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
     const postMap = new Map(posts.map(p => [p.id, p]));
 
-    // Map activities to ActivityFeedItem format
-    const result: ActivityFeedItem[] = activities.map(activity => {
+    // Map activities to ActivityFeedItem format and apply additional filtering
+    let result: ActivityFeedItem[] = activities.map(activity => {
       const userProfile = profileMap.get(activity.user_id);
       const targetUserProfile = activity.target_user_id 
         ? profileMap.get(activity.target_user_id) 
@@ -137,6 +137,43 @@ export async function getActivityFeed(
       };
     });
 
+    // Apply post-processing filters for audio content
+    if (filters.activityTypes && filters.activityTypes.length > 0) {
+      result = result.filter(activity => {
+        // Handle audio_uploaded filter by looking at post_created activities with audio posts
+        if (filters.activityTypes!.includes('audio_uploaded')) {
+          // If we're filtering for audio_uploaded, show post_created activities with audio posts
+          if (activity.activity_type === 'post_created' && activity.target_post?.post_type === 'audio') {
+            return true;
+          }
+          // If it's not a post_created activity, check if it's in the other selected types
+          if (activity.activity_type !== 'post_created') {
+            return filters.activityTypes!.includes(activity.activity_type);
+          }
+          // If it's post_created but not audio, check if post_created is also selected
+          if (activity.activity_type === 'post_created' && activity.target_post?.post_type !== 'audio') {
+            return filters.activityTypes!.includes('post_created');
+          }
+          return false;
+        }
+        
+        // Handle post_created filter - exclude audio posts if audio_uploaded is not also selected
+        if (filters.activityTypes!.includes('post_created')) {
+          if (activity.activity_type === 'post_created') {
+            // If audio_uploaded is also selected, include all post_created
+            if (filters.activityTypes!.includes('audio_uploaded')) {
+              return true;
+            }
+            // If audio_uploaded is NOT selected, exclude audio posts from post_created results
+            return activity.target_post?.post_type !== 'audio';
+          }
+        }
+        
+        // For other activity types, use normal filtering
+        return filters.activityTypes!.includes(activity.activity_type);
+      });
+    }
+
     return result;
   } catch (error) {
     console.error('Error fetching activity feed:', error);
@@ -150,6 +187,10 @@ export function formatActivityMessage(activity: ActivityFeedItem): string {
 
   switch (activity.activity_type) {
     case 'post_created':
+      // Check if it's an audio post
+      if (activity.target_post?.post_type === 'audio') {
+        return `uploaded new audio`;
+      }
       return `created a new post`;
     case 'audio_uploaded':
       return `uploaded new audio`;

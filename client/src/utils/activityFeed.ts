@@ -32,7 +32,8 @@ export async function getActivityFeed(
     
     // When filtering by activity types, we need to get more results initially
     // because post-processing will filter out many results
-    const queryLimit = filters.activityTypes && filters.activityTypes.length > 0 ? limit * 10 : limit;
+    const hasActivityTypeFilter = filters.activityTypes && filters.activityTypes.length > 0;
+    const queryLimit = hasActivityTypeFilter ? limit * 10 : limit;
     
     // Build the base query
     let query = supabase
@@ -86,8 +87,14 @@ export async function getActivityFeed(
     };
     query = query.gte('created_at', timeMap[effectiveTimeRange].toISOString());
 
-    // Apply the query limit
-    query = query.limit(queryLimit);
+    // Apply the query limit and pagination
+    if (hasActivityTypeFilter) {
+      // For filtered queries, get more results and paginate after filtering
+      query = query.limit(queryLimit);
+    } else {
+      // For unfiltered queries, apply normal pagination
+      query = query.range(offset, offset + limit - 1);
+    }
 
     const { data: activities, error } = await query;
     
@@ -189,10 +196,12 @@ export async function getActivityFeed(
       });
     }
 
-    // Apply pagination after post-processing
-    const startIndex = offset;
-    const endIndex = startIndex + limit;
-    result = result.slice(startIndex, endIndex);
+    // Apply pagination after post-processing only for filtered queries
+    if (hasActivityTypeFilter) {
+      const startIndex = offset;
+      const endIndex = startIndex + limit;
+      result = result.slice(startIndex, endIndex);
+    }
 
     return result;
   } catch (error) {

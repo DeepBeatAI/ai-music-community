@@ -65,13 +65,11 @@ export async function getActivityFeed(
       // Create expanded filter list that includes related activities for audio filtering
       let expandedFilters = [...filters.activityTypes];
       if (filters.activityTypes.includes('audio_uploaded')) {
-        // When filtering for audio, include post_created and post_liked to get audio-related activities
+        // When filtering for audio, only include post_created to get audio post creations
         if (!expandedFilters.includes('post_created')) {
           expandedFilters.push('post_created');
         }
-        if (!expandedFilters.includes('post_liked')) {
-          expandedFilters.push('post_liked');
-        }
+        // Don't automatically include post_liked for audio filtering
       }
       query = query.in('activity_type', expandedFilters);
     }
@@ -158,12 +156,13 @@ export async function getActivityFeed(
         
         // Handle activities related to audio posts
         if (activity.target_post?.post_type === 'audio') {
-          // For audio posts, check if the activity type matches what user wants
+          // For audio posts, "New Audio" filter should only show post creations
           if (activity.activity_type === 'post_created') {
             return hasAudioFilter || hasPostFilter;
           }
+          // Likes on audio posts should only show if "Likes" filter is selected
           if (activity.activity_type === 'post_liked') {
-            return hasAudioFilter || hasLikeFilter;
+            return hasLikeFilter; // Don't include in audio filter
           }
         }
         
@@ -223,17 +222,20 @@ export function getActivityIcon(activityType: string): string {
 }
 
 export function getActivityIconForPost(activityType: string, postType?: string): string {
+  // Audio creation gets blue music note
   if (activityType === 'post_created' && postType === 'audio') {
-    return '♪'; // Music note for audio posts
-  }
-  if (activityType === 'post_liked' && postType === 'audio') {
-    return '♪'; // Music note for audio post likes
+    return '🎵'; // Use the blue music note for audio post creation
   }
   
+  // Likes keep their heart symbol regardless of post type
+  if (activityType === 'post_liked') {
+    return '❤️'; // Always heart for likes
+  }
+  
+  // Other activity types
   switch (activityType) {
     case 'post_created': return '📝';
-    case 'audio_uploaded': return '♪';
-    case 'post_liked': return '❤️';
+    case 'audio_uploaded': return '🎵';
     case 'user_followed': return '👥';
     default: return '📢';
   }

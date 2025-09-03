@@ -163,15 +163,34 @@ export async function getRecommendedUsers(
         .limit(limit);
       
       if (fallbackUsers && fallbackUsers.length > 0) {
-        return fallbackUsers.map(user => ({
-          ...user,
-          mutual_follows: 0,
-          posts_count: 0,
-          followers_count: 0,
-          recent_activity: false,
-          reason: 'Community member',
-          score: Math.random()
-        }));
+        // Get stats for fallback users
+        const fallbackUserIds = fallbackUsers.map(u => u.user_id);
+        const { data: fallbackStats } = await supabase
+          .from('user_stats')
+          .select('user_id, posts_count, audio_posts_count, followers_count, likes_received, last_active')
+          .in('user_id', fallbackUserIds);
+        
+        const fallbackStatsMap = new Map((fallbackStats || []).map(s => [s.user_id, s]));
+        
+        return fallbackUsers.map(user => {
+          const stats = fallbackStatsMap.get(user.user_id) || {
+            posts_count: 0,
+            audio_posts_count: 0,
+            followers_count: 0,
+            likes_received: 0,
+            last_active: null
+          };
+          
+          return {
+            ...user,
+            mutual_follows: 0,
+            posts_count: stats.posts_count || 0,
+            followers_count: stats.followers_count || 0,
+            recent_activity: false,
+            reason: 'Community member',
+            score: Math.random()
+          };
+        });
       }
     }
 

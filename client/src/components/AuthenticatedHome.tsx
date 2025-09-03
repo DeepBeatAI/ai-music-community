@@ -208,7 +208,7 @@ export default function AuthenticatedHome() {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-2">
                         <p className="font-medium text-white text-sm truncate cursor-pointer hover:text-blue-300 transition-colors"
                            onClick={() => router.push(`/profile/${creator.username}`)}>
                           {creator.username}
@@ -218,17 +218,18 @@ export default function AuthenticatedHome() {
                           username={creator.username}
                           size="sm"
                           variant="secondary"
-                          showFollowerCount={true}
                         />
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {creator.user_stats?.posts_count || 0} posts
-                      </p>
-                      {creator.reason && (
-                        <p className="text-xs text-blue-400 mt-1 truncate">
-                          {creator.reason}
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-400">
+                          {creator.user_stats?.followers_count || 0} followers • {creator.user_stats?.posts_count || 0} posts
                         </p>
-                      )}
+                        {creator.reason && (
+                          <p className="text-xs text-blue-400 truncate">
+                            {creator.reason}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

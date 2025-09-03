@@ -13,7 +13,7 @@ export default function FeedPage() {
   const router = useRouter();
   const [activities, setActivities] = useState<ActivityFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<ActivityFilters>({});
+  const [filters, setFilters] = useState<ActivityFilters>({ timeRange: 'month' });
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFollow } from '@/contexts/FollowContext';
 import FollowButton from './FollowButton';
 import {
   getRecommendedUsers,
@@ -23,6 +24,7 @@ export default function UserRecommendations({
   className = ''
 }: UserRecommendationsProps) {
   const { user } = useAuth();
+  const { getFollowStatus } = useFollow();
   const router = useRouter();
   const [recommendations, setRecommendations] = useState<RecommendedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +95,7 @@ export default function UserRecommendations({
               
               <div className="flex space-x-3 text-xs text-gray-500 mt-1">
                 <span>{rec.posts_count || 0} posts</span>
-                <span>{rec.followers_count || 0} followers</span>
+                <span>{getFollowStatus(rec.user_id).followerCount} followers</span>
                 {rec.mutual_follows > 0 && (
                   <span className="text-blue-400">{rec.mutual_follows} mutual</span>
                 )}

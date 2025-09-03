@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFollow } from '@/contexts/FollowContext';
 import UserRecommendations from './UserRecommendations';
 import FollowButton from './FollowButton';
 import { getTrendingContent, getFeaturedCreators } from '@/utils/recommendations';
@@ -10,6 +11,7 @@ import { getActivityFeed, getActivityIconForPost } from '@/utils/activityFeed';
 
 export default function AuthenticatedHome() {
   const { user, profile } = useAuth();
+  const { getFollowStatus } = useFollow();
   const router = useRouter();
   const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
   const [featuredCreators, setFeaturedCreators] = useState<any[]>([]);
@@ -222,7 +224,7 @@ export default function AuthenticatedHome() {
                       </div>
                       <div className="space-y-1">
                         <p className="text-xs text-gray-400">
-                          {creator.user_stats?.followers_count || 0} followers • {creator.user_stats?.posts_count || 0} posts
+                          {getFollowStatus(creator.user_id).followerCount} followers • {creator.user_stats?.posts_count || 0} posts
                         </p>
                         {creator.reason && (
                           <p className="text-xs text-blue-400 truncate">

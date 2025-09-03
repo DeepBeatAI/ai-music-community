@@ -4,7 +4,7 @@ import { UserProfile } from '@/types';
 export interface ActivityFilters {
   following?: boolean;
   activityTypes?: string[];
-  timeRange?: 'all' | 'today' | 'week' | 'month';
+  timeRange?: 'today' | 'week' | 'month';
 }
 
 export interface ActivityFeedItem {
@@ -30,6 +30,10 @@ export async function getActivityFeed(
   try {
     const offset = page * limit;
     
+    // When filtering by activity types, we need to get more results initially
+    // because post-processing will filter out many results
+    const queryLimit = filters.activityTypes && filters.activityTypes.length > 0 ? limit * 10 : limit;
+    
     // Build the base query
     let query = supabase
       .from('user_activities')
@@ -42,8 +46,7 @@ export async function getActivityFeed(
         target_post_id
       `)
       .eq('is_public', true)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
 
     // Apply following filter
     if (filters.following) {
@@ -74,15 +77,17 @@ export async function getActivityFeed(
       query = query.in('activity_type', expandedFilters);
     }
 
-    // Apply time range filter
-    if (filters.timeRange && filters.timeRange !== 'all') {
-      const timeMap = {
-        today: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        week: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-        month: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      };
-      query = query.gte('created_at', timeMap[filters.timeRange].toISOString());
-    }
+    // Apply time range filter - default to month if not specified
+    const effectiveTimeRange = filters.timeRange || 'month';
+    const timeMap = {
+      today: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      week: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      month: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    };
+    query = query.gte('created_at', timeMap[effectiveTimeRange].toISOString());
+
+    // Apply the query limit
+    query = query.limit(queryLimit);
 
     const { data: activities, error } = await query;
     
@@ -183,6 +188,11 @@ export async function getActivityFeed(
         return false;
       });
     }
+
+    // Apply pagination after post-processing
+    const startIndex = offset;
+    const endIndex = startIndex + limit;
+    result = result.slice(startIndex, endIndex);
 
     return result;
   } catch (error) {

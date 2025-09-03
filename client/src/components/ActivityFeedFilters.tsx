@@ -5,7 +5,7 @@ import { useState } from 'react';
 export interface ActivityFilters {
   following?: boolean;
   activityTypes?: string[];
-  timeRange?: 'all' | 'today' | 'week' | 'month';
+  timeRange?: 'today' | 'week' | 'month';
 }
 
 interface ActivityFeedFiltersProps {
@@ -29,7 +29,7 @@ export default function ActivityFeedFilters({
     initialFilters.activityTypes || []
   );
   const [timeRange, setTimeRange] = useState<ActivityFilters['timeRange']>(
-    initialFilters.timeRange || 'all'
+    initialFilters.timeRange || 'month'
   );
 
   const handleActivityTypeToggle = (type: string) => {
@@ -91,7 +91,6 @@ export default function ActivityFeedFilters({
             onChange={(e) => handleTimeRangeChange(e.target.value as ActivityFilters['timeRange'])}
             className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">All Time</option>
             <option value="today">Today</option>
             <option value="week">This Week</option>
             <option value="month">This Month</option>

@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import UserRecommendations from './UserRecommendations';
 import FollowButton from './FollowButton';
 import { getTrendingContent, getFeaturedCreators } from '@/utils/recommendations';
-import { getActivityFeed } from '@/utils/activityFeed';
+import { getActivityFeed, getActivityIconForPost } from '@/utils/activityFeed';
 
 export default function AuthenticatedHome() {
   const { user, profile } = useAuth();
@@ -100,9 +100,7 @@ export default function AuthenticatedHome() {
                   >
                     <div className="flex items-center space-x-3">
                       <span className="text-2xl">
-                        {activity.activity_type === 'post_created' ? '📝' :
-                         activity.activity_type === 'audio_uploaded' ? '🎵' :
-                         activity.activity_type === 'post_liked' ? '❤️' : '🔔'}
+                        {getActivityIconForPost(activity.activity_type, activity.target_post?.post_type)}
                       </span>
                       <div>
                         <p className="text-white text-sm">
@@ -153,7 +151,7 @@ export default function AuthenticatedHome() {
                         <p className="text-gray-300 mb-2">{post.content}</p>
                         {post.post_type === 'audio' && (
                           <div className="flex items-center space-x-2 text-blue-400">
-                            <span>🎵</span>
+                            <span>♪</span>
                             <span className="text-sm">{post.audio_filename || 'Audio Track'}</span>
                           </div>
                         )}
@@ -220,10 +218,11 @@ export default function AuthenticatedHome() {
                           username={creator.username}
                           size="sm"
                           variant="secondary"
+                          showFollowerCount={true}
                         />
                       </div>
                       <p className="text-xs text-gray-400 mt-1">
-                        {creator.user_stats?.followers_count || 0} followers • {creator.user_stats?.posts_count || 0} posts
+                        {creator.user_stats?.posts_count || 0} posts
                       </p>
                       {creator.reason && (
                         <p className="text-xs text-blue-400 mt-1 truncate">

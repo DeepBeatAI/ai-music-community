@@ -62,10 +62,16 @@ export async function getActivityFeed(
 
     // Apply activity type filters - handle audio mapping at query level
     if (filters.activityTypes && filters.activityTypes.length > 0) {
-      // Create expanded filter list that includes post_created if audio_uploaded is requested
+      // Create expanded filter list that includes related activities for audio filtering
       let expandedFilters = [...filters.activityTypes];
-      if (filters.activityTypes.includes('audio_uploaded') && !filters.activityTypes.includes('post_created')) {
-        expandedFilters.push('post_created');
+      if (filters.activityTypes.includes('audio_uploaded')) {
+        // When filtering for audio, include post_created and post_liked to get audio-related activities
+        if (!expandedFilters.includes('post_created')) {
+          expandedFilters.push('post_created');
+        }
+        if (!expandedFilters.includes('post_liked')) {
+          expandedFilters.push('post_liked');
+        }
       }
       query = query.in('activity_type', expandedFilters);
     }
@@ -148,23 +154,34 @@ export async function getActivityFeed(
         const filterTypes = filters.activityTypes!;
         const hasAudioFilter = filterTypes.includes('audio_uploaded');
         const hasPostFilter = filterTypes.includes('post_created');
+        const hasLikeFilter = filterTypes.includes('post_liked');
         
-        // For post_created activities
-        if (activity.activity_type === 'post_created') {
-          const isAudioPost = activity.target_post?.post_type === 'audio';
-          
-          // If it's an audio post
-          if (isAudioPost) {
-            // Show if either 'audio_uploaded' or 'post_created' is selected
+        // Handle activities related to audio posts
+        if (activity.target_post?.post_type === 'audio') {
+          // For audio posts, check if the activity type matches what user wants
+          if (activity.activity_type === 'post_created') {
             return hasAudioFilter || hasPostFilter;
-          } else {
-            // If it's a text post, show only if 'post_created' is selected
-            return hasPostFilter;
+          }
+          if (activity.activity_type === 'post_liked') {
+            return hasAudioFilter || hasLikeFilter;
           }
         }
         
-        // For other activity types, use normal filtering
-        return filterTypes.includes(activity.activity_type);
+        // Handle activities related to text posts
+        if (activity.activity_type === 'post_created' && activity.target_post?.post_type === 'text') {
+          return hasPostFilter;
+        }
+        
+        if (activity.activity_type === 'post_liked' && activity.target_post?.post_type === 'text') {
+          return hasLikeFilter;
+        }
+        
+        // Handle other activity types normally (user_followed, etc.)
+        if (!activity.target_post) {
+          return filterTypes.includes(activity.activity_type);
+        }
+        
+        return false;
       });
     }
 
@@ -200,7 +217,22 @@ export function formatActivityMessage(activity: ActivityFeedItem): string {
 export function getActivityIcon(activityType: string): string {
   switch (activityType) {
     case 'post_created': return '📝';
-    case 'audio_uploaded': return '🎵';
+    case 'audio_uploaded': return '♪';
+    default: return '📢';
+  }
+}
+
+export function getActivityIconForPost(activityType: string, postType?: string): string {
+  if (activityType === 'post_created' && postType === 'audio') {
+    return '♪'; // Music note for audio posts
+  }
+  if (activityType === 'post_liked' && postType === 'audio') {
+    return '♪'; // Music note for audio post likes
+  }
+  
+  switch (activityType) {
+    case 'post_created': return '📝';
+    case 'audio_uploaded': return '♪';
     case 'post_liked': return '❤️';
     case 'user_followed': return '👥';
     default: return '📢';

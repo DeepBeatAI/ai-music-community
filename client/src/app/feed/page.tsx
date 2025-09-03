@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import ActivityFeedFilters, { ActivityFilters } from '@/components/ActivityFeedFilters';
 import { useAuth } from '@/contexts/AuthContext';
-import { getActivityFeed, ActivityFeedItem, formatActivityMessage, getActivityIcon } from '@/utils/activityFeed';
+import { getActivityFeed, ActivityFeedItem, formatActivityMessage, getActivityIconForPost } from '@/utils/activityFeed';
 import { formatTimeAgo } from '@/utils/format';
 
 export default function FeedPage() {
@@ -138,7 +138,7 @@ export default function FeedPage() {
                   className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
                 >
                   <div className="flex items-start space-x-3">
-                    <div className="text-2xl">{getActivityIcon(activity.activity_type)}</div>
+                    <div className="text-2xl">{getActivityIconForPost(activity.activity_type, activity.target_post?.post_type)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
                         <span className="font-medium text-white">{activity.user_profile.username}</span>

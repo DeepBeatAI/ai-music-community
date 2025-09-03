@@ -3,11 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import FollowButton from './FollowButton';
 import {
   getRecommendedUsers,
-  followUser,
-  unfollowUser,
-  checkIfFollowing,
   RecommendedUser
 } from '@/utils/recommendations';
 
@@ -27,9 +25,7 @@ export default function UserRecommendations({
   const { user } = useAuth();
   const router = useRouter();
   const [recommendations, setRecommendations] = useState<RecommendedUser[]>([]);
-  const [followingState, setFollowingState] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (user) {
@@ -44,16 +40,6 @@ export default function UserRecommendations({
     try {
       const recs = await getRecommendedUsers(user.id, limit);
       setRecommendations(recs);
-
-      // Check follow status for each recommendation
-      const followingStatus: Record<string, boolean> = {};
-      await Promise.all(
-        recs.map(async (rec) => {
-          const isFollowing = await checkIfFollowing(user.id, rec.user_id);
-          followingStatus[rec.user_id] = isFollowing;
-        })
-      );
-      setFollowingState(followingStatus);
     } catch (error) {
       console.error('Error loading recommendations:', error);
     } finally {
@@ -61,33 +47,8 @@ export default function UserRecommendations({
     }
   };
 
-  const handleFollow = async (targetUserId: string) => {
-    if (!user || actionLoading[targetUserId]) return;
-
-    setActionLoading(prev => ({ ...prev, [targetUserId]: true }));
-    try {
-      const isCurrentlyFollowing = followingState[targetUserId];
-      const success = isCurrentlyFollowing
-        ? await unfollowUser(user.id, targetUserId)
-        : await followUser(user.id, targetUserId);
-
-      if (success) {
-        setFollowingState(prev => ({
-          ...prev,
-          [targetUserId]: !isCurrentlyFollowing
-        }));
-      }
-    } catch (error) {
-      console.error('Error toggling follow:', error);
-    } finally {
-      setActionLoading(prev => ({ ...prev, [targetUserId]: false }));
-    }
-  };
-
   const handleUserClick = (username: string) => {
-    // TODO: Navigate to user profile when implemented
-    // For now, just close any modals or navigate to discover
-    router.push('/discover');
+    router.push(`/profile/${username}`);
   };
 
   if (!user || loading) {
@@ -131,25 +92,20 @@ export default function UserRecommendations({
               )}
               
               <div className="flex space-x-3 text-xs text-gray-500 mt-1">
-                <span>{rec.posts_count} posts</span>
-                <span>{rec.followers_count} followers</span>
+                <span>{rec.posts_count || 0} posts</span>
+                <span>{rec.followers_count || 0} followers</span>
                 {rec.mutual_follows > 0 && (
                   <span className="text-blue-400">{rec.mutual_follows} mutual</span>
                 )}
               </div>
             </div>
             
-            <button
-              onClick={() => handleFollow(rec.user_id)}
-              disabled={actionLoading[rec.user_id]}
-              className={`px-3 py-1 text-xs rounded-full font-medium transition-colors ${
-                followingState[rec.user_id]
-                  ? 'bg-gray-600 text-white hover:bg-gray-500'
-                  : 'bg-blue-600 text-white hover:bg-blue-500'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {actionLoading[rec.user_id] ? '...' : followingState[rec.user_id] ? 'Following' : 'Follow'}
-            </button>
+            <FollowButton 
+              userId={rec.user_id}
+              username={rec.username}
+              size="sm"
+              variant="primary"
+            />
           </div>
         ))}
       </div>

@@ -65,7 +65,7 @@ export default function DashboardPage() {
   // Apply filters and search when data changes
   useEffect(() => {
     applyFiltersAndSearch();
-  }, [allPosts, filters, searchResults, isSearchActive]);
+  }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
 
   // Add missing state variable
   const [hasFiltersApplied, setHasFiltersApplied] = useState(false);
@@ -167,15 +167,22 @@ export default function DashboardPage() {
       filtered = allPosts.filter(post => searchPostIds.has(post.id));
     }
 
-    // If we have search filters, use those instead of local filters
-    const activeFilters = isSearchActive ? {
+    // FIXED: Always use search filters when they exist, regardless of search status
+    // This allows filters to work on existing posts even without an active search
+    const hasSearchFilters = Object.keys(currentSearchFilters).some(
+      key => currentSearchFilters[key] && 
+             currentSearchFilters[key] !== 'all' && 
+             currentSearchFilters[key] !== 'recent'
+    );
+    
+    const activeFilters = hasSearchFilters ? {
       postType: currentSearchFilters.postType || 'all',
       sortBy: currentSearchFilters.sortBy || 'recent',
       timeRange: currentSearchFilters.timeRange || 'all'
     } : filters;
 
     // Apply post type filter
-    if (activeFilters.postType !== 'all') {
+    if (activeFilters.postType !== 'all' && activeFilters.postType !== 'creators') {
       filtered = filtered.filter(post => post.post_type === activeFilters.postType);
     }
 

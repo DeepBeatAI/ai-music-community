@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { formatDuration, getBestAudioUrl } from '@/utils/audio';
+import { getCachedAudioUrl } from '@/utils/audioCache';
 import { 
   createWavesurferInstance, 
   formatWaveformError, 
@@ -38,26 +39,23 @@ export default function WavesurferPlayer({
   const [isWaveformReady, setIsWaveformReady] = useState(false);
   const [volume, setVolume] = useState(0.7);
   const [urlProcessingComplete, setUrlProcessingComplete] = useState(false);
-  const [showFallbackPlayer, setShowFallbackPlayer] = useState(false);
 
   // NEW: Stable managers that don't change on re-renders
   const volumeManager = useMemo(() => createVolumeManager(), []);
   const timeManager = useMemo(() => createTimeManager(), []);
 
   const waveformRef = useRef<HTMLDivElement>(null);
-  const fallbackAudioRef = useRef<HTMLAudioElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const initializationRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // STEP 1: Process audio URL (no volume dependency)
+  // STEP 1: Process audio URL with smart caching
   useEffect(() => {
     const initializeAudioUrl = async () => {
-      console.log('🎵 Processing audio URL:', audioUrl);
+      console.log('🎵 Initializing audio URL with smart caching');
       setIsLoading(true);
       setError(null);
       setUrlProcessingComplete(false);
-      setShowFallbackPlayer(false);
       
       try {
         // Cancel any ongoing URL processing
@@ -66,22 +64,16 @@ export default function WavesurferPlayer({
         }
         abortControllerRef.current = new AbortController();
         
-        let bestUrl;
-        try {
-          bestUrl = await getBestAudioUrl(audioUrl);
-        } catch (err) {
-          console.warn('getBestAudioUrl failed, using original:', err);
-          bestUrl = audioUrl;
-        }
+        // Use smart caching system
+        const optimizedUrl = await getCachedAudioUrl(audioUrl);
         
         if (abortControllerRef.current.signal.aborted) {
           console.log('URL processing was cancelled');
           return;
         }
         
-        const finalUrl = bestUrl || audioUrl;
-        console.log('✅ Using audio URL:', finalUrl);
-        setActualAudioUrl(finalUrl);
+        console.log('✅ Using optimized audio URL from cache system');
+        setActualAudioUrl(optimizedUrl);
         
       } catch (err) {
         if (!abortControllerRef.current?.signal.aborted) {
@@ -103,7 +95,7 @@ export default function WavesurferPlayer({
         abortControllerRef.current.abort();
       }
     };
-  }, [audioUrl]); // CRITICAL: Only audioUrl dependency
+  }, [audioUrl]); // Only audioUrl dependency - no volume
 
   // STEP 2: Initialize Wavesurfer (no volume dependency)
   useEffect(() => {
@@ -166,7 +158,6 @@ export default function WavesurferPlayer({
           setIsWaveformReady(true);
           setIsLoading(false);
           setTotalDuration(duration);
-          setShowFallbackPlayer(false);
           
           // CRITICAL: Apply current volume via manager
           volumeManager.updateVolume(volume);
@@ -234,9 +225,8 @@ export default function WavesurferPlayer({
             return;
           }
           
-          setError('Waveform failed to load - using fallback player');
+          setError('Waveform failed to load');
           setIsLoading(false);
-          setShowFallbackPlayer(true);
         });
 
         wavesurfer.on('finish', () => {
@@ -283,9 +273,8 @@ export default function WavesurferPlayer({
           return;
         }
         
-        setError('Waveform unavailable - using fallback player');
+        setError('Waveform unavailable');
         setIsLoading(false);
-        setShowFallbackPlayer(true);
         initializationRef.current = false;
       }
     };
@@ -328,61 +317,9 @@ export default function WavesurferPlayer({
     volumeManager.updateVolume(volume);
   }, [volume, volumeManager]);
 
-  // Fallback audio player setup
-  useEffect(() => {
-    if (!showFallbackPlayer || !fallbackAudioRef.current || !actualAudioUrl) return;
-
-    const audio = fallbackAudioRef.current;
-    
-    const handleLoadedMetadata = () => {
-      setTotalDuration(audio.duration);
-      setIsLoading(false);
-    };
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-
-    const handleError = () => {
-      setError('Audio file could not be loaded');
-      setIsLoading(false);
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-
-    // Apply volume to fallback player
-    audio.volume = volume;
-
-    return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-    };
-  }, [showFallbackPlayer, actualAudioUrl, volume]);
-
   // ENHANCED: Play/pause with better error handling
   const togglePlayPause = useCallback(() => {
-    if (showFallbackPlayer && fallbackAudioRef.current) {
-      const audio = fallbackAudioRef.current;
-      if (isPlaying) {
-        audio.pause();
-        setIsPlaying(false);
-      } else {
-        audio.play().then(() => setIsPlaying(true)).catch((err) => {
-          console.error('Fallback playback error:', err);
-          setError('Playback failed');
-        });
-      }
-    } else if (wavesurferRef.current && isWaveformReady) {
+    if (wavesurferRef.current && isWaveformReady) {
       try {
         wavesurferRef.current.playPause();
       } catch (err) {
@@ -390,7 +327,7 @@ export default function WavesurferPlayer({
         setError('Playback failed');
       }
     }
-  }, [isWaveformReady, showFallbackPlayer, isPlaying]);
+  }, [isWaveformReady]);
 
   // CRITICAL: Volume change that doesn't reinitialize
   const handleVolumeChange = useCallback((newVolume: number) => {
@@ -398,54 +335,35 @@ export default function WavesurferPlayer({
     setVolume(newVolume); // This will trigger the separate volume effect
   }, []);
 
-  // ENHANCED: Progress change with fallback handling
+  // ENHANCED: Progress change with waveform handling only
   const handleProgressChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = (parseFloat(e.target.value) / 100) * totalDuration;
     
-    if (showFallbackPlayer && fallbackAudioRef.current) {
-      fallbackAudioRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
-    } else if (wavesurferRef.current && totalDuration > 0) {
+    if (wavesurferRef.current && totalDuration > 0) {
       // CRITICAL: Manual state update for better responsiveness
       setCurrentTime(newTime);
       timeManager.updateTime(newTime);
       wavesurferRef.current.seekTo(newTime / totalDuration);
     }
-  }, [totalDuration, showFallbackPlayer, timeManager]);
+  }, [totalDuration, timeManager]);
 
   // ENHANCED: Rewind with manual state update
   const handleRewind = useCallback(() => {
     const newTime = Math.max(0, currentTime - 10);
     
-    if (showFallbackPlayer && fallbackAudioRef.current) {
-      fallbackAudioRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
-    } else if (wavesurferRef.current && totalDuration > 0) {
+    if (wavesurferRef.current && totalDuration > 0) {
       // CRITICAL: Update state immediately, then seek
       setCurrentTime(newTime);
       timeManager.updateTime(newTime);
       timeManager.seek(newTime);
     }
-  }, [currentTime, totalDuration, showFallbackPlayer, timeManager]);
+  }, [currentTime, totalDuration, timeManager]);
 
   // ENHANCED: Fast forward with boundary check to prevent restart
   const handleFastForward = useCallback(() => {
     const newTime = currentTime + 10;
     
-    if (showFallbackPlayer && fallbackAudioRef.current) {
-      // For fallback player, check if we're near the end
-      if (newTime >= totalDuration - 0.5) {
-        // Stop playback instead of seeking past the end
-        fallbackAudioRef.current.pause();
-        fallbackAudioRef.current.currentTime = totalDuration;
-        setCurrentTime(totalDuration);
-        setIsPlaying(false);
-        console.log('🛑 Fast forward reached end, stopping playback');
-      } else {
-        fallbackAudioRef.current.currentTime = newTime;
-        setCurrentTime(newTime);
-      }
-    } else if (wavesurferRef.current && totalDuration > 0) {
+    if (wavesurferRef.current && totalDuration > 0) {
       // For wavesurfer, check if we're near the end
       if (newTime >= totalDuration - 0.5) {
         // Stop playback and go to end instead of seeking past
@@ -463,10 +381,10 @@ export default function WavesurferPlayer({
         console.log('⏩ Fast forward to:', newTime);
       }
     }
-  }, [currentTime, totalDuration, showFallbackPlayer, timeManager, wavesurferRef]);
+  }, [currentTime, totalDuration, timeManager, wavesurferRef]);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
-  const canPlay = (isWaveformReady && !showFallbackPlayer) || (showFallbackPlayer && actualAudioUrl);
+  const canPlay = isWaveformReady && actualAudioUrl;
 
   // Debug info (remove in production)
   console.log('WavesurferPlayer state:', {
@@ -474,21 +392,36 @@ export default function WavesurferPlayer({
     urlProcessingComplete,
     showWaveform,
     isWaveformReady,
-    showFallbackPlayer,
     isLoading,
     error,
     volume
   });
 
-  if (error && !showFallbackPlayer) {
+  // REMOVED: Fallback player to eliminate bandwidth redundancy
+  // Instead, show error state and let user retry
+  if (error && !showWaveform) {
     return (
       <div className={`bg-red-900/20 border border-red-700 rounded-lg p-4 ${className}`}>
-        <div className="flex items-center space-x-3">
-          <div className="text-red-400 text-xl">⚠️</div>
-          <div>
-            <p className="text-red-400 font-medium">Audio Error</p>
-            <p className="text-red-300 text-sm">{error}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="text-red-400 text-xl">⚠️</div>
+            <div>
+              <p className="text-red-400 font-medium">Audio Error</p>
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
           </div>
+          <button
+            onClick={() => {
+              setError(null);
+              setIsLoading(true);
+              // Trigger re-initialization
+              setActualAudioUrl(null);
+              setTimeout(() => setActualAudioUrl(audioUrl), 100);
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -496,11 +429,6 @@ export default function WavesurferPlayer({
 
   return (
     <div className={`bg-gray-800 rounded-lg p-4 border border-gray-600 ${className}`}>
-      {/* Hidden fallback audio element */}
-      {showFallbackPlayer && actualAudioUrl && (
-        <audio ref={fallbackAudioRef} src={actualAudioUrl} preload="metadata" />
-      )}
-
       {/* File Info */}
       {fileName && (
         <div className="mb-4 pb-3 border-b border-gray-600">
@@ -510,17 +438,12 @@ export default function WavesurferPlayer({
             {isLoading && (
               <span className="text-xs text-gray-400">(Loading...)</span>
             )}
-            {showFallbackPlayer && (
-              <span className="text-xs text-yellow-400 bg-yellow-900/20 px-2 py-1 rounded">
-                Basic Player
-              </span>
-            )}
           </p>
         </div>
       )}
 
       {/* Waveform */}
-      {showWaveform && !showFallbackPlayer && (
+      {showWaveform && (
         <div className="mb-4">
           <div 
             ref={waveformRef} 
@@ -533,15 +456,6 @@ export default function WavesurferPlayer({
               <span className="ml-2 text-sm text-gray-400">Loading waveform...</span>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Error message for fallback */}
-      {showFallbackPlayer && (
-        <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-700 rounded">
-          <p className="text-yellow-400 text-sm">
-            ⚠️ Waveform unavailable - using basic audio player
-          </p>
         </div>
       )}
 

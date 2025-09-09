@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import NotificationCenter from '../NotificationCenter';
+import BandwidthMonitor from '../dev/BandwidthMonitor';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -145,6 +146,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <main className="flex-1">
         {children}
       </main>
+
+      {/* Development monitoring */}
+      <BandwidthMonitor />
     </div>
   );
 }

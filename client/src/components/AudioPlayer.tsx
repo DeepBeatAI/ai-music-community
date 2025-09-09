@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react';
-import { formatDuration, getAudioSignedUrl } from '@/utils/audio';
+import { formatDuration } from '@/utils/audio';
+import { getCachedAudioUrl } from '@/utils/audioCache';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -23,27 +24,22 @@ export default function AudioPlayer({
   const [actualAudioUrl, setActualAudioUrl] = useState(audioUrl);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Get signed URL for existing posts that might have public URLs
+  // Get optimized URL using smart caching system
   useEffect(() => {
     const initializeAudioUrl = async () => {
-      // Check if URL is a public URL (needs to be converted to signed URL)
       if (audioUrl.includes('/object/public/')) {
         setIsLoading(true);
         try {
-          const signedUrl = await getAudioSignedUrl(audioUrl);
-          if (signedUrl) {
-            setActualAudioUrl(signedUrl);
-          } else {
-            setError('Failed to generate access URL');
-          }
+          const optimizedUrl = await getCachedAudioUrl(audioUrl);
+          setActualAudioUrl(optimizedUrl);
         } catch (err) {
-          console.error('Error getting signed URL:', err);
+          console.error('Error getting optimized URL:', err);
           setError('Failed to load audio file');
         } finally {
           setIsLoading(false);
         }
       } else {
-        // URL is already a signed URL or valid URL
+        // URL is already optimized or valid
         setActualAudioUrl(audioUrl);
       }
     };

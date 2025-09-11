@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { FollowProvider } from '@/contexts/FollowContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import CacheTestDashboard from '@/components/CacheTestDashboard';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +35,10 @@ export default function RootLayout({
           <AuthProvider>
             <FollowProvider>
               {children}
+              {/* Only show in development */}
+              {process.env.NODE_ENV === 'development' && (
+                <CacheTestDashboard />
+              )}
             </FollowProvider>
           </AuthProvider>
         </ErrorBoundary>

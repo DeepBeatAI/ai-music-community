@@ -187,12 +187,108 @@ class AudioUrlCache {
   }
 }
 
+// Performance metrics for analytics
+interface PerformanceMetrics {
+  cacheHits: number;
+  cacheMisses: number;
+  totalBandwidthSaved: number;
+  averageLoadTime: number;
+  loadTimes: number[];
+}
+
+// Enhanced AudioCache with performance tracking
+export class AudioCacheManager {
+  private urlCache: AudioUrlCache;
+  private performanceMetrics: PerformanceMetrics = {
+    cacheHits: 0,
+    cacheMisses: 0,
+    totalBandwidthSaved: 0,
+    averageLoadTime: 0,
+    loadTimes: []
+  };
+
+  constructor() {
+    this.urlCache = new AudioUrlCache();
+  }
+
+  async getCachedAudioUrl(audioUrl: string): Promise<string> {
+    const startTime = Date.now();
+    
+    try {
+      // First check if we already have a cached URL
+      const stats = this.urlCache.getCacheStats();
+      const existingEntry = stats.entries.find(entry => 
+        audioUrl.includes(entry.key) || entry.key === this.extractCacheKey(audioUrl)
+      );
+      
+      if (existingEntry && existingEntry.expires > new Date()) {
+        this.performanceMetrics.cacheHits++;
+        const loadTime = Date.now() - startTime;
+        this.updatePerformanceMetrics(loadTime, true);
+        return await this.urlCache.getCachedUrl(audioUrl);
+      } else {
+        this.performanceMetrics.cacheMisses++;
+        const url = await this.urlCache.getCachedUrl(audioUrl);
+        const loadTime = Date.now() - startTime;
+        this.updatePerformanceMetrics(loadTime, false);
+        return url;
+      }
+    } catch (error) {
+      const loadTime = Date.now() - startTime;
+      this.updatePerformanceMetrics(loadTime, false);
+      throw error;
+    }
+  }
+
+  private extractCacheKey(url: string): string {
+    return url.split('?')[0].split('/').pop() || url;
+  }
+
+  private updatePerformanceMetrics(loadTime: number, wasHit: boolean): void {
+    this.performanceMetrics.loadTimes.push(loadTime);
+    
+    // Keep only last 100 measurements
+    if (this.performanceMetrics.loadTimes.length > 100) {
+      this.performanceMetrics.loadTimes.shift();
+    }
+    
+    this.performanceMetrics.averageLoadTime = 
+      this.performanceMetrics.loadTimes.reduce((a, b) => a + b, 0) / 
+      this.performanceMetrics.loadTimes.length;
+      
+    if (wasHit) {
+      // Estimate 5MB saved per cache hit
+      this.performanceMetrics.totalBandwidthSaved += 5 * 1024 * 1024;
+    }
+  }
+
+  getPerformanceStats() {
+    const total = this.performanceMetrics.cacheHits + this.performanceMetrics.cacheMisses;
+    
+    return {
+      hitRate: total > 0 ? this.performanceMetrics.cacheHits / total : 0,
+      averageLoadTime: this.performanceMetrics.averageLoadTime,
+      totalRequests: total,
+      estimatedBandwidthSaved: this.performanceMetrics.totalBandwidthSaved
+    };
+  }
+
+  clearCache(): void {
+    this.urlCache.clearCache();
+  }
+
+  getCacheStats() {
+    return this.urlCache.getCacheStats();
+  }
+}
+
 // Export singleton instance
 export const audioUrlCache = new AudioUrlCache();
+export const audioCacheManager = new AudioCacheManager();
 
 // Convenience functions
 export const getCachedAudioUrl = (originalUrl: string): Promise<string> => 
-  audioUrlCache.getCachedUrl(originalUrl);
+  audioCacheManager.getCachedAudioUrl(originalUrl);
 
 export const refreshAudioUrl = (originalUrl: string): Promise<string> => 
   audioUrlCache.refreshIfNeeded(originalUrl);

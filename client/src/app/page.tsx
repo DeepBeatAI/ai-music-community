@@ -5,6 +5,7 @@ import AuthenticatedHome from '@/components/AuthenticatedHome';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
+import { smartPreloader } from '@/utils/smartPreloader';
 
 export default function HomePage() {
   const { user, profile, loading } = useAuth();
@@ -13,6 +14,9 @@ export default function HomePage() {
   // Ensure we're on the client side to avoid hydration issues
   useEffect(() => {
     setIsClient(true);
+    
+    // Preload critical assets on app load
+    smartPreloader.preloadCriticalAssets();
   }, []);
 
   // Show loading state while auth is being determined

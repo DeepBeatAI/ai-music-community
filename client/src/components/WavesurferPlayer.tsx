@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { formatDuration, getBestAudioUrl } from '@/utils/audio';
 import { getCachedAudioUrl } from '@/utils/audioCache';
+import { performanceAnalytics } from '@/utils/performanceAnalytics';
 import { 
   createWavesurferInstance, 
   formatWaveformError, 
@@ -49,9 +50,10 @@ export default function WavesurferPlayer({
   const initializationRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // STEP 1: Process audio URL with smart caching
+  // STEP 1: Process audio URL with smart caching and analytics tracking
   useEffect(() => {
     const initializeAudioUrl = async () => {
+      const startTime = Date.now();
       console.log('🎵 Initializing audio URL with smart caching');
       setIsLoading(true);
       setError(null);
@@ -64,8 +66,20 @@ export default function WavesurferPlayer({
         }
         abortControllerRef.current = new AbortController();
         
-        // Use smart caching system
+        // Track cache attempt
         const optimizedUrl = await getCachedAudioUrl(audioUrl);
+        const wasFromCache = optimizedUrl.includes('cached') || optimizedUrl === audioUrl;
+        
+        // Track analytics event
+        performanceAnalytics.trackEvent({
+          type: wasFromCache ? 'cache_hit' : 'cache_miss',
+          url: audioUrl,
+          metadata: {
+            component: 'WavesurferPlayer',
+            originalUrl: audioUrl,
+            optimizedUrl: optimizedUrl
+          }
+        });
         
         if (abortControllerRef.current.signal.aborted) {
           console.log('URL processing was cancelled');
@@ -111,6 +125,7 @@ export default function WavesurferPlayer({
     const initWavesurfer = async () => {
       if (initializationRef.current) return;
       
+      const startTime = Date.now();
       try {
         initializationRef.current = true;
         console.log('🌊 Initializing Wavesurfer with URL:', actualAudioUrl);
@@ -151,13 +166,26 @@ export default function WavesurferPlayer({
         volumeManager.setWavesurfer(wavesurfer);
         timeManager.setWavesurfer(wavesurfer);
 
-        // Set up event listeners
+        // Set up event listeners with analytics tracking
         wavesurfer.on('ready', () => {
+          const loadTime = Date.now() - startTime;
           console.log('✅ Wavesurfer ready');
           const duration = wavesurfer.getDuration();
           setIsWaveformReady(true);
           setIsLoading(false);
           setTotalDuration(duration);
+          
+          // Track successful audio load
+          performanceAnalytics.trackEvent({
+            type: 'audio_load',
+            duration: loadTime,
+            url: actualAudioUrl,
+            metadata: {
+              component: 'WavesurferPlayer',
+              fromCache: actualAudioUrl.includes('cached'),
+              duration: duration
+            }
+          });
           
           // CRITICAL: Apply current volume via manager
           volumeManager.updateVolume(volume);
@@ -214,9 +242,21 @@ export default function WavesurferPlayer({
         wavesurfer.on('play', () => setIsPlaying(true));
         wavesurfer.on('pause', () => setIsPlaying(false));
 
-        // ENHANCED: Better error handling
+        // ENHANCED: Better error handling with analytics
         wavesurfer.on('error', (err) => {
+          const loadTime = Date.now() - startTime;
           console.error('❌ Wavesurfer error:', err);
+          
+          // Track error
+          performanceAnalytics.trackEvent({
+            type: 'error',
+            duration: loadTime,
+            url: actualAudioUrl,
+            metadata: {
+              component: 'WavesurferPlayer',
+              error: err.toString()
+            }
+          });
           
           // Use enhanced error handler
           const isRealError = handleWavesurferError(err, 'WavesurferPlayer');

@@ -1,35 +1,33 @@
-import type { Metadata } from "next";
+'use client';
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { FollowProvider } from '@/contexts/FollowContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import CacheTestDashboard from '@/components/CacheTestDashboard';
+import PerformanceDashboard from '@/components/PerformanceDashboard';
+import { useState } from 'react';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "AI Music Community",
-  description: "Create, Share, Connect, and Grow Your AI Music",
-};
-
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [showDashboard, setShowDashboard] = useState(false);
+
   return (
     <html lang="en">
+      <head>
+        <title>AI Music Community</title>
+        <meta name="description" content="Create, Share, Connect, and Grow Your AI Music" />
+      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} antialiased`}
       >
         <ErrorBoundary>
           <AuthProvider>
@@ -37,7 +35,13 @@ export default function RootLayout({
               {children}
               {/* Only show in development */}
               {process.env.NODE_ENV === 'development' && (
-                <CacheTestDashboard />
+                <>
+                  <CacheTestDashboard />
+                  <PerformanceDashboard
+                    isVisible={showDashboard}
+                    onToggle={() => setShowDashboard(!showDashboard)}
+                  />
+                </>
               )}
             </FollowProvider>
           </AuthProvider>

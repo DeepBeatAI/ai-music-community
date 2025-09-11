@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { formatDuration } from '@/utils/audio';
 import { getCachedAudioUrl } from '@/utils/audioCache';
+import { performanceAnalytics } from '@/utils/performanceAnalytics';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -24,13 +25,28 @@ export default function AudioPlayer({
   const [actualAudioUrl, setActualAudioUrl] = useState(audioUrl);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Get optimized URL using smart caching system
+  // Get optimized URL using smart caching system with analytics tracking
   useEffect(() => {
     const initializeAudioUrl = async () => {
+      const startTime = Date.now();
+      
       if (audioUrl.includes('/object/public/')) {
         setIsLoading(true);
         try {
           const optimizedUrl = await getCachedAudioUrl(audioUrl);
+          const wasFromCache = optimizedUrl.includes('cached') || optimizedUrl === audioUrl;
+          
+          // Track analytics event
+          performanceAnalytics.trackEvent({
+            type: wasFromCache ? 'cache_hit' : 'cache_miss',
+            url: audioUrl,
+            metadata: {
+              component: 'AudioPlayer',
+              originalUrl: audioUrl,
+              optimizedUrl: optimizedUrl
+            }
+          });
+          
           setActualAudioUrl(optimizedUrl);
         } catch (err) {
           console.error('Error getting optimized URL:', err);
@@ -51,9 +67,24 @@ export default function AudioPlayer({
     const audio = audioRef.current;
     if (!audio) return;
 
+    const startTime = Date.now();
+
     const handleLoadedMetadata = () => {
+      const loadTime = Date.now() - startTime;
       setTotalDuration(audio.duration);
       setIsLoading(false);
+      
+      // Track successful audio load
+      performanceAnalytics.trackEvent({
+        type: 'audio_load',
+        duration: loadTime,
+        url: actualAudioUrl,
+        metadata: {
+          component: 'AudioPlayer',
+          fromCache: actualAudioUrl.includes('cached'),
+          duration: audio.duration
+        }
+      });
     };
 
     const handleTimeUpdate = () => {
@@ -66,6 +97,19 @@ export default function AudioPlayer({
     };
 
     const handleError = () => {
+      const loadTime = Date.now() - startTime;
+      
+      // Track error
+      performanceAnalytics.trackEvent({
+        type: 'error',
+        duration: loadTime,
+        url: actualAudioUrl,
+        metadata: {
+          component: 'AudioPlayer',
+          error: 'Audio load failed'
+        }
+      });
+      
       setError('Failed to load audio file');
       setIsLoading(false);
       setIsPlaying(false);

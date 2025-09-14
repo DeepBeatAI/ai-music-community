@@ -8,7 +8,6 @@ const supabase = createClient(
 
 interface PerformanceData {
   sessionId: string;
-  userId?: string;
   timestamp: number;
   metrics: {
     fcp: number;
@@ -24,7 +23,7 @@ interface PerformanceData {
     timestamp: number;
     duration?: number;
     size?: number;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
   }>;
   userAgent: string;
   url: string;
@@ -32,6 +31,27 @@ interface PerformanceData {
 
 export async function POST(request: NextRequest) {
   try {
+    // Get auth token from request
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Verify token and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Invalid authentication' },
+        { status: 401 }
+      );
+    }
+
     const data: PerformanceData = await request.json();
 
     // Validate required fields
@@ -42,13 +62,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Store in Supabase (create table if needed)
+    // Add timestamp if missing
+    const timestamp = data.timestamp || Date.now();
+
+    // Store in Supabase with authenticated user ID
     const { error } = await supabase
       .from('performance_analytics')
       .insert([{
         session_id: data.sessionId,
-        user_id: data.userId,
-        timestamp: new Date(data.timestamp).toISOString(),
+        user_id: user.id, // Use authenticated user ID
+        timestamp: new Date(timestamp).toISOString(),
         metrics: data.metrics,
         events: data.events,
         user_agent: data.userAgent,
@@ -76,23 +99,41 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Get auth token from request
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Verify token and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Invalid authentication' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
-    const userId = searchParams.get('userId');
     const hours = parseInt(searchParams.get('hours') || '24');
 
+    // Query only current user's data (RLS will enforce this too)
     let query = supabase
       .from('performance_analytics')
       .select('*')
+      .eq('user_id', user.id) // Explicitly filter by user ID
       .gte('timestamp', new Date(Date.now() - hours * 60 * 60 * 1000).toISOString())
       .order('timestamp', { ascending: false });
 
     if (sessionId) {
       query = query.eq('session_id', sessionId);
-    }
-
-    if (userId) {
-      query = query.eq('user_id', userId);
     }
 
     const { data, error } = await query.limit(100);
@@ -121,7 +162,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function calculateAggregateMetrics(data: any[]) {
+interface DatabaseRecord {
+  metrics: {
+    fcp: number;
+    lcp: number;
+    fid: number;
+    cls: number;
+    cacheHitRate: number;
+    bandwidthSaved: number;
+    errorRate: number;
+  };
+}
+
+function calculateAggregateMetrics(data: DatabaseRecord[]) {
   if (data.length === 0) {
     return {
       averageFCP: 0,

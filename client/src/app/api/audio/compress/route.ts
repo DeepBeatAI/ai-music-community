@@ -131,25 +131,10 @@ export async function POST(request: NextRequest) {
     console.log(`🎚️  Original bitrate: ${audioInfo.bitrate}kbps`);
     console.log(`🎚️  Target bitrate: ${targetBitrate} (${targetBitrateNum}kbps)`);
 
-    // STEP 3: Check if compression makes sense
-    if (targetBitrateNum >= audioInfo.bitrate * 0.9) {
-      console.log(`📝 Skipping compression: target bitrate (${targetBitrateNum}kbps) is not significantly lower than original (${audioInfo.bitrate}kbps)`);
-      
-      return NextResponse.json({
-        success: true,
-        originalSize: file.size,
-        compressedSize: file.size,
-        compressionRatio: 1,
-        duration: audioInfo.duration,
-        bitrate: `${audioInfo.bitrate}k (original)`,
-        originalBitrate: `${audioInfo.bitrate}k`,
-        compressionApplied: false,
-        error: `No compression needed - original bitrate (${audioInfo.bitrate}kbps) is already low enough`
-      } as CompressionResult);
-    }
-
-    // STEP 4: Proceed with compression
-    console.log(`🔄 Proceeding with compression: ${audioInfo.bitrate}kbps → ${targetBitrateNum}kbps`);
+    // STEP 3: Always proceed with compression for egress reduction
+    // Goal: Reduce file size regardless of current bitrate
+    console.log(`🔄 Proceeding with aggressive compression: ${audioInfo.bitrate}kbps → ${targetBitrateNum}kbps`);
+    console.log(`🎯 Goal: Maximum egress savings through file size reduction`);
 
     const compressionResult = await Promise.race([
       compressAudio(tempInputPath, tempOutputPath, targetBitrate, options),
@@ -211,7 +196,7 @@ export async function POST(request: NextRequest) {
       duration: audioInfo.duration,
       bitrate: targetBitrate,
       originalBitrate: `${audioInfo.bitrate}k`,
-      compressionApplied: true,
+      compressionApplied: true, // Always true when we reach this point
       supabaseUrl: urlData.publicUrl
     };
 
@@ -327,37 +312,35 @@ function getSmartTargetBitrate(options: CompressionOptions, fileSize: number, au
   const currentBitrate = audioInfo.bitrate;
   const fileSizeMB = fileSize / (1024 * 1024);
   
-  console.log(`🧮 Smart bitrate calculation:`);
+  console.log(`🧮 Aggressive compression calculation:`);
   console.log(`  - Current bitrate: ${currentBitrate}kbps`);
   console.log(`  - File size: ${fileSizeMB.toFixed(2)}MB`);
   console.log(`  - Quality setting: ${options.quality}`);
 
-  // Define reduction factors based on quality (more differentiated)
-  const reductionFactors = {
-    'high': 0.85,   // Reduce to 85% of original (gentle compression)
-    'medium': 0.7,  // Reduce to 70% of original (moderate compression)
-    'low': 0.55     // Reduce to 55% of original (aggressive compression)
-  };
-
-  const factor = reductionFactors[options.quality];
-  let targetBitrate = Math.round(currentBitrate * factor);
-
-  // Set reasonable bounds with lower minimum for better differentiation
-  const minBitrate = 48;  // Allow lower bitrates for aggressive compression
-  const maxBitrate = 256; // Don't exceed 256kbps
-
-  // Only apply minimum if the calculated bitrate is reasonable
-  if (targetBitrate < minBitrate && currentBitrate > minBitrate * 1.5) {
-    console.log(`⚠️  Calculated bitrate (${targetBitrate}kbps) is very low, setting to minimum (${minBitrate}kbps)`);
-    targetBitrate = minBitrate;
+  // AGGRESSIVE COMPRESSION: Always compress to reduce egress
+  // Goal: Maximum file size reduction regardless of current bitrate
+  let targetBitrate: number;
+  
+  switch (options.quality) {
+    case 'high':
+      targetBitrate = Math.min(currentBitrate, 128); // Never exceed 128k
+      break;
+    case 'medium':
+      targetBitrate = Math.min(currentBitrate, 96);  // Never exceed 96k
+      break;
+    case 'low':
+      targetBitrate = Math.min(currentBitrate, 64);  // Never exceed 64k
+      break;
+    default:
+      targetBitrate = 96; // Default fallback
   }
-  
-  targetBitrate = Math.min(maxBitrate, targetBitrate);
-  
-  const originalCalculated = Math.round(currentBitrate * factor);
+
+  // Set absolute minimum for audio quality
+  const minBitrate = 32; // Very low but still listenable
+  targetBitrate = Math.max(minBitrate, targetBitrate);
 
   const result = `${targetBitrate}k`;
-  console.log(`🎯 Smart target bitrate: ${result} (${(factor * 100).toFixed(0)}% of original, calculated: ${originalCalculated}k → final: ${targetBitrate}k)`);
+  console.log(`🎯 Aggressive target bitrate: ${result} (always compress for egress savings)`);  
   
   return result;
 }

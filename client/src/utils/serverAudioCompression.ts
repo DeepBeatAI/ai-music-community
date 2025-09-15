@@ -223,21 +223,23 @@ export class ServerAudioCompressor {
     const fileSizeMB = file.size / (1024 * 1024);
     console.log(`📏 File size: ${fileSizeMB.toFixed(2)}MB`);
 
+    // AGGRESSIVE COMPRESSION: Always reduce file size regardless of bitrate
+    // Goal: Maximize egress savings, not preserve quality
     if (fileSizeMB > 50) {
-      console.log(`🎯 Recommended: LOW quality (file > 50MB)`);
-      return { quality: 'low', targetBitrate: '96k' };
+      console.log(`🎯 Large file (>50MB): LOW quality for maximum compression`);
+      return { quality: 'low', targetBitrate: '64k' }; // Very aggressive
     } else if (fileSizeMB > 25) {
-      console.log(`🎯 Recommended: LOW quality (file > 25MB)`);
-      return { quality: 'low', targetBitrate: '128k' };
+      console.log(`🎯 Medium-large file (>25MB): LOW quality for high compression`);
+      return { quality: 'low', targetBitrate: '80k' };
     } else if (fileSizeMB > 10) {
-      console.log(`🎯 Recommended: MEDIUM quality (file > 10MB)`);
-      return { quality: 'medium', targetBitrate: '112k' }; // Lower bitrate for faster processing
+      console.log(`🎯 Medium file (>10MB): MEDIUM quality for good compression`);
+      return { quality: 'medium', targetBitrate: '96k' };
     } else if (fileSizeMB > 3) {
-      console.log(`🎯 Recommended: MEDIUM quality (file > 3MB)`);
+      console.log(`🎯 Small-medium file (>3MB): MEDIUM quality`);
       return { quality: 'medium', targetBitrate: '112k' };
     } else {
-      console.log(`🎯 Recommended: HIGH quality (file <= 3MB)`);
-      return { quality: 'high', targetBitrate: '160k' };
+      console.log(`🎯 Small file (<=3MB): HIGH quality (still compressed)`);
+      return { quality: 'high', targetBitrate: '128k' };
     }
   }
 

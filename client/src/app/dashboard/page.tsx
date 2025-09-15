@@ -14,6 +14,7 @@ import { Post, UserProfile } from '@/types';
 import { SearchResults, SearchFilters } from '@/utils/search';
 import { validatePostContent } from '@/utils/validation';
 import { uploadAudioFile } from '@/utils/audio';
+import { CompressionResult } from '@/utils/serverAudioCompression';
 
 type PostType = 'text' | 'audio';
 
@@ -33,6 +34,7 @@ export default function DashboardPage() {
   const [audioDescription, setAudioDescription] = useState('');
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const [audioDuration, setAudioDuration] = useState<number | undefined>();
+  const [compressionInfo, setCompressionInfo] = useState<CompressionResult | null>(null); // Add compression info state
   
   // Data state
   const [allPosts, setAllPosts] = useState<Post[]>([]);
@@ -259,16 +261,23 @@ export default function DashboardPage() {
     setIsSearchActive(false);
   }, []);
 
-  // Post creation handlers
-  const handleAudioFileSelect = (file: File, duration?: number) => {
+  // Post creation handlers - Enhanced with compression support
+  const handleAudioFileSelect = (file: File, duration?: number, compressionResult?: CompressionResult) => {
     setSelectedAudioFile(file);
     setAudioDuration(duration);
+    setCompressionInfo(compressionResult); // Store compression info
     setError('');
+    
+    // Log compression info for debugging
+    if (compressionResult) {
+      console.log('📊 Dashboard: Compression info received:', compressionResult);
+    }
   };
 
   const handleAudioFileRemove = () => {
     setSelectedAudioFile(null);
     setAudioDuration(undefined);
+    setCompressionInfo(null); // Clear compression info
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -435,8 +444,14 @@ export default function DashboardPage() {
         return;
       }
 
-      console.log('Uploading audio file...');
-      const uploadResult = await uploadAudioFile(selectedAudioFile, user!.id);
+      console.log('📤 Dashboard: Uploading audio file with compression optimization...');
+      
+      // Pass compression info to upload function for optimization
+      const uploadResult = await uploadAudioFile(
+        selectedAudioFile, 
+        user!.id,
+        compressionInfo // Pass compression info from AudioUpload
+      );
       if (!uploadResult.success) {
         setError(uploadResult.error || 'Failed to upload audio file.');
         return;
@@ -601,6 +616,9 @@ export default function DashboardPage() {
                       onFileSelect={handleAudioFileSelect}
                       onFileRemove={handleAudioFileRemove}
                       disabled={isSubmitting}
+                      enableCompression={true}  // ✅ Enable compression by default
+                      compressionQuality="medium"  // ✅ Set default quality for balance
+                      maxFileSize={50 * 1024 * 1024} // 50MB limit
                     />
                   </div>
 

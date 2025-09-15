@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { getCachedAudioUrl, isAudioUrlExpired } from './audioCache';
+import { serverAudioCompressor, CompressionResult } from './serverAudioCompression';
 
 // Supported audio file types and their MIME types
 export const SUPPORTED_AUDIO_TYPES = {
@@ -10,10 +11,8 @@ export const SUPPORTED_AUDIO_TYPES = {
   'audio/ogg': ['.ogg'],
 } as const;
 
-// Type for supported MIME types
 type SupportedMimeType = keyof typeof SUPPORTED_AUDIO_TYPES;
 
-// Helper function to check if a MIME type is supported
 const isSupportedMimeType = (mimeType: string): mimeType is SupportedMimeType => {
   return mimeType in SUPPORTED_AUDIO_TYPES;
 };
@@ -36,6 +35,11 @@ export interface AudioUploadResult {
   duration?: number;
   mimeType?: string;
   error?: string;
+  // Enhanced with compression info
+  compressionApplied?: boolean;
+  originalFileSize?: number;
+  compressionRatio?: number;
+  compressionBitrate?: string;
 }
 
 /**
@@ -53,19 +57,13 @@ const validateAudioHeader = async (file: File): Promise<boolean> => {
       
       const bytes = new Uint8Array(arrayBuffer.slice(0, 12));
       
-      // Check for common audio file magic numbers
       const headerChecks = [
-        // MP3: FF FB or ID3
         () => (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0) || 
               (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33),
-        // WAV: RIFF...WAVE
         () => bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
               bytes[8] === 0x57 && bytes[9] === 0x41 && bytes[10] === 0x56 && bytes[11] === 0x45,
-        // FLAC: fLaC
         () => bytes[0] === 0x66 && bytes[1] === 0x4C && bytes[2] === 0x61 && bytes[3] === 0x43,
-        // M4A: ftypM4A
         () => bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70,
-        // OGG: OggS
         () => bytes[0] === 0x4F && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53
       ];
       
@@ -84,48 +82,29 @@ const validateAudioHeader = async (file: File): Promise<boolean> => {
 export const validateAudioFile = async (file: File): Promise<AudioValidationResult> => {
   const errors: string[] = [];
 
-  // 1. Basic file type check
   if (!isSupportedMimeType(file.type)) {
     errors.push(`Unsupported file type. Supported types: MP3, WAV, FLAC, M4A, OGG`);
   }
 
-  // 2. File size check
   if (file.size > MAX_FILE_SIZE) {
     errors.push(`File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
   }
 
-  // 3. Enhanced extension and MIME validation
   const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
   if (fileExtension && fileExtension !== '.') {
-    // Check if extension is supported
     const allSupportedExtensions = Object.values(SUPPORTED_AUDIO_TYPES).flat();
     if (!allSupportedExtensions.includes(fileExtension as typeof allSupportedExtensions[number])) {
       errors.push(`Unsupported file extension: ${fileExtension}`);
     }
     
-    // Strict MIME and extension matching
     if (isSupportedMimeType(file.type)) {
       const expectedExtensions = SUPPORTED_AUDIO_TYPES[file.type];
       if (!(expectedExtensions as readonly string[]).includes(fileExtension)) {
         errors.push(`File extension ${fileExtension} doesn't match detected file type ${file.type}. This may indicate a renamed or corrupted file.`);
       }
     }
-    
-    // Additional suspicious file detection
-    const suspiciousPatterns: { [key: string]: string[] } = {
-      '.mp3': ['audio/wav', 'audio/flac'],
-      '.wav': ['audio/mpeg', 'audio/mp4'],
-      '.flac': ['audio/mpeg', 'audio/wav'],
-      '.m4a': ['audio/mpeg', 'audio/wav'],
-      '.ogg': ['audio/mpeg', 'audio/wav']
-    };
-    
-    if (suspiciousPatterns[fileExtension]?.includes(file.type)) {
-      errors.push(`Suspicious file detected: ${fileExtension} extension but content appears to be ${file.type}`);
-    }
   }
 
-  // 4. File header validation (magic number check)
   try {
     const isValidAudio = await validateAudioHeader(file);
     if (!isValidAudio) {
@@ -133,10 +112,8 @@ export const validateAudioFile = async (file: File): Promise<AudioValidationResu
     }
   } catch (error) {
     console.warn('Could not validate audio header:', error);
-    // Don't fail validation on header check failure
   }
 
-  // 5. Duration validation
   let duration: number | undefined;
   try {
     duration = await getAudioDuration(file);
@@ -178,11 +155,12 @@ export const getAudioDuration = (file: File): Promise<number> => {
 };
 
 /**
- * Upload audio file to Supabase Storage
+ * ENHANCED: Upload audio file with intelligent compression
  */
 export const uploadAudioFile = async (
   file: File, 
-  userId: string
+  userId: string,
+  compressionInfo?: CompressionResult
 ): Promise<AudioUploadResult> => {
   try {
     // Validate file first
@@ -194,17 +172,59 @@ export const uploadAudioFile = async (
       };
     }
 
+    let finalFile = file;
+    let compressionData: CompressionResult | undefined = compressionInfo;
+
+    // If compression info wasn't provided, try to compress now
+    if (!compressionData) {
+      console.log('🎵 No compression info provided - attempting compression during upload...');
+      
+      try {
+        const recommendedSettings = serverAudioCompressor.getRecommendedSettings(file);
+        const compressionResult = await serverAudioCompressor.compressAudio(file, recommendedSettings);
+        
+        if (compressionResult.success && compressionResult.supabaseUrl) {
+          // Server compression successful - the file is already uploaded to Supabase!
+          console.log('✅ Server compression completed with direct upload');
+          
+          return {
+            success: true,
+            audioUrl: compressionResult.supabaseUrl,
+            fileName: file.name,
+            fileSize: compressionResult.compressedSize,
+            originalFileSize: compressionResult.originalSize,
+            duration: compressionResult.duration,
+            mimeType: 'audio/mpeg', // Compressed files are always MP3
+            compressionApplied: compressionResult.compressionApplied,
+            compressionRatio: compressionResult.compressionRatio,
+            compressionBitrate: compressionResult.bitrate
+          };
+        } else if (compressionResult.success) {
+          // Compression decided not to compress, continue with original upload
+          console.log('📝 Compression analysis complete - using original file');
+          compressionData = compressionResult;
+        } else {
+          console.warn('⚠️ Compression failed, proceeding with original upload:', compressionResult.error);
+        }
+      } catch (compressionError) {
+        console.warn('⚠️ Compression process failed, proceeding with original upload:', compressionError);
+      }
+    }
+
+    // If we reach here, we need to do traditional upload (either compression failed or wasn't beneficial)
+    console.log('📤 Proceeding with standard Supabase upload...');
+
     // Generate unique filename
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const fileExtension = finalFile.name.split('.').pop()?.toLowerCase();
     const fileName = `${timestamp}-${randomString}.${fileExtension}`;
     const filePath = `${userId}/${fileName}`;
 
     // Upload file to Supabase Storage
     const { data, error } = await supabase.storage
       .from('audio-files')
-      .upload(filePath, file, {
+      .upload(filePath, finalFile, {
         cacheControl: '3600',
         upsert: false
       });
@@ -217,10 +237,10 @@ export const uploadAudioFile = async (
       };
     }
 
-    // Get signed URL for the uploaded file (valid for 1 hour)
+    // Get signed URL for the uploaded file
     const { data: signedUrlData, error: urlError } = await supabase.storage
       .from('audio-files')
-      .createSignedUrl(data.path, 3600); // 1 hour expiry
+      .createSignedUrl(data.path, 3600);
 
     if (urlError) {
       console.error('Signed URL error:', urlError);
@@ -230,15 +250,19 @@ export const uploadAudioFile = async (
       };
     }
 
-    console.log('Upload successful, signed URL generated:', signedUrlData.signedUrl);
+    console.log('✅ Standard upload successful');
 
     return {
       success: true,
       audioUrl: signedUrlData.signedUrl,
-      fileName: file.name,
-      fileSize: file.size,
+      fileName: finalFile.name,
+      fileSize: finalFile.size,
+      originalFileSize: compressionData?.originalSize,
       duration: validation.duration,
-      mimeType: file.type
+      mimeType: finalFile.type,
+      compressionApplied: compressionData?.compressionApplied || false,
+      compressionRatio: compressionData?.compressionRatio,
+      compressionBitrate: compressionData?.bitrate
     };
 
   } catch (error) {
@@ -254,41 +278,30 @@ export const uploadAudioFile = async (
  * Extract file path from various URL formats
  */
 const extractFilePathFromUrl = (audioUrl: string): string => {
-  console.log('🔍 Extracting file path from URL:', audioUrl);
+  console.log('🔍 Extracting file path from URL:', audioUrl.substring(0, 80) + '...');
   
   let filePath = '';
   
-  // Handle signed URLs
   if (audioUrl.includes('/object/sign/audio-files/')) {
     const pathStart = audioUrl.indexOf('/object/sign/audio-files/') + '/object/sign/audio-files/'.length;
     const pathEnd = audioUrl.indexOf('?') !== -1 ? audioUrl.indexOf('?') : audioUrl.length;
     filePath = audioUrl.substring(pathStart, pathEnd);
-    console.log('📝 Extracted from signed URL:', filePath);
-  }
-  // Handle public URLs  
-  else if (audioUrl.includes('/object/public/audio-files/')) {
+  } else if (audioUrl.includes('/object/public/audio-files/')) {
     const pathStart = audioUrl.indexOf('/object/public/audio-files/') + '/object/public/audio-files/'.length;
     filePath = audioUrl.substring(pathStart);
-    console.log('📝 Extracted from public URL:', filePath);
-  }
-  // Handle storage URLs with different patterns
-  else if (audioUrl.includes('storage/v1/object/')) {
+  } else if (audioUrl.includes('storage/v1/object/')) {
     const urlParts = audioUrl.split('/');
     const audioFilesIndex = urlParts.findIndex(part => part === 'audio-files');
     
     if (audioFilesIndex !== -1) {
       filePath = urlParts.slice(audioFilesIndex + 1).join('/').split('?')[0];
-      console.log('📝 Extracted from storage URL:', filePath);
     }
-  }
-  // Fallback method
-  else {
+  } else {
     const urlParts = audioUrl.split('/');
     const audioFilesIndex = urlParts.findIndex(part => part === 'audio-files');
     
     if (audioFilesIndex !== -1) {
       filePath = urlParts.slice(audioFilesIndex + 1).join('/').split('?')[0];
-      console.log('📝 Extracted using fallback method:', filePath);
     }
   }
   
@@ -297,7 +310,6 @@ const extractFilePathFromUrl = (audioUrl: string): string => {
 
 /**
  * DEPRECATED - Legacy function kept for compatibility
- * Use getBestAudioUrl instead for optimal performance
  */
 export const getAudioSignedUrl = async (audioUrl: string): Promise<string | null> => {
   console.warn('⚠️ Using legacy getAudioSignedUrl - consider using getBestAudioUrl for better performance');
@@ -311,7 +323,7 @@ export const getAudioSignedUrl = async (audioUrl: string): Promise<string | null
 
     const { data, error } = await supabase.storage
       .from('audio-files')
-      .createSignedUrl(filePath, 7200); // 2 hour expiry
+      .createSignedUrl(filePath, 7200);
 
     if (error) {
       console.error('❌ Error creating signed URL:', error.message);
@@ -327,13 +339,10 @@ export const getAudioSignedUrl = async (audioUrl: string): Promise<string | null
 };
 
 /**
- * STRICT - Check if an audio URL is truly accessible and not expired
+ * Check if an audio URL is truly accessible and not expired
  */
 export const validateAudioUrl = async (audioUrl: string, timeout: number = 3000): Promise<boolean> => {
   try {
-    console.log('🔍 STRICT validation for URL...');
-    
-    // FIRST: If it's a signed URL, check if token is expired
     if (audioUrl.includes('/object/sign/audio-files/') && audioUrl.includes('token=')) {
       try {
         const tokenPart = audioUrl.split('token=')[1].split('&')[0];
@@ -342,23 +351,16 @@ export const validateAudioUrl = async (audioUrl: string, timeout: number = 3000)
         const now = Math.floor(Date.now() / 1000);
         
         if (now > expiry) {
-          console.log('❌ URL has expired token, automatically invalid');
           return false;
         }
-        
-        console.log('✅ Token is not expired, proceeding with network test');
       } catch {
         console.warn('⚠️ Could not parse token, proceeding with network test');
       }
     }
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      console.log('⏱️ URL validation timed out after', timeout, 'ms');
-    }, timeout);
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
     
-    // Make a more comprehensive request
     const response = await fetch(audioUrl, { 
       method: 'HEAD',
       signal: controller.signal,
@@ -367,65 +369,35 @@ export const validateAudioUrl = async (audioUrl: string, timeout: number = 3000)
         'Pragma': 'no-cache',
         'Expires': '0'
       },
-      // Disable caching completely
       cache: 'no-store'
     });
     
     clearTimeout(timeoutId);
     
-    console.log('📡 Response status:', response.status, response.statusText);
-    
-    // Be VERY strict - only 200 or 206 (partial content) are acceptable
     const isValid = response.status === 200 || response.status === 206;
-    
-    if (isValid) {
-      console.log('✅ URL passed strict validation');
-    } else {
-      console.log('❌ URL failed strict validation - status:', response.status);
-    }
-    
     return isValid;
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        console.log('⏱️ URL validation timeout - treating as invalid');
-      } else {
-        console.log('❌ URL validation error:', error.message, '- treating as invalid');
-      }
-    } else {
-      console.log('❌ URL validation error: Unknown error - treating as invalid');
-    }
     return false;
   }
 };
 
 /**
- * OPTIMIZED - Get the best available audio URL with smart caching
- * Reduces API calls by 85% through intelligent caching
+ * Get the best available audio URL with smart caching
  */
 export const getBestAudioUrl = async (originalUrl: string): Promise<string | null> => {
   try {
-    console.log('🎵 getBestAudioUrl with smart caching:', originalUrl.substring(0, 80) + '...');
-    
-    // Quick check if current URL is still valid
     if (originalUrl.includes('/object/sign/audio-files/')) {
       if (!isAudioUrlExpired(originalUrl)) {
-        console.log('✅ Original URL still valid, using as-is');
         return originalUrl;
       }
-      console.log('⏰ Original URL expired, getting cached/fresh URL');
     }
     
-    // Use smart caching system
     const cachedUrl = await getCachedAudioUrl(originalUrl);
     
     if (cachedUrl && cachedUrl !== originalUrl) {
-      console.log('🆕 Got optimized URL from cache system');
       return cachedUrl;
     }
     
-    // Fallback to original
-    console.log('🔄 Using original URL as final fallback');
     return originalUrl;
     
   } catch (error) {
@@ -439,19 +411,13 @@ export const getBestAudioUrl = async (originalUrl: string): Promise<string | nul
  */
 export const deleteAudioFile = async (audioUrl: string, userId: string): Promise<boolean> => {
   try {
-    console.log('Attempting to delete audio file:', audioUrl);
-    
     const filePath = extractFilePathFromUrl(audioUrl);
 
-    console.log('Extracted file path for deletion:', filePath);
-
-    // Verify the file belongs to the current user
     if (!filePath.startsWith(`${userId}/`)) {
       console.error('Security violation: Attempting to delete file not owned by user');
       return false;
     }
 
-    // Attempt deletion
     const { error } = await supabase.storage
       .from('audio-files')
       .remove([filePath]);
@@ -461,7 +427,6 @@ export const deleteAudioFile = async (audioUrl: string, userId: string): Promise
       return false;
     }
 
-    console.log('Successfully deleted file:', filePath);
     return true;
   } catch (error) {
     console.error('Delete process error:', error);

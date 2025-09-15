@@ -36,11 +36,19 @@ export default function DashboardPage() {
   const [audioDuration, setAudioDuration] = useState<number | undefined>();
   const [compressionInfo, setCompressionInfo] = useState<CompressionResult | null>(null); // Add compression info state
   
-  // Data state
+  // Data state - Enhanced with pagination for egress optimization
   const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [displayPosts, setDisplayPosts] = useState<Post[]>([]);
+  const [paginatedPosts, setPaginatedPosts] = useState<Post[]>([]); // Currently visible posts
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [totalPostsCount, setTotalPostsCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  
+  // Pagination configuration for egress optimization
+  const POSTS_PER_PAGE = 15; // Optimized for bandwidth savings
   
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,10 +72,15 @@ export default function DashboardPage() {
     fetchPosts();
   }, [user, loading, router]);
 
-  // Apply filters and search when data changes
+  // Apply filters and search when data changes - Enhanced with pagination
   useEffect(() => {
     applyFiltersAndSearch();
   }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
+  
+  // Update pagination when filtered posts change
+  useEffect(() => {
+    updatePagination();
+  }, [displayPosts, currentPage]);
 
   // Add missing state variable
   const [hasFiltersApplied, setHasFiltersApplied] = useState(false);
@@ -79,19 +92,46 @@ export default function DashboardPage() {
     setHasFiltersApplied(filtersApplied);
   }, [filters]);
 
-  const fetchPosts = async () => {
+  const fetchPosts = async (page: number = 1, isLoadMore: boolean = false) => {
     try {
-      const { data, error } = await supabase
+      if (isLoadMore) {
+        setIsLoadingMore(true);
+      }
+      
+      console.log(`📊 Fetching posts - Page ${page} (${POSTS_PER_PAGE} per page) - Load More: ${isLoadMore}`);
+      
+      // EGRESS OPTIMIZATION: Only fetch the posts we need
+      const startRange = (page - 1) * POSTS_PER_PAGE;
+      const endRange = startRange + POSTS_PER_PAGE - 1;
+      
+      console.log(`🎯 Egress optimization: Fetching posts ${startRange}-${endRange}`);
+      
+      const { data, error, count } = await supabase
         .from('posts')
         .select(`
           *,
           user_profiles!posts_user_id_fkey (
             username
           )
-        `)
-        .order('created_at', { ascending: false });
+        `, { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(startRange, endRange);
 
       if (error) throw error;
+      
+      // Update total count for pagination logic
+      if (count !== null) {
+        setTotalPostsCount(count);
+        const totalPages = Math.ceil(count / POSTS_PER_PAGE);
+        const serverHasMore = page < totalPages;
+        console.log(`📊 Total posts: ${count}, Current page: ${page}/${totalPages}, Server has more: ${serverHasMore}`);
+        
+        // For initial load, always set hasMorePosts based on server data
+        // The updatePagination function will override this for filtered results
+        if (!isLoadMore || page === 1) {
+          setHasMorePosts(serverHasMore);
+        }
+      }
       
       // Add interaction data for each post with better error handling
       const postsWithInteractions = await Promise.all(
@@ -152,10 +192,38 @@ export default function DashboardPage() {
         })
       );
 
-      setAllPosts(postsWithInteractions);
+      if (isLoadMore) {
+        // Append to existing posts for "Load More" functionality
+        setAllPosts(prev => {
+          const newPosts = [...prev, ...postsWithInteractions];
+          console.log(`📈 Appended ${postsWithInteractions.length} posts (Load More) - Total now: ${newPosts.length}`);
+          
+          // Update hasMorePosts immediately based on new total
+          const totalPages = Math.ceil(totalPostsCount / POSTS_PER_PAGE);
+          const currentServerPage = Math.ceil(newPosts.length / POSTS_PER_PAGE);
+          const stillHasMore = currentServerPage < totalPages;
+          console.log(`📊 Updated pagination: ${currentServerPage}/${totalPages}, Still has more: ${stillHasMore}`);
+          
+          // Use setTimeout to ensure state update happens after this render cycle
+          setTimeout(() => {
+            setHasMorePosts(stillHasMore);
+          }, 0);
+          
+          return newPosts;
+        });
+      } else {
+        // Replace all posts for initial load or refresh
+        setAllPosts(postsWithInteractions);
+        console.log(`🔄 Loaded ${postsWithInteractions.length} posts (Initial/Refresh)`);
+      }
+      
     } catch (error) {
       console.error('Error fetching posts:', error);
       setError('Failed to fetch posts. Please try again.');
+    } finally {
+      if (isLoadMore) {
+        setIsLoadingMore(false);
+      }
     }
   };
 
@@ -231,6 +299,86 @@ export default function DashboardPage() {
 
     setDisplayPosts(filtered);
   }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
+  
+  // FIXED: Update pagination for filtered posts
+  const updatePagination = useCallback(() => {
+    const hasActiveFilters = isSearchActive || hasFiltersApplied;
+    
+    if (hasActiveFilters) {
+      // For filtered results, use client-side pagination (slice by currentPage)
+      const startIndex = 0;
+      const endIndex = currentPage * POSTS_PER_PAGE;
+      const paginatedResults = displayPosts.slice(startIndex, endIndex);
+      
+      setPaginatedPosts(paginatedResults);
+      setHasMorePosts(endIndex < displayPosts.length);
+      console.log(`📊 Client-side pagination: Showing ${paginatedResults.length}/${displayPosts.length} filtered posts (Page ${currentPage})`);
+    } else {
+      // For regular browsing, show ALL loaded posts (server-side pagination)
+      setPaginatedPosts(displayPosts); // Show all loaded posts
+      
+      const totalPages = Math.ceil(totalPostsCount / POSTS_PER_PAGE);
+      const currentServerPage = Math.ceil(allPosts.length / POSTS_PER_PAGE);
+      setHasMorePosts(currentServerPage < totalPages);
+      console.log(`📊 Server-side pagination: Showing ${displayPosts.length} posts, Page ${currentServerPage}/${totalPages}, Has more: ${currentServerPage < totalPages}`);
+    }
+  }, [displayPosts, currentPage, POSTS_PER_PAGE, isSearchActive, hasFiltersApplied, totalPostsCount, allPosts.length]);
+  
+  // IMPROVED: Load more posts function with better state management
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMorePosts) {
+      console.log('🚫 Load more blocked:', { isLoadingMore, hasMorePosts });
+      return;
+    }
+    
+    console.log('🚀 Load more triggered');
+    
+    const hasActiveFilters = isSearchActive || hasFiltersApplied;
+    
+    if (hasActiveFilters) {
+      // For filtered/search results, just show more from existing data (client-side)
+      setCurrentPage(prev => {
+        const newPage = prev + 1;
+        console.log(`🔍 Load more: Expanding filtered results to page ${newPage} (client-side)`);
+        return newPage;
+      });
+    } else {
+      // For regular browsing, fetch more posts from database (server-side)
+      const nextPage = Math.floor(allPosts.length / POSTS_PER_PAGE) + 1;
+      console.log(`📎 Load more: Fetching page ${nextPage} from database (server-side)`);
+      console.log(`Current state: allPosts.length=${allPosts.length}, totalPostsCount=${totalPostsCount}`);
+      
+      // Temporarily disable hasMorePosts to prevent double-clicks
+      setIsLoadingMore(true);
+      
+      try {
+        await fetchPosts(nextPage, true);
+        
+        // After successful fetch, check if we have more
+        const newTotalLoaded = allPosts.length + POSTS_PER_PAGE;
+        const stillHasMore = newTotalLoaded < totalPostsCount;
+        console.log(`📊 After load: newTotalLoaded=${newTotalLoaded}, totalPostsCount=${totalPostsCount}, stillHasMore=${stillHasMore}`);
+        
+        // Update hasMorePosts based on server data
+        setHasMorePosts(stillHasMore);
+        
+      } catch (error) {
+        console.error('❌ Load more failed:', error);
+        setIsLoadingMore(false);
+      }
+    }
+  }, [isLoadingMore, hasMorePosts, isSearchActive, hasFiltersApplied, allPosts.length, currentPage, POSTS_PER_PAGE, totalPostsCount, fetchPosts]);
+  
+  // Reset pagination when search/filters change
+  const resetPagination = useCallback(() => {
+    setCurrentPage(1);
+    console.log('🔄 Pagination reset');
+  }, []);
+  
+  // Reset pagination when search changes
+  useEffect(() => {
+    resetPagination();
+  }, [isSearchActive, currentSearchFilters, resetPagination]);
 
   const handleSearch = useCallback((results: SearchResults, query: string) => {
     // Ensure results is always a valid object
@@ -259,7 +407,8 @@ export default function DashboardPage() {
     setSearchResults({ posts: [], users: [], totalResults: 0 });
     setCurrentSearchFilters({}); // Clear search filters
     setIsSearchActive(false);
-  }, []);
+    resetPagination(); // Reset pagination when clearing search
+  }, [resetPagination]);
 
   // Post creation handlers - Enhanced with compression support
   const handleAudioFileSelect = (file: File, duration?: number, compressionResult?: CompressionResult) => {
@@ -418,7 +567,10 @@ export default function DashboardPage() {
 
       console.log('Post created successfully without errors!');
       setTextContent('');
-      await fetchPosts();
+      // Refresh posts and reset pagination to show new post
+      setCurrentPage(1);
+      setAllPosts([]); // Clear existing posts to force fresh fetch
+      await fetchPosts(1, false);
       
     } catch (error) {
       console.error('Error in handleTextPostSubmit:', error);
@@ -488,7 +640,10 @@ export default function DashboardPage() {
       setAudioDescription('');
       setSelectedAudioFile(null);
       setAudioDuration(undefined);
-      await fetchPosts();
+      // Refresh posts and reset pagination to show new post
+      setCurrentPage(1);
+      setAllPosts([]); // Clear existing posts to force fresh fetch
+      await fetchPosts(1, false);
       
     } catch (error) {
       console.error('Error in handleAudioPostSubmit:', error);
@@ -509,7 +664,11 @@ export default function DashboardPage() {
         .eq('id', postId);
 
       if (error) throw error;
-      await fetchPosts();
+      
+      // Refresh posts after deletion
+      setCurrentPage(1);
+      setAllPosts([]); // Clear existing posts to force fresh fetch
+      await fetchPosts(1, false);
     } catch (error) {
       console.error('Error deleting post:', error);
       setError('Failed to delete post. Please try again.');
@@ -533,11 +692,16 @@ export default function DashboardPage() {
     return null;
   }
 
-  // Determine what to show and how to label it
+  // Determine what to show and how to label it - Enhanced with pagination
   const hasSearchResults = isSearchActive;
   const hasUserResults = hasSearchResults && searchResults.users.length > 0;
-  const hasPostResults = displayPosts.length > 0;
+  const hasPostResults = paginatedPosts.length > 0; // Use paginated posts
   const showNoResults = isSearchActive && searchResults.posts.length === 0 && searchResults.users.length === 0;
+  
+  // Calculate pagination stats for egress optimization display
+  const totalFilteredPosts = displayPosts.length;
+  const currentlyShowing = paginatedPosts.length;
+  const bandwidthSavings = Math.max(0, totalFilteredPosts - currentlyShowing);
 
   return (
     <MainLayout>
@@ -545,9 +709,16 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold mb-6 text-center">Dashboard</h1>
         
         {profile && (
-          <p className="text-center text-gray-300 mb-8">
-            Welcome back, <span className="text-blue-400 font-medium">{profile.username}</span>!
-          </p>
+          <div className="text-center text-gray-300 mb-8">
+            <p>
+              Welcome back, <span className="text-blue-400 font-medium">{profile.username}</span>!
+            </p>
+            {/* Egress Optimization Info */}
+            <div className="mt-2 text-xs text-green-400">
+              🎯 Bandwidth optimized: Loading {POSTS_PER_PAGE} posts at a time • 
+              Audio files load only when played
+            </div>
+          </div>
         )}
 
         {/* Post Creation Form */}
@@ -822,16 +993,108 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : !showNoResults ? (
-            <div className="space-y-6">
-              {displayPosts.map(post => (
-                <PostItem
-                  key={post.id}
-                  post={post}
-                  currentUserId={user.id}
-                  onDelete={handleDeletePost}
-                  showWaveform={true}
-                />
-              ))}
+          <div className="space-y-6">
+          {/* Paginated Posts Display - Egress Optimized */}
+          {paginatedPosts.map(post => (
+          <PostItem
+          key={post.id}
+          post={post}
+          currentUserId={user.id}
+          onDelete={handleDeletePost}
+            showWaveform={true}
+            />              
+            ))}
+              
+              {/* ENHANCED Load More Button - Egress Optimization */}
+              {hasMorePosts && (
+                <div className="flex flex-col items-center space-y-4 pt-8">
+                  {/* Bandwidth Savings Info */}
+                  {bandwidthSavings > 0 && (
+                    <div className="bg-green-900/20 border border-green-700 rounded p-3 text-center max-w-md">
+                      <p className="text-green-400 text-sm font-medium">
+                        📊 Bandwidth Optimization Active
+                      </p>
+                      <p className="text-green-300 text-xs mt-1">
+                        Showing {currentlyShowing} of {totalFilteredPosts} posts • 
+                        Saving bandwidth by not loading {bandwidthSavings} posts until needed
+                      </p>
+                      <p className="text-green-200 text-xs mt-1 opacity-75">
+                        🎵 Audio files load only when you click play
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Pagination Strategy Info */}
+                  <div className="bg-blue-900/20 border border-blue-700 rounded p-2 text-center max-w-md">
+                    <p className="text-blue-300 text-xs">
+                      {isSearchActive || hasFiltersApplied ? 
+                        `📋 Client-side pagination: ${Math.min(POSTS_PER_PAGE, displayPosts.length - currentlyShowing)} more from filtered results` :
+                        `🔄 Server-side pagination: Loading next ${POSTS_PER_PAGE} posts from database`
+                      }
+                    </p>
+                  </div>
+                  
+                  {/* Load More Button */}
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore}
+                    className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center space-x-2 min-w-[200px] justify-center"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span>Loading more posts...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>📄</span>
+                        <span>
+                          Load More Posts 
+                          {displayPosts.length - currentlyShowing > 0 && 
+                            ` (${Math.min(POSTS_PER_PAGE, displayPosts.length - currentlyShowing)} more)`
+                          }
+                        </span>
+                      </>
+                    )}
+                  </button>
+                  
+                  {/* Pagination Stats */}
+                  <div className="text-center text-xs text-gray-500 space-y-1">
+                    {isSearchActive || hasFiltersApplied ? (
+                      <>
+                        <p>Showing {currentlyShowing} of {totalFilteredPosts} filtered results</p>
+                        <p className="text-gray-400">🔍 Results are filtered from {allPosts.length} total posts</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>Showing {currentlyShowing} of {totalPostsCount} total posts • Page {Math.ceil(currentlyShowing / POSTS_PER_PAGE)}</p>
+                        <p className="text-gray-400">📊 {POSTS_PER_PAGE} posts per page for optimal loading</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* End of Posts Message */}
+              {!hasMorePosts && paginatedPosts.length > 0 && (
+                <div className="text-center py-8">
+                  <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <div className="text-3xl mb-2">🎉</div>
+                    <p className="text-gray-400 mb-2">You've reached the end!</p>
+                    <p className="text-sm text-gray-500">
+                      {isSearchActive || hasFiltersApplied 
+                        ? `All ${displayPosts.length} matching posts loaded.`
+                        : `All ${totalPostsCount} posts loaded.`
+                      }
+                    </p>
+                    {(!isSearchActive && !hasFiltersApplied) && (
+                      <p className="text-xs text-green-400 mt-2">
+                        🎯 Bandwidth optimized: Only loaded posts as needed
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
         </div>

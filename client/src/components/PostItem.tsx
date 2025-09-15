@@ -1,5 +1,5 @@
 'use client'
-import { memo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { formatTimeAgo, truncateText } from '@/utils/format';
 import { Post } from '@/types';
 import WavesurferPlayer from './WavesurferPlayer';
@@ -13,6 +13,90 @@ interface PostItemProps {
   onDelete?: (postId: string) => void;
   showWaveform?: boolean;
 }
+
+// EGRESS OPTIMIZED Audio Player Section Component
+interface AudioPlayerSectionProps {
+  post: Post;
+  showWaveform?: boolean;
+}
+
+const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSectionProps) => {
+  const [audioLoaded, setAudioLoaded] = useState(false);
+  const [audioLoadError, setAudioLoadError] = useState(false);
+
+  // Lazy load audio only when user intends to play
+  const handlePlayIntention = useCallback(() => {
+    if (!audioLoaded && post.audio_url) {
+      console.log(`🎵 Loading audio on demand for post ${post.id}`);
+      setAudioLoaded(true);
+    }
+  }, [audioLoaded, post.audio_url, post.id]);
+
+  return (
+    <div className="mt-4 bg-gray-800 p-4 rounded-lg border border-gray-600">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <span className="text-blue-400">🎵</span>
+          <span className="text-sm text-gray-300">
+            {post.audio_filename || 'Audio Track'}
+          </span>
+        </div>
+        
+        {/* Bandwidth savings indicator */}
+        {!audioLoaded && (
+          <div className="text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
+            📊 Audio loads on play
+          </div>
+        )}
+      </div>
+      
+      {/* Optimized Audio Player Implementation */}
+      <div className="relative">
+        {!audioLoaded ? (
+          // Show placeholder until user wants to play
+          <div className="bg-gray-700 rounded p-8 text-center">
+            <button
+              onClick={handlePlayIntention}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center space-x-2 mx-auto"
+            >
+              <span>▶️</span>
+              <span>Load & Play Audio</span>
+            </button>
+            <p className="text-xs text-gray-400 mt-2">
+              💾 Bandwidth optimized: {post.audio_file_size ? (post.audio_file_size / 1024 / 1024).toFixed(1) + 'MB' : 'Audio file'} will load when you click play
+            </p>
+            {post.audio_duration && (
+              <p className="text-xs text-gray-500">
+                Duration: {Math.floor(post.audio_duration / 60)}:{String(Math.floor(post.audio_duration % 60)).padStart(2, '0')}
+              </p>
+            )}
+          </div>
+        ) : (
+          // Load full WaveSurfer when user wants to play
+          <div>
+            <WavesurferPlayer
+              key={`wavesurfer-${post.id}-${post.audio_url}`}
+              audioUrl={post.audio_url}
+              fileName={post.audio_filename}
+              duration={post.audio_duration}
+              showWaveform={showWaveform}
+              theme="ai_music"
+              className="audio-player-unique"
+            />
+            
+            {audioLoadError && (
+              <div className="text-red-400 text-sm text-center mt-2">
+                Failed to load audio. Please try again.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+AudioPlayerSection.displayName = 'AudioPlayerSection';
 
 const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: PostItemProps) => {
   const isOwner = currentUserId === post.user_id;
@@ -102,19 +186,12 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: P
           </div>
         )}
 
-        {/* Audio Player - FIXED: Added unique key for proper React handling */}
+        {/* Audio Player - EGRESS OPTIMIZED with Lazy Loading */}
         {post.post_type === 'audio' && post.audio_url && (
-          <div key={`audio-player-container-${post.id}`}>
-            <WavesurferPlayer
-              key={`wavesurfer-${post.id}-${post.audio_url}`}
-              audioUrl={post.audio_url}
-              fileName={post.audio_filename}
-              duration={post.audio_duration}
-              showWaveform={showWaveform}
-              theme="ai_music"
-              className="audio-player-unique"
-            />
-          </div>
+          <AudioPlayerSection 
+            post={post} 
+            showWaveform={showWaveform}
+          />
         )}
       </div>
 

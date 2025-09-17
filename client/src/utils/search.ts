@@ -16,10 +16,72 @@ export interface SearchResults {
   totalResults: number;
 }
 
+// NEW: Enhanced function for dashboard filtering support
+export async function getPostsForFiltering(
+  postType: 'all' | 'text' | 'audio' = 'all',
+  count: number = 100
+): Promise<Post[]> {
+  try {
+    console.log(`🔍 getPostsForFiltering: Fetching ${count} posts of type '${postType}'`);
+    
+    let query = supabase
+      .from('posts')
+      .select(`
+        *,
+        user_profiles!posts_user_id_fkey (
+          username
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(count);
+
+    if (postType !== 'all') {
+      query = query.eq('post_type', postType);
+    }
+
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching posts for filtering:', error);
+      return [];
+    }
+
+    // Add interaction data
+    const postsWithInteractions = await Promise.all(
+      (data || []).map(async (post) => {
+        try {
+          const { count: likeCount } = await supabase
+            .from('post_likes')
+            .select('id', { count: 'exact', head: true })
+            .eq('post_id', post.id);
+
+          return {
+            ...post,
+            like_count: likeCount || 0,
+            liked_by_user: false // Will be set properly in dashboard
+          };
+        } catch (error) {
+          return {
+            ...post,
+            like_count: 0,
+            liked_by_user: false
+          };
+        }
+      })
+    );
+
+    console.log(`✅ getPostsForFiltering: Successfully fetched ${postsWithInteractions.length} posts`);
+    return postsWithInteractions;
+  } catch (error) {
+    console.error('Error in getPostsForFiltering:', error);
+    return [];
+  }
+}
+
 export async function searchContent(
   filters: SearchFilters,
   page: number = 0,
-  limit: number = 10
+  limit: number = 50  // FIXED: Increased default limit to show more results when filtering
 ): Promise<SearchResults> {
   // Check cache first
   const cachedResults = searchCache.get(filters, page, limit);
@@ -55,6 +117,10 @@ export async function searchContent(
       // Normal post search logic
       
       // Build posts query with proper JOIN syntax
+      // FIXED: For filtering, get more results to ensure we capture all matching content
+      const isFiltering = filters.postType !== 'all' || filters.timeRange !== 'all' || filters.query;
+      const queryLimit = isFiltering ? Math.max(limit, 100) : limit; // Get more when filtering
+      
       let postsQuery = supabase
         .from('posts')
         .select(`
@@ -65,7 +131,7 @@ export async function searchContent(
             user_id
           )
         `)
-        .range(offset, offset + limit - 1);
+        .range(offset, offset + queryLimit - 1);
 
       // Apply search filters
       if (filters.query && filters.query.trim()) {

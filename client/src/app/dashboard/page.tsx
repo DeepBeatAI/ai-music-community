@@ -14,7 +14,7 @@ import { Post, UserProfile } from '@/types';
 import { SearchResults, SearchFilters } from '@/utils/search';
 import { validatePostContent } from '@/utils/validation';
 import { uploadAudioFile } from '@/utils/audio';
-import { CompressionResult } from '@/utils/serverAudioCompression';
+import type { CompressionResult } from '@/utils/serverAudioCompression';
 
 type PostType = 'text' | 'audio';
 
@@ -61,38 +61,7 @@ export default function DashboardPage() {
   });
   const [isSearchActive, setIsSearchActive] = useState(false);
 
-  // Auth and initial data loading
-  useEffect(() => {
-    if (loading) return;
-    
-    if (!user) {
-      router.replace('/login');
-      return;
-    }
-    fetchPosts();
-  }, [user, loading, router]);
-
-  // Apply filters and search when data changes - Enhanced with pagination
-  useEffect(() => {
-    applyFiltersAndSearch();
-  }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
-  
-  // Update pagination when filtered posts change
-  useEffect(() => {
-    updatePagination();
-  }, [displayPosts, currentPage]);
-
-  // Add missing state variable
-  const [hasFiltersApplied, setHasFiltersApplied] = useState(false);
-
-  // Track if filters are applied
-  useEffect(() => {
-    const defaultFilters = { postType: 'all', sortBy: 'newest', timeRange: 'all' };
-    const filtersApplied = JSON.stringify(filters) !== JSON.stringify(defaultFilters);
-    setHasFiltersApplied(filtersApplied);
-  }, [filters]);
-
-  const fetchPosts = async (page: number = 1, isLoadMore: boolean = false) => {
+  const fetchPosts = useCallback(async (page: number = 1, isLoadMore: boolean = false) => {
     try {
       if (isLoadMore) {
         setIsLoadingMore(true);
@@ -225,7 +194,39 @@ export default function DashboardPage() {
         setIsLoadingMore(false);
       }
     }
-  };
+  }, [POSTS_PER_PAGE, user, totalPostsCount]);
+
+
+  // Auth and initial data loading
+  useEffect(() => {
+    if (loading) return;
+    
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+    fetchPosts();
+  }, [user, loading, router, fetchPosts]);
+
+  // Apply filters and search when data changes - Enhanced with pagination
+  useEffect(() => {
+    applyFiltersAndSearch();
+  }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
+  
+  // Update pagination when filtered posts change
+  useEffect(() => {
+    updatePagination();
+  }, [displayPosts, currentPage]);
+
+  // Add missing state variable
+  const [hasFiltersApplied, setHasFiltersApplied] = useState(false);
+
+  // Track if filters are applied
+  useEffect(() => {
+    const defaultFilters = { postType: 'all', sortBy: 'newest', timeRange: 'all' };
+    const filtersApplied = JSON.stringify(filters) !== JSON.stringify(defaultFilters);
+    setHasFiltersApplied(filtersApplied);
+  }, [filters]);
 
   const applyFiltersAndSearch = useCallback(() => {
     let filtered = [...allPosts];
@@ -240,9 +241,11 @@ export default function DashboardPage() {
     // FIXED: Always use search filters when they exist, regardless of search status
     // This allows filters to work on existing posts even without an active search
     const hasSearchFilters = Object.keys(currentSearchFilters).some(
-      key => currentSearchFilters[key] && 
-             currentSearchFilters[key] !== 'all' && 
-             currentSearchFilters[key] !== 'recent'
+      key => {
+        const filterKey = key as keyof SearchFilters;
+        const value = currentSearchFilters[filterKey];
+        return value && value !== 'all' && value !== 'recent';
+      }
     );
     
     const activeFilters = hasSearchFilters ? {
@@ -414,7 +417,7 @@ export default function DashboardPage() {
   const handleAudioFileSelect = (file: File, duration?: number, compressionResult?: CompressionResult) => {
     setSelectedAudioFile(file);
     setAudioDuration(duration);
-    setCompressionInfo(compressionResult); // Store compression info
+    setCompressionInfo(compressionResult || null); // Convert undefined to null
     setError('');
     
     // Log compression info for debugging
@@ -602,7 +605,7 @@ export default function DashboardPage() {
       const uploadResult = await uploadAudioFile(
         selectedAudioFile, 
         user!.id,
-        compressionInfo // Pass compression info from AudioUpload
+        compressionInfo || undefined // Convert null to undefined
       );
       if (!uploadResult.success) {
         setError(uploadResult.error || 'Failed to upload audio file.');
@@ -756,7 +759,7 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                   <div>
                     <label htmlFor="textContent" className="block text-sm font-medium text-gray-300 mb-2">
-                      What's on your mind?
+                    What&apos;s on your mind?
                     </label>
                     <textarea
                       id="textContent"
@@ -854,12 +857,16 @@ export default function DashboardPage() {
           />
           
           {/* Control Buttons - Updated to show search filters */}
-          {(isSearchActive || Object.keys(currentSearchFilters).some(key => currentSearchFilters[key] && currentSearchFilters[key] !== 'all' && currentSearchFilters[key] !== 'recent')) && (
+          {(isSearchActive || Object.keys(currentSearchFilters).some(key => {
+            const filterKey = key as keyof SearchFilters;
+            const value = currentSearchFilters[filterKey];
+            return value && value !== 'all' && value !== 'recent';
+          })) && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center space-x-2 text-sm text-gray-300 flex-wrap gap-2">
                 {currentSearchFilters.query && (
                   <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
-                    Search: "{currentSearchFilters.query}"
+                    Search: &ldquo;{currentSearchFilters.query}&rdquo;
                   </span>
                 )}
                 {currentSearchFilters.postType && currentSearchFilters.postType !== 'all' && (
@@ -867,13 +874,12 @@ export default function DashboardPage() {
                     Type: {currentSearchFilters.postType === 'creators' ? 'Creators' : currentSearchFilters.postType === 'audio' ? 'Audio Posts' : 'Text Posts'}
                   </span>
                 )}
-                {currentSearchFilters.sortBy && currentSearchFilters.sortBy !== 'recent' && (
+                {currentSearchFilters.sortBy && currentSearchFilters.sortBy !== 'relevance' && (
                   <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
-                    Sort: {currentSearchFilters.sortBy === 'recent' ? 'Newest First' : 
-                           currentSearchFilters.sortBy === 'oldest' ? 'Oldest First' : 
+                    Sort: {currentSearchFilters.sortBy === 'oldest' ? 'Oldest First' : 
                            currentSearchFilters.sortBy === 'popular' ? 'Most Popular' : 
                            currentSearchFilters.sortBy === 'likes' ? 'Most Liked' : 
-                           currentSearchFilters.sortBy === 'relevance' ? 'Most Relevant' : currentSearchFilters.sortBy}
+                           'Most Relevant'}
                   </span>
                 )}
                 {currentSearchFilters.timeRange && currentSearchFilters.timeRange !== 'all' && (
@@ -905,8 +911,8 @@ export default function DashboardPage() {
               {searchResults.users.map((searchUser) => {
                 // Use real stats from search results instead of filtering current results
                 const totalPosts = searchUser.posts_count || 0;
-                const audioPosts = searchUser.audio_posts_count || 0;
-                const textPosts = searchUser.text_posts_count || 0;
+                const audioPosts = 0; // Not available in search results
+                const textPosts = 0; // Not available in search results
                 
                 return (
                   <div key={searchUser.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between">
@@ -919,7 +925,7 @@ export default function DashboardPage() {
                       <div>
                         <p className="text-gray-200 font-medium">{searchUser.username}</p>
                         <p className="text-gray-400 text-sm">
-                          {totalPosts} posts ({audioPosts} audio, {textPosts} text)
+                          {totalPosts} posts
                         </p>
                         <p className="text-gray-500 text-xs">
                           Member since {new Date(searchUser.created_at).toLocaleDateString()}
@@ -938,7 +944,7 @@ export default function DashboardPage() {
                       />
                     ) : user && user.id === searchUser.user_id ? (
                       <div className="text-gray-500 text-sm px-3 py-1 bg-gray-700 rounded">
-                        That's you!
+                        That&apos;s you!
                       </div>
                     ) : (
                       <div className="text-gray-500 text-sm px-3 py-1">
@@ -957,7 +963,7 @@ export default function DashboardPage() {
           <div className="max-w-2xl mx-auto mb-8">
             <div className="text-center py-12 bg-gray-800 rounded-lg border border-gray-700">
               <div className="text-4xl mb-4">🔍</div>
-              <p className="text-gray-400 mb-2">No results found for "{searchQuery}"</p>
+              <p className="text-gray-400 mb-2">No results found for &ldquo;{searchQuery}&rdquo;</p>
               <p className="text-sm text-gray-500 mb-4">
                 Try different keywords, adjust your filters, or check your spelling.
               </p>
@@ -1080,7 +1086,7 @@ export default function DashboardPage() {
                 <div className="text-center py-8">
                   <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
                     <div className="text-3xl mb-2">🎉</div>
-                    <p className="text-gray-400 mb-2">You've reached the end!</p>
+                    <p className="text-gray-400 mb-2">You&apos;ve reached the end!</p>
                     <p className="text-sm text-gray-500">
                       {isSearchActive || hasFiltersApplied 
                         ? `All ${displayPosts.length} matching posts loaded.`

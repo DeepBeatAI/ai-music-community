@@ -80,7 +80,7 @@ export default function SearchBar({
     }
   }, [onSearch]);
 
-  // FIXED: Debounced search effect without circular dependencies
+  // Debounced search and suggestions effect
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -119,9 +119,11 @@ export default function SearchBar({
 
       // Trigger search if we have content or active filters
       if (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') {
+        console.log('🔍 SearchBar triggering search with filters:', currentFilters);
         await performSearch(currentFilters);
       } else {
         // Clear results if no query and no filters
+        console.log('🧹 SearchBar clearing search - no query or filters active');
         onSearch({ posts: [], users: [], totalResults: 0 }, '');
       }
     }, 300);
@@ -136,8 +138,15 @@ export default function SearchBar({
   // FIXED: Notify parent of filter changes without causing loops
   useEffect(() => {
     const currentFilters = { query, postType, sortBy, timeRange };
-    notifyFiltersChange(currentFilters);
-  }, [query, postType, sortBy, timeRange, notifyFiltersChange]);
+    const filtersString = JSON.stringify(currentFilters);
+    
+    // Only notify if filters actually changed
+    if (lastFiltersRef.current !== filtersString && onFiltersChange) {
+      lastFiltersRef.current = filtersString;
+      console.log('🔄 SearchBar notifying parent of filter changes:', currentFilters);
+      onFiltersChange(currentFilters);
+    }
+  }, [query, postType, sortBy, timeRange, onFiltersChange]);
 
   const handleSearch = useCallback(async () => {
     const currentFilters = { query, postType, sortBy, timeRange };
@@ -171,11 +180,13 @@ export default function SearchBar({
   }, []);
 
   const handleClearAll = useCallback(() => {
+    console.log('🧹 SearchBar handleClearAll called');
     setQuery('');
     setPostType('all');
     setSortBy('recent');
     setTimeRange('all');
     // The useEffect will trigger search automatically to clear results
+    // This will also notify the parent through onFiltersChange
   }, []);
 
   return (
@@ -318,6 +329,7 @@ export default function SearchBar({
           <button
             onClick={handleClearAll}
             className="w-full px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm transition-colors"
+            title="Reset all search filters to default values"
           >
             Reset All
           </button>

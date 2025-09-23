@@ -63,11 +63,11 @@ export const togglePostLike = async (
   } catch (error) {
     console.error(`[LIKE-${requestId}] ERROR CAUGHT:`, error);
     console.error(`[LIKE-${requestId}] Error object details:`, {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      name: error?.name
+      message: error instanceof Error ? error.message : 'Unknown error',
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      name: error instanceof Error ? error.name : 'Unknown'
     });
     const errorMessage = error instanceof Error ? error.message : 
                         (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
@@ -155,11 +155,11 @@ export const toggleUserFollow = async (
   } catch (error) {
     console.error('Error toggling user follow:', error);
     console.error('Error object details:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      name: error?.name
+      message: error instanceof Error ? error.message : 'Unknown error',
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      name: error instanceof Error ? error.name : 'Unknown'
     });
     const errorMessage = error instanceof Error ? error.message : 
                         (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));

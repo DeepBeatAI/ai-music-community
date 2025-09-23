@@ -12,7 +12,7 @@ export interface SearchFilters {
 
 export interface SearchResults {
   posts: (Post & { user_profile: UserProfile; likes_count: number })[];
-  users: (UserProfile & { posts_count: number; followers_count: number })[];
+  users: (UserProfile & { posts_count: number; followers_count: number; audio_posts_count?: number; text_posts_count?: number })[];
   totalResults: number;
 }
 
@@ -141,8 +141,11 @@ export async function searchContent(
         );
       }
 
-      if (filters.postType && filters.postType !== 'all' && filters.postType !== 'creators') {
-        postsQuery = postsQuery.eq('post_type', filters.postType);
+      if (filters.postType && filters.postType !== 'all') {
+        if (filters.postType === 'text' || filters.postType === 'audio') {
+          postsQuery = postsQuery.eq('post_type', filters.postType);
+        }
+        // Note: 'creators' filter is handled separately in user search
       }
 
       // Time range filtering

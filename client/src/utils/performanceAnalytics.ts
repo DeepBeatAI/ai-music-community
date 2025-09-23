@@ -131,7 +131,7 @@ class PerformanceAnalyticsManager {
         url: entry.name,
         metadata: {
           fromCache: entry.transferSize === 0,
-          redirectCount: entry.redirectCount
+          redirectCount: (entry as any).redirectCount || 0
         }
       });
     } else if (isImage) {

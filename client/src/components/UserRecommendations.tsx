@@ -96,7 +96,7 @@ export default function UserRecommendations({
               <div className="flex space-x-3 text-xs text-gray-500 mt-1">
                 <span>{rec.posts_count || 0} posts</span>
                 <span>{getFollowStatus(rec.user_id).followerCount} followers</span>
-                {rec.mutual_follows > 0 && (
+                {rec.mutual_follows && rec.mutual_follows > 0 && (
                   <span className="text-blue-400">{rec.mutual_follows} mutual</span>
                 )}
               </div>

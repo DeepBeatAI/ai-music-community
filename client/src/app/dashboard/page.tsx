@@ -1,14 +1,14 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import PostItem from '@/components/PostItem';
 import AudioUpload from '@/components/AudioUpload';
 import SearchBar from '@/components/SearchBar';
-
 import ActivityFeed from '@/components/ActivityFeed';
 import FollowButton from '@/components/FollowButton';
+import PerformanceMonitoringPanel from '@/components/PerformanceMonitoringPanel';
 import { supabase } from '@/lib/supabase';
 import { Post, UserProfile } from '@/types';
 import { SearchResults, SearchFilters } from '@/utils/search';
@@ -16,17 +16,52 @@ import { validatePostContent } from '@/utils/validation';
 import { uploadAudioFile } from '@/utils/audio';
 import type { CompressionResult } from '@/utils/serverAudioCompression';
 
+// Enhanced error handling imports
+import { 
+  ErrorBoundary, 
+  PaginationErrorBoundary, 
+  LoadMoreErrorBoundary, 
+  SearchErrorBoundary, 
+  PostErrorBoundary, 
+  AudioUploadErrorBoundary 
+} from '@/components/ErrorBoundary';
+import ErrorDisplay from '@/components/ErrorDisplay';
+import { usePaginationErrorState } from '@/hooks/useErrorState';
+import { defaultErrorRecovery } from '@/utils/errorRecovery';
+
+// Simplified performance monitoring imports - FIXED
+import { 
+  usePerformanceMonitoring
+} from '@/hooks/usePerformanceMonitoring';
+
+// Import unified pagination system
+import { UnifiedPaginationStateManager, createUnifiedPaginationState } from '@/utils/unifiedPaginationState';
+import { UnifiedLoadMoreHandler, createLoadMoreHandler } from '@/utils/loadMoreHandler';
+import { LoadMoreStateMachine, createLoadMoreStateMachine } from '@/utils/loadMoreStateMachine';
+import { PaginationState, LoadMoreResult } from '@/types/pagination';
+
 type PostType = 'text' | 'audio';
 
-interface FilterOptions {
-  postType: 'all' | 'text' | 'audio';
-  sortBy: 'newest' | 'oldest' | 'popular';
-  timeRange: 'all' | 'today' | 'week' | 'month';
-}
+// Constants
+const POSTS_PER_PAGE = 15;
 
 export default function DashboardPage() {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
+
+  // Simplified performance monitoring setup - FIXED
+  const performanceMonitoring = usePerformanceMonitoring({
+    componentName: 'DashboardPage',
+    trackRenders: false,  // Disabled to prevent loops
+    trackEffects: false,  // Disabled to prevent loops
+    autoStart: false,     // Disabled to prevent loops
+    reportInterval: 0     // Disabled to prevent loops
+  });
+
+  // Performance monitoring panel state
+  const [showPerformancePanel, setShowPerformancePanel] = useState(
+    process.env.NODE_ENV === 'development' && process.env.REACT_APP_SHOW_PERFORMANCE_PANEL === 'true'
+  );
   
   // Post creation state
   const [activeTab, setActiveTab] = useState<PostType>('text');
@@ -34,72 +69,149 @@ export default function DashboardPage() {
   const [audioDescription, setAudioDescription] = useState('');
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const [audioDuration, setAudioDuration] = useState<number | undefined>();
-  const [compressionInfo, setCompressionInfo] = useState<CompressionResult | null>(null); // Add compression info state
+  const [compressionInfo, setCompressionInfo] = useState<CompressionResult | null>(null);
   
-  // Data state - Enhanced with pagination for egress optimization
-  const [allPosts, setAllPosts] = useState<Post[]>([]);
-  const [displayPosts, setDisplayPosts] = useState<Post[]>([]);
-  const [paginatedPosts, setPaginatedPosts] = useState<Post[]>([]); // Currently visible posts
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMorePosts, setHasMorePosts] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [totalPostsCount, setTotalPostsCount] = useState(0);
+  // Unified pagination system state
+  const paginationManagerRef = useRef<UnifiedPaginationStateManager | null>(null);
+  const loadMoreHandlerRef = useRef<UnifiedLoadMoreHandler | null>(null);
+  const stateMachineRef = useRef<LoadMoreStateMachine | null>(null);
+  
+  // Local state for UI
+  const [paginationState, setPaginationState] = useState<PaginationState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
   
-  // Pagination configuration for egress optimization
-  const POSTS_PER_PAGE = 15; // Optimized for bandwidth savings
+  // Enhanced error state management
+  const {
+    errorState,
+    setError,
+    clearError
+  } = usePaginationErrorState();
   
-  // Search and filter state
+  // Legacy error state for backward compatibility
+  const [error, setLegacyError] = useState('');
+  
+  // Enhanced ref-based initial load tracking to prevent multiple fetches
+  const hasInitiallyLoaded = useRef(false);
+  const initialLoadAttempted = useRef(false);
+  
+  // Search state (still needed for UI)
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResults>({ posts: [], users: [], totalResults: 0 });
-  const [currentSearchFilters, setCurrentSearchFilters] = useState<SearchFilters>({}); // Track SearchBar filters
-  const [filters, setFilters] = useState<FilterOptions>({
-    postType: 'all',
-    sortBy: 'newest',
-    timeRange: 'all'
-  });
-  const [isSearchActive, setIsSearchActive] = useState(false);
+
+  // Initialize unified pagination system - FIXED: Only run once
+  useEffect(() => {
+    if (!paginationManagerRef.current) {
+      console.log('🚀 Dashboard: Initializing pagination system');
+      
+      // Create pagination manager
+      paginationManagerRef.current = createUnifiedPaginationState({
+        postsPerPage: 15,
+        minResultsForFilter: 10,
+        maxAutoFetchPosts: 100,
+        fetchTimeout: 10000,
+      });
+
+      // Create state machine
+      stateMachineRef.current = createLoadMoreStateMachine('idle');
+
+      // Create load more handler
+      loadMoreHandlerRef.current = createLoadMoreHandler(
+        paginationManagerRef.current.getState(),
+        stateMachineRef.current
+      );
+
+      // Subscribe to state changes
+      paginationManagerRef.current.subscribe((newState) => {
+        setPaginationState(newState);
+      });
+
+      // Set initial state
+      setPaginationState(paginationManagerRef.current.getState());
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (paginationManagerRef.current) {
+        paginationManagerRef.current.cleanup();
+      }
+    };
+  }, []); // Empty dependency array - runs only once
 
   const fetchPosts = useCallback(async (page: number = 1, isLoadMore: boolean = false) => {
+    if (!paginationManagerRef.current) {
+      console.warn('⚠️ Dashboard: fetchPosts called but pagination manager not initialized');
+      return;
+    }
+
+    // Enhanced initial load tracking validation
+    if (!isLoadMore && hasInitiallyLoaded.current && page === 1) {
+      console.warn('⚠️ Dashboard: Attempted duplicate initial load prevented');
+      return;
+    }
+
     try {
-      if (isLoadMore) {
-        setIsLoadingMore(true);
-      }
+      // Set loading state with discrimination between load more and initial fetch
+      paginationManagerRef.current.setLoadingState(true, isLoadMore);
       
-      console.log(`📊 Fetching posts - Page ${page} (${POSTS_PER_PAGE} per page) - Load More: ${isLoadMore}`);
+      console.log(`📊 Fetching posts - Page ${page} (15 per page) - Load More: ${isLoadMore}`);
       
       // EGRESS OPTIMIZATION: Only fetch the posts we need
-      const startRange = (page - 1) * POSTS_PER_PAGE;
-      const endRange = startRange + POSTS_PER_PAGE - 1;
+      const startRange = (page - 1) * 15;
+      const endRange = startRange + 15 - 1;
       
       console.log(`🎯 Egress optimization: Fetching posts ${startRange}-${endRange}`);
       
-      const { data, error, count } = await supabase
+      // Use manual join approach since foreign key relationship might not be properly configured
+      const { data: postsData, error: postsError, count } = await supabase
         .from('posts')
-        .select(`
-          *,
-          user_profiles!posts_user_id_fkey (
-            username
-          )
-        `, { count: 'exact' })
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(startRange, endRange);
 
+      if (postsError) throw postsError;
+
+      let data: any[] = [];
+      let error: any = null;
+      
+      if (postsData && postsData.length > 0) {
+        // Get unique user IDs from posts
+        const userIds = [...new Set(postsData.map(post => post.user_id))];
+        
+        // Fetch usernames for these user IDs
+        const { data: usersData, error: usersError } = await supabase
+          .from('user_profiles')
+          .select('user_id, username')
+          .in('user_id', userIds);
+
+        if (usersError) {
+          console.warn('Could not fetch user profiles:', usersError);
+          // Continue with posts but without usernames
+          data = postsData.map(post => ({
+            ...post,
+            user_profiles: { username: 'Unknown User', user_id: post.user_id, created_at: '', updated_at: '' }
+          }));
+        } else {
+          // Create a map for quick lookup
+          const usersMap = (usersData || []).reduce((acc: Record<string, any>, user: any) => {
+            acc[user.user_id] = user;
+            return acc;
+          }, {} as Record<string, any>);
+          
+          // Join the data manually
+          data = postsData.map(post => ({
+            ...post,
+            user_profiles: usersMap[post.user_id] || { username: 'Unknown User', user_id: post.user_id, created_at: '', updated_at: '' }
+          }));
+        }
+      } else {
+        data = postsData || [];
+      }
+
       if (error) throw error;
       
-      // Update total count for pagination logic
+      // Update total count
       if (count !== null) {
-        setTotalPostsCount(count);
-        const totalPages = Math.ceil(count / POSTS_PER_PAGE);
-        const serverHasMore = page < totalPages;
-        console.log(`📊 Total posts: ${count}, Current page: ${page}/${totalPages}, Server has more: ${serverHasMore}`);
-        
-        // For initial load, always set hasMorePosts based on server data
-        // The updatePagination function will override this for filtered results
-        if (!isLoadMore || page === 1) {
-          setHasMorePosts(serverHasMore);
-        }
+        paginationManagerRef.current.updateTotalPostsCount(count);
+        console.log(`📊 Total posts: ${count}`);
       }
       
       // Add interaction data for each post with better error handling
@@ -161,284 +273,196 @@ export default function DashboardPage() {
         })
       );
 
-      if (isLoadMore) {
-        // Append to existing posts for "Load More" functionality
-        setAllPosts(prev => {
-          const newPosts = [...prev, ...postsWithInteractions];
-          console.log(`📈 Appended ${postsWithInteractions.length} posts (Load More) - Total now: ${newPosts.length}`);
-          
-          // Update hasMorePosts immediately based on new total
-          const totalPages = Math.ceil(totalPostsCount / POSTS_PER_PAGE);
-          const currentServerPage = Math.ceil(newPosts.length / POSTS_PER_PAGE);
-          const stillHasMore = currentServerPage < totalPages;
-          console.log(`📊 Updated pagination: ${currentServerPage}/${totalPages}, Still has more: ${stillHasMore}`);
-          
-          // Use setTimeout to ensure state update happens after this render cycle
-          setTimeout(() => {
-            setHasMorePosts(stillHasMore);
-          }, 0);
-          
-          return newPosts;
-        });
-      } else {
-        // Replace all posts for initial load or refresh
-        setAllPosts(postsWithInteractions);
-        console.log(`🔄 Loaded ${postsWithInteractions.length} posts (Initial/Refresh)`);
-      }
+      // Update pagination state with new posts
+      paginationManagerRef.current.updatePosts({
+        newPosts: postsWithInteractions,
+        resetPagination: !isLoadMore,
+        updateMetadata: {
+          lastFetchTimestamp: Date.now(),
+          currentBatch: page,
+        },
+      });
+
+      console.log(`${isLoadMore ? '📈 Appended' : '🔄 Loaded'} ${postsWithInteractions.length} posts`);
       
     } catch (error) {
-      console.error('Error fetching posts:', error);
-      setError('Failed to fetch posts. Please try again.');
+      console.error('❌ Dashboard: Error fetching posts:', error);
+      
+      // Enhanced error handling for initial load failures
+      if (!isLoadMore && page === 1) {
+        console.error('❌ Dashboard: Initial load failed, resetting tracking flags for retry');
+        // Reset tracking flags to allow retry on initial load failure
+        hasInitiallyLoaded.current = false;
+        initialLoadAttempted.current = false;
+      }
+      
+      // Enhanced error handling with recovery
+      const errorMessage = 'Failed to fetch posts. Please try again.';
+      setError(error instanceof Error ? error : new Error(String(error)), 'recoverable', 'FETCH_POSTS_FAILED');
+      setLegacyError(errorMessage);
     } finally {
-      if (isLoadMore) {
-        setIsLoadingMore(false);
+      // Clear loading state
+      if (paginationManagerRef.current) {
+        paginationManagerRef.current.setLoadingState(false);
       }
     }
-  }, [POSTS_PER_PAGE, user, totalPostsCount]);
+  }, [user, setError]);
 
-
-  // Auth and initial data loading
+  // Enhanced auth and initial data loading - FIXED: Removed problematic dependencies
   useEffect(() => {
-    if (loading) return;
+    // Early return if still loading authentication
+    if (loading) {
+      console.log('🔄 Dashboard: Waiting for auth to complete...');
+      return;
+    }
     
+    // Redirect unauthenticated users
     if (!user) {
+      console.log('🚫 Dashboard: No user found, redirecting to login');
       router.replace('/login');
       return;
     }
-    fetchPosts();
-  }, [user, loading, router, fetchPosts]);
-
-  // Apply filters and search when data changes - Enhanced with pagination
-  useEffect(() => {
-    applyFiltersAndSearch();
-  }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
-  
-  // Update pagination when filtered posts change
-  useEffect(() => {
-    updatePagination();
-  }, [displayPosts, currentPage]);
-
-  // Add missing state variable
-  const [hasFiltersApplied, setHasFiltersApplied] = useState(false);
-
-  // Track if filters are applied
-  useEffect(() => {
-    const defaultFilters = { postType: 'all', sortBy: 'newest', timeRange: 'all' };
-    const filtersApplied = JSON.stringify(filters) !== JSON.stringify(defaultFilters);
-    setHasFiltersApplied(filtersApplied);
-  }, [filters]);
-
-  const applyFiltersAndSearch = useCallback(() => {
-    let filtered = [...allPosts];
-
-    // Apply search first if active
-    if (isSearchActive && searchResults.posts.length >= 0) {
-      // Use search results as base, but only the posts that match search
-      const searchPostIds = new Set(searchResults.posts.map(p => p.id));
-      filtered = allPosts.filter(post => searchPostIds.has(post.id));
-    }
-
-    // FIXED: Always use search filters when they exist, regardless of search status
-    // This allows filters to work on existing posts even without an active search
-    const hasSearchFilters = Object.keys(currentSearchFilters).some(
-      key => {
-        const filterKey = key as keyof SearchFilters;
-        const value = currentSearchFilters[filterKey];
-        return value && value !== 'all' && value !== 'recent';
-      }
+    
+    // Enhanced initial load tracking with multiple safeguards
+    const shouldPerformInitialLoad = (
+      paginationManagerRef.current && // Pagination system must be initialized
+      !hasInitiallyLoaded.current && // Haven't loaded yet
+      !initialLoadAttempted.current   // Haven't even attempted to load
     );
     
-    const activeFilters = hasSearchFilters ? {
-      postType: currentSearchFilters.postType || 'all',
-      sortBy: currentSearchFilters.sortBy || 'recent',
-      timeRange: currentSearchFilters.timeRange || 'all'
-    } : filters;
-
-    // Apply post type filter
-    if (activeFilters.postType !== 'all' && activeFilters.postType !== 'creators') {
-      filtered = filtered.filter(post => post.post_type === activeFilters.postType);
+    if (shouldPerformInitialLoad) {
+      console.log('🚀 Dashboard: Performing initial data load');
+      
+      // Set attempt flag first, but wait to set loaded flag until after fetch
+      initialLoadAttempted.current = true;
+      
+      // Perform the initial fetch
+      fetchPosts().then(() => {
+        console.log('✅ Dashboard: Initial data load completed successfully');
+        // Set loaded flag only after successful fetch
+        hasInitiallyLoaded.current = true;
+      }).catch((error) => {
+        console.error('❌ Dashboard: Initial data load failed:', error);
+        // Reset flags on failure to allow retry
+        initialLoadAttempted.current = false;
+        hasInitiallyLoaded.current = false;
+      });
     }
+  }, [user, loading, router, fetchPosts]); // FIXED: Removed paginationState from dependencies
 
-    // Apply time range filter
-    if (activeFilters.timeRange !== 'all') {
-      const now = new Date();
-      const cutoff = new Date();
-      
-      switch (activeFilters.timeRange) {
-        case 'today':
-          cutoff.setHours(0, 0, 0, 0);
-          break;
-        case 'week':
-          cutoff.setDate(now.getDate() - 7);
-          break;
-        case 'month':
-          cutoff.setMonth(now.getMonth() - 1);
-          break;
-      }
-      
-      filtered = filtered.filter(post => new Date(post.created_at) >= cutoff);
-    }
+  // REMOVED: The problematic state validation useEffect that was causing infinite loops
+  // State validation is now handled internally by the UnifiedPaginationStateManager
 
-    // Apply sorting - map SearchBar sortBy values to local values
-    const sortBy = activeFilters.sortBy;
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'oldest':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        case 'popular':
-        case 'likes':
-          const likeDiff = (b.like_count || 0) - (a.like_count || 0);
-          if (likeDiff === 0) {
-            // If same likes, sort by most recent
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          }
-          return likeDiff;
-        case 'recent':
-        case 'newest':
-        default:
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-    });
-
-    setDisplayPosts(filtered);
-  }, [allPosts, filters, searchResults, isSearchActive, currentSearchFilters]);
-  
-  // FIXED: Update pagination for filtered posts
-  const updatePagination = useCallback(() => {
-    const hasActiveFilters = isSearchActive || hasFiltersApplied;
-    
-    if (hasActiveFilters) {
-      // For filtered results, use client-side pagination (slice by currentPage)
-      const startIndex = 0;
-      const endIndex = currentPage * POSTS_PER_PAGE;
-      const paginatedResults = displayPosts.slice(startIndex, endIndex);
-      
-      setPaginatedPosts(paginatedResults);
-      setHasMorePosts(endIndex < displayPosts.length);
-      console.log(`📊 Client-side pagination: Showing ${paginatedResults.length}/${displayPosts.length} filtered posts (Page ${currentPage})`);
-    } else {
-      // For regular browsing, show ALL loaded posts (server-side pagination)
-      setPaginatedPosts(displayPosts); // Show all loaded posts
-      
-      const totalPages = Math.ceil(totalPostsCount / POSTS_PER_PAGE);
-      const currentServerPage = Math.ceil(allPosts.length / POSTS_PER_PAGE);
-      setHasMorePosts(currentServerPage < totalPages);
-      console.log(`📊 Server-side pagination: Showing ${displayPosts.length} posts, Page ${currentServerPage}/${totalPages}, Has more: ${currentServerPage < totalPages}`);
-    }
-  }, [displayPosts, currentPage, POSTS_PER_PAGE, isSearchActive, hasFiltersApplied, totalPostsCount, allPosts.length]);
-  
-  // IMPROVED: Load more posts function with better state management
+  // Unified Load More handler
   const handleLoadMore = useCallback(async () => {
-    if (isLoadingMore || !hasMorePosts) {
-      console.log('🚫 Load more blocked:', { isLoadingMore, hasMorePosts });
+    if (!loadMoreHandlerRef.current || !paginationManagerRef.current) {
+      console.log('🚫 Load more blocked: Handlers not initialized');
       return;
     }
-    
+
     console.log('🚀 Load more triggered');
     
-    const hasActiveFilters = isSearchActive || hasFiltersApplied;
-    
-    if (hasActiveFilters) {
-      // For filtered/search results, just show more from existing data (client-side)
-      setCurrentPage(prev => {
-        const newPage = prev + 1;
-        console.log(`🔍 Load more: Expanding filtered results to page ${newPage} (client-side)`);
-        return newPage;
-      });
-    } else {
-      // For regular browsing, fetch more posts from database (server-side)
-      const nextPage = Math.floor(allPosts.length / POSTS_PER_PAGE) + 1;
-      console.log(`📎 Load more: Fetching page ${nextPage} from database (server-side)`);
-      console.log(`Current state: allPosts.length=${allPosts.length}, totalPostsCount=${totalPostsCount}`);
+    try {
+      // Use unified handler to determine strategy and execute
+      const result: LoadMoreResult = await loadMoreHandlerRef.current.handleLoadMore();
       
-      // Temporarily disable hasMorePosts to prevent double-clicks
-      setIsLoadingMore(true);
-      
-      try {
-        await fetchPosts(nextPage, true);
+      if (result.success) {
+        console.log(`✅ Load more successful: ${result.strategy}, ${result.newPosts.length} new posts`);
         
-        // After successful fetch, check if we have more
-        const newTotalLoaded = allPosts.length + POSTS_PER_PAGE;
-        const stillHasMore = newTotalLoaded < totalPostsCount;
-        console.log(`📊 After load: newTotalLoaded=${newTotalLoaded}, totalPostsCount=${totalPostsCount}, stillHasMore=${stillHasMore}`);
+        // For server-fetch strategy, we need to fetch the actual posts
+        if (result.strategy === 'server-fetch') {
+          const currentState = paginationManagerRef.current.getState();
+          const nextPage = Math.ceil(currentState.allPosts.length / 15) + 1;
+          await fetchPosts(nextPage, true);
+        }
+        // For client-paginate, the unified system handles everything internally
         
-        // Update hasMorePosts based on server data
-        setHasMorePosts(stillHasMore);
-        
-      } catch (error) {
-        console.error('❌ Load more failed:', error);
-        setIsLoadingMore(false);
+      } else {
+        console.error('❌ Load more failed:', result.error);
+        const loadMoreError = result.error || 'Failed to load more posts';
+        setError(loadMoreError, 'recoverable', 'LOAD_MORE_FAILED');
+        setLegacyError(loadMoreError);
       }
+    } catch (error) {
+      console.error('❌ Load more error:', error);
+      const loadMoreException = 'Failed to load more posts. Please try again.';
+      setError(loadMoreException, 'recoverable', 'LOAD_MORE_EXCEPTION');
+      setLegacyError(loadMoreException);
     }
-  }, [isLoadingMore, hasMorePosts, isSearchActive, hasFiltersApplied, allPosts.length, currentPage, POSTS_PER_PAGE, totalPostsCount, fetchPosts]);
+  }, [fetchPosts, setError]);
   
-  // Reset pagination when search/filters change
-  const resetPagination = useCallback(() => {
-    setCurrentPage(1);
-    console.log('🔄 Pagination reset');
-  }, []);
-  
-  // Reset pagination when search changes
-  useEffect(() => {
-    resetPagination();
-  }, [isSearchActive, currentSearchFilters, resetPagination]);
-
+  // Search and filter handlers (simplified)
   const handleSearch = useCallback((results: SearchResults, query: string) => {
-    // Ensure results is always a valid object
-    const safeResults = results || { posts: [], users: [], totalResults: 0 };
-    
-    // Ensure arrays exist
-    const safePosts = Array.isArray(safeResults.posts) ? safeResults.posts : [];
-    const safeUsers = Array.isArray(safeResults.users) ? safeResults.users : [];
-    
-    setSearchResults({
-      posts: safePosts,
-      users: safeUsers,
-      totalResults: safeResults.totalResults || (safePosts.length + safeUsers.length)
-    });
-    setSearchQuery(query || '');
-    setIsSearchActive((query || '').length > 0);
-  }, []);
+    if (!paginationManagerRef.current) return;
+    try {
+      const safeResults = results || { posts: [], users: [], totalResults: 0 };
+      const safePosts = Array.isArray(safeResults.posts) ? safeResults.posts : [];
+      const safeUsers = Array.isArray(safeResults.users) ? safeResults.users : [];
+      
+      const searchResults = {
+        posts: safePosts,
+        users: safeUsers,
+        totalResults: safeResults.totalResults || (safePosts.length + safeUsers.length)
+      };
+
+      setSearchQuery(query || '');
+      paginationManagerRef.current.updateSearch(searchResults, query || '', {});
+    } catch (error) {
+      console.error('❌ Dashboard: Search handling error:', error);
+      const searchHandlingError = 'Failed to update search. Please try again.';
+      setError(searchHandlingError, 'recoverable', 'SEARCH_HANDLING_ERROR');
+      setLegacyError(searchHandlingError);
+    }
+  }, [setError]);
 
   const handleFiltersChange = useCallback((searchFilters: SearchFilters) => {
-    // Update the current search filters state
-    setCurrentSearchFilters(searchFilters);
-  }, []);
+    if (!paginationManagerRef.current) return;
+    try {
+      const currentState = paginationManagerRef.current.getState();
+      paginationManagerRef.current.updateSearch(
+        currentState.searchResults,
+        searchQuery,
+        searchFilters
+      );
+    } catch (error) {
+      console.error('❌ Dashboard: Filter handling error:', error);
+      const filterHandlingError = 'Failed to update filters. Please try again.';
+      setError(filterHandlingError, 'recoverable', 'FILTER_HANDLING_ERROR');
+      setLegacyError(filterHandlingError);
+    }
+  }, [searchQuery, setError]);
 
   const clearSearch = useCallback(() => {
+    if (!paginationManagerRef.current) return;
     setSearchQuery('');
-    setSearchResults({ posts: [], users: [], totalResults: 0 });
-    setCurrentSearchFilters({}); // Clear search filters
-    setIsSearchActive(false);
-    resetPagination(); // Reset pagination when clearing search
-  }, [resetPagination]);
+    paginationManagerRef.current.clearSearch();
+  }, []);
 
-  // Post creation handlers - Enhanced with compression support
+  // Post creation handlers (simplified)
   const handleAudioFileSelect = (file: File, duration?: number, compressionResult?: CompressionResult) => {
     setSelectedAudioFile(file);
     setAudioDuration(duration);
-    setCompressionInfo(compressionResult || null); // Convert undefined to null
-    setError('');
-    
-    // Log compression info for debugging
-    if (compressionResult) {
-      console.log('📊 Dashboard: Compression info received:', compressionResult);
-    }
+    setCompressionInfo(compressionResult || null);
+    clearError();
+    setLegacyError('');
   };
 
   const handleAudioFileRemove = () => {
     setSelectedAudioFile(null);
     setAudioDuration(undefined);
-    setCompressionInfo(null); // Clear compression info
+    setCompressionInfo(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setError('');
+    clearError();
+    setLegacyError('');
 
     if (!user) {
-      setError('You must be logged in to create a post.');
+      const authError = 'You must be logged in to create a post.';
+      setError(authError, 'recoverable', 'AUTH_REQUIRED');
+      setLegacyError(authError);
       setIsSubmitting(false);
       return;
     }
@@ -451,7 +475,6 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Error creating post:', error);
-      // Error is already set in the individual handlers
     } finally {
       setIsSubmitting(false);
     }
@@ -461,31 +484,14 @@ export default function DashboardPage() {
     try {
       const validationErrors = validatePostContent(textContent, 'text');
       if (validationErrors.length > 0) {
-        setError(validationErrors[0]);
+        const validationError = validationErrors[0];
+        setError(validationError, 'recoverable', 'TEXT_CONTENT_VALIDATION_ERROR');
+        setLegacyError(validationError);
         return;
       }
 
-      // Debug user information
-      console.log('User object:', user);
-      console.log('User ID:', user?.id);
-      console.log('User ID type:', typeof user?.id);
-      
-      // Check auth status
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      console.log('Auth user:', authUser);
-      console.log('Auth user ID:', authUser?.id);
-      console.log('IDs match:', user?.id === authUser?.id);
-      
       if (!user?.id) {
         throw new Error('User ID is missing. Please log out and log back in.');
-      }
-      
-      if (!authUser?.id) {
-        throw new Error('Authentication expired. Please log out and log back in.');
-      }
-      
-      if (user.id !== authUser.id) {
-        throw new Error('User ID mismatch. Please log out and log back in.');
       }
 
       const postData = {
@@ -494,40 +500,17 @@ export default function DashboardPage() {
         post_type: 'text' as const
       };
 
-      console.log('Attempting to create post with data:', postData);
-      console.log('Content length:', textContent.trim().length);
-
-      // Try a different approach - create without .select() to avoid some trigger issues
-      console.log('Attempting post creation without select...');
       const { error: insertError } = await supabase
         .from('posts')
         .insert(postData);
 
       if (insertError) {
-        console.error('Insert failed with error:');
-        console.error('Full error object:', JSON.stringify(insertError, null, 2));
-        console.error('Error message:', insertError.message);
-        console.error('Error code:', insertError.code);
-        console.error('Error details:', insertError.details);
-        console.error('Error hint:', insertError.hint);
-        console.error('Error typeof:', typeof insertError);
-        console.error('Error keys:', Object.keys(insertError));
-        
-        // If it's the function error, the post might still be created
-        // Let's check if it exists and continue
-        console.log('Checking error conditions:');
-        console.log('insertError.code === "42883":', insertError.code === '42883');
-        console.log('insertError.message?.includes("create_activity"):', insertError.message?.includes('create_activity'));
-        
+        // Handle specific errors but continue if it's just the trigger function missing
         if (insertError.code === '42883' || insertError.message?.includes('create_activity')) {
           console.log('Function error detected - checking if post was created anyway...');
-          
-          // Wait a moment for any async operations
           await new Promise(resolve => setTimeout(resolve, 1000));
           
-          // Check if the post exists
-          console.log('Checking for existing posts with content:', textContent.trim());
-          const { data: existingPosts, error: checkError } = await supabase
+          const { data: existingPosts } = await supabase
             .from('posts')
             .select('id, content, created_at')
             .eq('user_id', user.id)
@@ -535,52 +518,33 @@ export default function DashboardPage() {
             .order('created_at', { ascending: false })
             .limit(1);
           
-          if (checkError) {
-            console.error('Error checking for existing posts:', checkError);
-          }
-          
-          console.log('Existing posts found:', existingPosts);
-          
           if (existingPosts && existingPosts.length > 0) {
-            console.log('Success! Post was created despite the trigger error:', existingPosts[0]);
+            console.log('Success! Post was created despite the trigger error');
             setTextContent('');
             await fetchPosts();
             return;
-          } else {
-            console.log('Post was not created. The trigger error prevented creation.');
-            console.log('This means the database triggers are blocking post creation entirely.');
-            setError('Post creation failed due to a database trigger issue. The create_activity function is missing from the database.');
-            return;
           }
-        } else {
-          console.log('This is not the expected function error. Continuing with other error handling...');
-        }
-        
-        // Handle other specific errors
-        if (insertError.code === '23503') {
-          throw new Error('Foreign key constraint error - user may not exist in user_profiles table.');
-        }
-        
-        if (insertError.code === '42501') {
-          throw new Error('Permission denied - check RLS policies.');
         }
         
         throw new Error(`Database error: ${insertError.message || insertError.code || 'Unknown database error'}`);
       }
 
-      console.log('Post created successfully without errors!');
       setTextContent('');
-      // Refresh posts and reset pagination to show new post
-      setCurrentPage(1);
-      setAllPosts([]); // Clear existing posts to force fresh fetch
-      await fetchPosts(1, false);
+      if (paginationManagerRef.current) {
+        paginationManagerRef.current.reset();
+        hasInitiallyLoaded.current = false;
+        await fetchPosts(1, false);
+      }
       
     } catch (error) {
       console.error('Error in handleTextPostSubmit:', error);
       if (error instanceof Error) {
-        setError(error.message);
+        setError(error.message, 'recoverable', 'POST_CREATION_ERROR');
+        setLegacyError(error.message);
       } else {
-        setError('Failed to create post. Please try again.');
+        const genericError = 'Failed to create post. Please try again.';
+        setError(genericError, 'recoverable', 'POST_CREATION_UNKNOWN_ERROR');
+        setLegacyError(genericError);
       }
       throw error;
     }
@@ -589,30 +553,33 @@ export default function DashboardPage() {
   const handleAudioPostSubmit = async () => {
     try {
       if (!selectedAudioFile) {
-        setError('Please select an audio file.');
+        const fileError = 'Please select an audio file.';
+        setError(fileError, 'recoverable', 'AUDIO_FILE_REQUIRED');
+        setLegacyError(fileError);
         return;
       }
 
       const validationErrors = validatePostContent(audioDescription, 'audio');
       if (validationErrors.length > 0) {
-        setError(validationErrors[0]);
+        const validationError = validationErrors[0];
+        setError(validationError, 'recoverable', 'AUDIO_CONTENT_VALIDATION_ERROR');
+        setLegacyError(validationError);
         return;
       }
 
-      console.log('📤 Dashboard: Uploading audio file with compression optimization...');
-      
-      // Pass compression info to upload function for optimization
       const uploadResult = await uploadAudioFile(
         selectedAudioFile, 
         user!.id,
-        compressionInfo || undefined // Convert null to undefined
+        compressionInfo || undefined
       );
+      
       if (!uploadResult.success) {
-        setError(uploadResult.error || 'Failed to upload audio file.');
+        const uploadError = uploadResult.error || 'Failed to upload audio file.';
+        setError(uploadError, 'recoverable', 'AUDIO_UPLOAD_ERROR');
+        setLegacyError(uploadError);
         return;
       }
 
-      console.log('Audio uploaded, creating post...');
       const { error: insertError } = await supabase
         .from('posts')
         .insert({
@@ -626,34 +593,28 @@ export default function DashboardPage() {
           audio_mime_type: uploadResult.mimeType
         });
 
-      if (insertError) {
-        console.error('Supabase insert error:', insertError);
-        
-        // Check if the error is about the missing function
-        if (insertError.message && insertError.message.includes('function create_activity')) {
-          // This means triggers are trying to run but function is missing
-          // For now, we'll just show a success message as the post should still be created
-          console.log('Audio post likely created, but activity function is missing. This is OK for testing.');
-        } else {
-          throw new Error(`Database error: ${insertError.message}`);
-        }
+      if (insertError && !insertError.message?.includes('function create_activity')) {
+        throw new Error(`Database error: ${insertError.message}`);
       }
 
-      console.log('Audio post created successfully');
       setAudioDescription('');
       setSelectedAudioFile(null);
       setAudioDuration(undefined);
-      // Refresh posts and reset pagination to show new post
-      setCurrentPage(1);
-      setAllPosts([]); // Clear existing posts to force fresh fetch
-      await fetchPosts(1, false);
+      if (paginationManagerRef.current) {
+        paginationManagerRef.current.reset();
+        hasInitiallyLoaded.current = false;
+        await fetchPosts(1, false);
+      }
       
     } catch (error) {
       console.error('Error in handleAudioPostSubmit:', error);
       if (error instanceof Error) {
-        setError(error.message);
+        setError(error.message, 'recoverable', 'AUDIO_POST_CREATION_ERROR');
+        setLegacyError(error.message);
       } else {
-        setError('Failed to create audio post. Please try again.');
+        const genericError = 'Failed to create audio post. Please try again.';
+        setError(genericError, 'recoverable', 'AUDIO_POST_CREATION_UNKNOWN_ERROR');
+        setLegacyError(genericError);
       }
       throw error;
     }
@@ -668,13 +629,16 @@ export default function DashboardPage() {
 
       if (error) throw error;
       
-      // Refresh posts after deletion
-      setCurrentPage(1);
-      setAllPosts([]); // Clear existing posts to force fresh fetch
-      await fetchPosts(1, false);
+      if (paginationManagerRef.current) {
+        paginationManagerRef.current.reset();
+        hasInitiallyLoaded.current = false;
+        await fetchPosts(1, false);
+      }
     } catch (error) {
       console.error('Error deleting post:', error);
-      setError('Failed to delete post. Please try again.');
+      const deleteError = 'Failed to delete post. Please try again.';
+      setError(deleteError, 'recoverable', 'POST_DELETION_ERROR');
+      setLegacyError(deleteError);
     }
   };
 
@@ -695,16 +659,19 @@ export default function DashboardPage() {
     return null;
   }
 
-  // Determine what to show and how to label it - Enhanced with pagination
-  const hasSearchResults = isSearchActive;
-  const hasUserResults = hasSearchResults && searchResults.users.length > 0;
-  const hasPostResults = paginatedPosts.length > 0; // Use paginated posts
-  const showNoResults = isSearchActive && searchResults.posts.length === 0 && searchResults.users.length === 0;
+  // Determine what to show using unified pagination state
+  const hasSearchResults = paginationState?.isSearchActive || false;
+  const hasUserResults = hasSearchResults && (paginationState?.searchResults.users.length || 0) > 0;
+  const showNoResults = hasSearchResults && 
+    (paginationState?.searchResults.posts.length || 0) === 0 && 
+    (paginationState?.searchResults.users.length || 0) === 0;
   
   // Calculate pagination stats for egress optimization display
-  const totalFilteredPosts = displayPosts.length;
-  const currentlyShowing = paginatedPosts.length;
+  const totalFilteredPosts = paginationState?.displayPosts.length || 0;
+  const currentlyShowing = paginationState?.paginatedPosts.length || 0;
   const bandwidthSavings = Math.max(0, totalFilteredPosts - currentlyShowing);
+  const isLoadingMore = paginationState?.isLoadingMore || false;
+  const hasMorePosts = paginationState?.hasMorePosts || false;
 
   return (
     <MainLayout>
@@ -716,7 +683,6 @@ export default function DashboardPage() {
             <p>
               Welcome back, <span className="text-blue-400 font-medium">{profile.username}</span>!
             </p>
-            {/* Egress Optimization Info */}
             <div className="mt-2 text-xs text-green-400">
               🎯 Bandwidth optimized: Loading {POSTS_PER_PAGE} posts at a time • 
               Audio files load only when played
@@ -759,7 +725,7 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                   <div>
                     <label htmlFor="textContent" className="block text-sm font-medium text-gray-300 mb-2">
-                    What&apos;s on your mind?
+                      What&apos;s on your mind?
                     </label>
                     <textarea
                       id="textContent"
@@ -786,14 +752,16 @@ export default function DashboardPage() {
                     <label className="block text-sm font-medium text-gray-300 mb-3">
                       Select Audio File
                     </label>
-                    <AudioUpload
-                      onFileSelect={handleAudioFileSelect}
-                      onFileRemove={handleAudioFileRemove}
-                      disabled={isSubmitting}
-                      enableCompression={true}  // ✅ Enable compression by default
-                      compressionQuality="medium"  // ✅ Set default quality for balance
-                      maxFileSize={50 * 1024 * 1024} // 50MB limit
-                    />
+                    <AudioUploadErrorBoundary>
+                      <AudioUpload
+                        onFileSelect={handleAudioFileSelect}
+                        onFileRemove={handleAudioFileRemove}
+                        disabled={isSubmitting}
+                        enableCompression={true}
+                        compressionQuality="medium"
+                        maxFileSize={50 * 1024 * 1024} // 50MB limit
+                      />
+                    </AudioUploadErrorBoundary>
                   </div>
 
                   <div>
@@ -820,7 +788,25 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {error && (
+              {/* Enhanced Error Display */}
+              {errorState && (
+                <ErrorDisplay
+                  errorState={errorState}
+                  errorRecovery={defaultErrorRecovery}
+                  onErrorCleared={clearError}
+                  onRetry={async () => {
+                    if (activeTab === 'text') {
+                      await handleTextPostSubmit();
+                    } else {
+                      await handleAudioPostSubmit();
+                    }
+                  }}
+                  className="mt-4"
+                />
+              )}
+              
+              {/* Legacy Error Display for backward compatibility */}
+              {!errorState && error && (
                 <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded">
                   <p className="text-red-400 text-sm">{error}</p>
                 </div>
@@ -829,7 +815,7 @@ export default function DashboardPage() {
               <div className="mt-6 flex justify-end">
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium
                     disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   disabled={isSubmitting || (activeTab === 'audio' && !selectedAudioFile)}
                 >
@@ -849,44 +835,45 @@ export default function DashboardPage() {
 
         {/* Enhanced Discovery Section */}
         <div className="max-w-2xl mx-auto mb-8 space-y-4">
-          <SearchBar 
-            onSearch={handleSearch} 
-            onFiltersChange={handleFiltersChange}
-            currentQuery={searchQuery}
-            className="w-full" 
-          />
+          <SearchErrorBoundary>
+            <SearchBar 
+              onSearch={handleSearch} 
+              onFiltersChange={handleFiltersChange}
+              className="w-full"
+            />
+          </SearchErrorBoundary>
           
           {/* Control Buttons - Updated to show search filters */}
-          {(isSearchActive || Object.keys(currentSearchFilters).some(key => {
+          {(hasSearchResults || Object.keys(paginationState?.currentSearchFilters || {}).some(key => {
             const filterKey = key as keyof SearchFilters;
-            const value = currentSearchFilters[filterKey];
+            const value = (paginationState?.currentSearchFilters as any)?.[filterKey];
             return value && value !== 'all' && value !== 'recent';
           })) && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center space-x-2 text-sm text-gray-300 flex-wrap gap-2">
-                {currentSearchFilters.query && (
+                {paginationState?.currentSearchFilters.query && (
                   <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
-                    Search: &ldquo;{currentSearchFilters.query}&rdquo;
+                    Search: &ldquo;{paginationState.currentSearchFilters.query}&rdquo;
                   </span>
                 )}
-                {currentSearchFilters.postType && currentSearchFilters.postType !== 'all' && (
+                {paginationState?.currentSearchFilters.postType && paginationState.currentSearchFilters.postType !== 'all' && (
                   <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded text-xs">
-                    Type: {currentSearchFilters.postType === 'creators' ? 'Creators' : currentSearchFilters.postType === 'audio' ? 'Audio Posts' : 'Text Posts'}
+                    Type: {paginationState.currentSearchFilters.postType === 'creators' ? 'Creators' : paginationState.currentSearchFilters.postType === 'audio' ? 'Audio Posts' : 'Text Posts'}
                   </span>
                 )}
-                {currentSearchFilters.sortBy && currentSearchFilters.sortBy !== 'relevance' && (
+                {paginationState?.currentSearchFilters.sortBy && paginationState.currentSearchFilters.sortBy !== 'relevance' && (
                   <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
-                    Sort: {currentSearchFilters.sortBy === 'oldest' ? 'Oldest First' : 
-                           currentSearchFilters.sortBy === 'popular' ? 'Most Popular' : 
-                           currentSearchFilters.sortBy === 'likes' ? 'Most Liked' : 
+                    Sort: {paginationState.currentSearchFilters.sortBy === 'oldest' ? 'Oldest First' : 
+                           paginationState.currentSearchFilters.sortBy === 'popular' ? 'Most Popular' : 
+                           paginationState.currentSearchFilters.sortBy === 'likes' ? 'Most Liked' : 
                            'Most Relevant'}
                   </span>
                 )}
-                {currentSearchFilters.timeRange && currentSearchFilters.timeRange !== 'all' && (
+                {paginationState?.currentSearchFilters.timeRange && paginationState.currentSearchFilters.timeRange !== 'all' && (
                   <span className="bg-orange-900/30 text-orange-400 px-2 py-1 rounded text-xs">
-                    Time: {currentSearchFilters.timeRange === 'today' ? 'Today' : 
-                           currentSearchFilters.timeRange === 'week' ? 'This Week' : 
-                           currentSearchFilters.timeRange === 'month' ? 'This Month' : currentSearchFilters.timeRange}
+                    Time: {paginationState.currentSearchFilters.timeRange === 'today' ? 'Today' : 
+                           paginationState.currentSearchFilters.timeRange === 'week' ? 'This Week' : 
+                           paginationState.currentSearchFilters.timeRange === 'month' ? 'This Month' : paginationState.currentSearchFilters.timeRange}
                   </span>
                 )}
               </div>
@@ -903,46 +890,43 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Search Results Users - UPDATED WITH FOLLOW BUTTON */}
+        {/* Search Results Users */}
         {hasUserResults && (
           <div className="max-w-2xl mx-auto mb-8">
             <h3 className="text-lg font-semibold mb-4 text-gray-200">Search Results: Creators</h3>
             <div className="grid gap-4">
-              {searchResults.users.map((searchUser) => {
-                // Use real stats from search results instead of filtering current results
-                const totalPosts = searchUser.posts_count || 0;
-                const audioPosts = 0; // Not available in search results
-                const textPosts = 0; // Not available in search results
+              {(paginationState?.searchResults.users || []).map((searchUser: unknown) => {
+                const typedSearchUser = searchUser as UserProfile;
+                const totalPosts = (typedSearchUser as any).posts_count || 0;
                 
                 return (
-                  <div key={searchUser.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between">
+                  <div key={typedSearchUser.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
                         <span className="text-white font-bold text-sm">
-                          {searchUser.username.charAt(0).toUpperCase()}
+                          {typedSearchUser.username.charAt(0).toUpperCase()}
                         </span>
                       </div>
                       <div>
-                        <p className="text-gray-200 font-medium">{searchUser.username}</p>
+                        <p className="text-gray-200 font-medium">{typedSearchUser.username}</p>
                         <p className="text-gray-400 text-sm">
                           {totalPosts} posts
                         </p>
                         <p className="text-gray-500 text-xs">
-                          Member since {new Date(searchUser.created_at).toLocaleDateString()}
+                          Member since {new Date(typedSearchUser.created_at).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
                     
-                    {/* Replace "Follow feature coming soon" with actual FollowButton */}
-                    {user && user.id !== searchUser.user_id ? (
+                    {user && user.id !== typedSearchUser.user_id ? (
                       <FollowButton
-                        userId={searchUser.user_id}
-                        username={searchUser.username}
+                        userId={typedSearchUser.user_id}
+                        username={typedSearchUser.username}
                         size="sm"
                         variant="secondary"
                         showFollowerCount={false}
                       />
-                    ) : user && user.id === searchUser.user_id ? (
+                    ) : user && user.id === typedSearchUser.user_id ? (
                       <div className="text-gray-500 text-sm px-3 py-1 bg-gray-700 rounded">
                         That&apos;s you!
                       </div>
@@ -980,124 +964,191 @@ export default function DashboardPage() {
         {/* Posts List */}
         <div className="max-w-2xl mx-auto">
           <h2 className="text-xl font-bold mb-6">
-            {isSearchActive ? 'Search Results: Posts' : 'Community Posts'}
-            {displayPosts.length > 0 && (
+            {hasSearchResults ? 'Search Results: Posts' : 'Community Posts'}
+            {totalFilteredPosts > 0 && (
               <span className="text-sm font-normal text-gray-400 ml-2">
-                ({displayPosts.length} {displayPosts.length === 1 ? 'post' : 'posts'})
+                ({totalFilteredPosts} {totalFilteredPosts === 1 ? 'post' : 'posts'})
               </span>
             )}
           </h2>
           
-          {!showNoResults && displayPosts.length === 0 ? (
+          {!showNoResults && totalFilteredPosts === 0 ? (
             <div className="text-center py-12 bg-gray-800 rounded-lg">
               <div className="text-4xl mb-4">🎵</div>
               <p className="text-gray-400 mb-2">
-                {isSearchActive || hasFiltersApplied ? 'No posts match your current search and filters.' : 'No posts yet. Be the first to share!'}
+                {hasSearchResults || paginationState?.hasFiltersApplied ? 'No posts match your current search and filters.' : 'No posts yet. Be the first to share!'}
               </p>
               <p className="text-sm text-gray-500">
-                {isSearchActive || hasFiltersApplied ? 'Try adjusting your search terms or filters.' : 'Share your AI music creations or thoughts with the community.'}
+                {hasSearchResults || paginationState?.hasFiltersApplied ? 'Try adjusting your search terms or filters.' : 'Share your AI music creations or thoughts with the community.'}
               </p>
             </div>
           ) : !showNoResults ? (
-          <div className="space-y-6">
-          {/* Paginated Posts Display - Egress Optimized */}
-          {paginatedPosts.map(post => (
-          <PostItem
-          key={post.id}
-          post={post}
-          currentUserId={user.id}
-          onDelete={handleDeletePost}
-            showWaveform={true}
-            />              
-            ))}
+            <div className="space-y-6">
+              {/* Paginated Posts Display */}
+              <PaginationErrorBoundary>
+                {(paginationState?.paginatedPosts || []).map(post => (
+                  <PostErrorBoundary key={post.id} postId={post.id}>
+                    <PostItem
+                      post={post}
+                      currentUserId={user?.id}
+                      onDelete={handleDeletePost}
+                      showWaveform={true}
+                    />
+                  </PostErrorBoundary>
+                ))}
+              </PaginationErrorBoundary>
               
-              {/* ENHANCED Load More Button - Egress Optimization */}
+              {/* Load More Button */}
               {hasMorePosts && (
-                <div className="flex flex-col items-center space-y-4 pt-8">
-                  {/* Bandwidth Savings Info */}
-                  {bandwidthSavings > 0 && (
-                    <div className="bg-green-900/20 border border-green-700 rounded p-3 text-center max-w-md">
-                      <p className="text-green-400 text-sm font-medium">
-                        📊 Bandwidth Optimization Active
-                      </p>
-                      <p className="text-green-300 text-xs mt-1">
-                        Showing {currentlyShowing} of {totalFilteredPosts} posts • 
-                        Saving bandwidth by not loading {bandwidthSavings} posts until needed
-                      </p>
-                      <p className="text-green-200 text-xs mt-1 opacity-75">
-                        🎵 Audio files load only when you click play
+                <LoadMoreErrorBoundary>
+                  <div className="flex flex-col items-center space-y-4 pt-8">
+                    {/* Bandwidth Savings Info */}
+                    {bandwidthSavings > 0 && (
+                      <div className="bg-green-900/20 border border-green-700 rounded p-3 text-center max-w-md">
+                        <p className="text-green-400 text-sm font-medium">
+                          📊 Bandwidth Optimization Active
+                        </p>
+                        <p className="text-green-300 text-xs mt-1">
+                          Showing {currentlyShowing} of {totalFilteredPosts} posts • 
+                          Saving bandwidth by not loading {bandwidthSavings} posts until needed
+                        </p>
+                        <p className="text-green-200 text-xs mt-1 opacity-75">
+                          🎵 Audio files load only when you click play
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Pagination Strategy Info */}
+                    <div className={`border rounded p-3 text-center max-w-md transition-colors ${
+                      paginationState?.paginationMode === 'client' 
+                        ? 'bg-purple-900/20 border-purple-700' 
+                        : 'bg-blue-900/20 border-blue-700'
+                    }`}>
+                      <div className="flex items-center justify-center space-x-2 mb-2">
+                        <span className="text-lg">
+                          {paginationState?.paginationMode === 'client' ? '📋' : '🔄'}
+                        </span>
+                        <p className={`text-sm font-medium ${
+                          paginationState?.paginationMode === 'client' 
+                            ? 'text-purple-300' 
+                            : 'text-blue-300'
+                        }`}>
+                          {paginationState?.paginationMode === 'client' 
+                            ? 'Client-side Pagination' 
+                            : 'Server-side Pagination'}
+                        </p>
+                      </div>
+                      <p className={`text-xs ${
+                        paginationState?.paginationMode === 'client' 
+                          ? 'text-purple-200' 
+                          : 'text-blue-200'
+                      }`}>
+                        {paginationState?.paginationMode === 'client' 
+                          ? `${Math.min(15, totalFilteredPosts - currentlyShowing)} more from filtered results`
+                          : `Loading next 15 posts from database`
+                        }
                       </p>
                     </div>
-                  )}
-                  
-                  {/* Pagination Strategy Info */}
-                  <div className="bg-blue-900/20 border border-blue-700 rounded p-2 text-center max-w-md">
-                    <p className="text-blue-300 text-xs">
-                      {isSearchActive || hasFiltersApplied ? 
-                        `📋 Client-side pagination: ${Math.min(POSTS_PER_PAGE, displayPosts.length - currentlyShowing)} more from filtered results` :
-                        `🔄 Server-side pagination: Loading next ${POSTS_PER_PAGE} posts from database`
-                      }
-                    </p>
+                    
+                    {/* Load More Button */}
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={isLoadingMore}
+                      className={`px-8 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 min-w-[200px] justify-center ${
+                        isLoadingMore
+                          ? 'bg-gray-600 opacity-50 cursor-not-allowed'
+                          : paginationState?.paginationMode === 'client'
+                          ? 'bg-purple-600 hover:bg-purple-700 hover:scale-105 shadow-lg hover:shadow-purple-500/25'
+                          : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 shadow-lg hover:shadow-blue-500/25'
+                      } text-white`}
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                          <span>
+                            {paginationState?.paginationMode === 'client' 
+                              ? 'Expanding results...' 
+                              : 'Fetching from server...'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-lg">
+                            {paginationState?.paginationMode === 'client' ? '📋' : '🔄'}
+                          </span>
+                          <span>
+                            {paginationState?.paginationMode === 'client' 
+                              ? `Show More (${Math.min(15, totalFilteredPosts - currentlyShowing)})`
+                              : 'Load More Posts (15)'}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                    
+                    {/* Pagination Stats */}
+                    <div className="text-center text-xs text-gray-500 space-y-2">
+                      <div className="bg-gray-800/50 rounded p-2 border border-gray-700">
+                        {paginationState?.paginationMode === 'client' ? (
+                          <>
+                            <p className="text-purple-300 font-medium">
+                              📋 Filtered View: {currentlyShowing} of {totalFilteredPosts} results
+                            </p>
+                            <p className="text-gray-400">
+                              🔍 Filtered from {paginationState?.allPosts.length || 0} loaded posts 
+                              ({paginationState?.totalPostsCount || 0} total available)
+                            </p>
+                            <p className="text-gray-500 text-xs mt-1">
+                              Page {paginationState?.currentPage || 1} • Client-side pagination
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-blue-300 font-medium">
+                              🔄 Server View: {currentlyShowing} of {paginationState?.totalPostsCount || 0} total posts
+                            </p>
+                            <p className="text-gray-400">
+                              📊 Loaded {paginationState?.allPosts.length || 0} posts • 15 per batch
+                            </p>
+                            <p className="text-gray-500 text-xs mt-1">
+                              Batch {Math.ceil((paginationState?.allPosts.length || 0) / 15)} • Server-side pagination
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  
-                  {/* Load More Button */}
-                  <button
-                    onClick={handleLoadMore}
-                    disabled={isLoadingMore}
-                    className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center space-x-2 min-w-[200px] justify-center"
-                  >
-                    {isLoadingMore ? (
-                      <>
-                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                        <span>Loading more posts...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>📄</span>
-                        <span>
-                          Load More Posts 
-                          {displayPosts.length - currentlyShowing > 0 && 
-                            ` (${Math.min(POSTS_PER_PAGE, displayPosts.length - currentlyShowing)} more)`
-                          }
-                        </span>
-                      </>
-                    )}
-                  </button>
-                  
-                  {/* Pagination Stats */}
-                  <div className="text-center text-xs text-gray-500 space-y-1">
-                    {isSearchActive || hasFiltersApplied ? (
-                      <>
-                        <p>Showing {currentlyShowing} of {totalFilteredPosts} filtered results</p>
-                        <p className="text-gray-400">🔍 Results are filtered from {allPosts.length} total posts</p>
-                      </>
-                    ) : (
-                      <>
-                        <p>Showing {currentlyShowing} of {totalPostsCount} total posts • Page {Math.ceil(currentlyShowing / POSTS_PER_PAGE)}</p>
-                        <p className="text-gray-400">📊 {POSTS_PER_PAGE} posts per page for optimal loading</p>
-                      </>
-                    )}
-                  </div>
-                </div>
+                </LoadMoreErrorBoundary>
               )}
               
               {/* End of Posts Message */}
-              {!hasMorePosts && paginatedPosts.length > 0 && (
+              {!hasMorePosts && (paginationState?.paginatedPosts.length || 0) > 0 && (
                 <div className="text-center py-8">
                   <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
                     <div className="text-3xl mb-2">🎉</div>
                     <p className="text-gray-400 mb-2">You&apos;ve reached the end!</p>
-                    <p className="text-sm text-gray-500">
-                      {isSearchActive || hasFiltersApplied 
-                        ? `All ${displayPosts.length} matching posts loaded.`
-                        : `All ${totalPostsCount} posts loaded.`
+                    <p className="text-sm text-gray-500 mb-3">
+                      {paginationState?.paginationMode === 'client' 
+                        ? `All ${totalFilteredPosts} filtered results are now visible.`
+                        : `All ${paginationState?.totalPostsCount || 0} posts have been loaded.`
                       }
                     </p>
-                    {(!isSearchActive && !hasFiltersApplied) && (
-                      <p className="text-xs text-green-400 mt-2">
-                        🎯 Bandwidth optimized: Only loaded posts as needed
-                      </p>
-                    )}
+                    
+                    <div className="flex justify-center space-x-3 mt-4">
+                      {(hasSearchResults || paginationState?.hasFiltersApplied) && (
+                        <button
+                          onClick={clearSearch}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded transition-colors"
+                        >
+                          Clear Filters
+                        </button>
+                      )}
+                      <button
+                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors"
+                      >
+                        Back to Top
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1107,9 +1158,41 @@ export default function DashboardPage() {
 
         {/* Activity Feed Section */}
         <div className="max-w-2xl mx-auto mt-12">
-          <ActivityFeed showHeader={true} maxItems={10} />
+          <ErrorBoundary
+            fallback={
+              <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4 text-center">
+                <div className="text-gray-400 mb-2">📱</div>
+                <p className="text-gray-400 text-sm mb-3">
+                  Activity feed temporarily unavailable
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                >
+                  Refresh
+                </button>
+              </div>
+            }
+            onError={(error, errorInfo) => {
+              console.error('❌ ActivityFeed Error:', {
+                error: error.message,
+                componentStack: errorInfo.componentStack,
+                timestamp: new Date().toISOString()
+              });
+            }}
+          >
+            <ActivityFeed showHeader={true} maxItems={10} />
+          </ErrorBoundary>
         </div>
       </div>
+
+      {/* Performance Monitoring Panel */}
+      {showPerformancePanel && (
+        <PerformanceMonitoringPanel
+          isVisible={showPerformancePanel}
+          onToggle={() => setShowPerformancePanel(!showPerformancePanel)}
+        />
+      )}
     </MainLayout>
   );
 }

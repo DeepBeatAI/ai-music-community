@@ -200,9 +200,9 @@ export default function WavesurferPlayer({
         });
 
         // CRITICAL: Handle seek events for paused state
-        wavesurfer.on('seek', () => {
+        wavesurfer.on('interaction', () => {
           const time = wavesurfer.getCurrentTime();
-          console.log('🎯 Seek event triggered, time:', time);
+          console.log('🎯 Interaction event triggered, time:', time);
           setCurrentTime(time);
           timeManager.updateTime(time);
         });
@@ -306,7 +306,7 @@ export default function WavesurferPlayer({
         console.error('❌ Failed to initialize Wavesurfer:', err);
         
         // Handle AbortError specifically
-        if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        if (err instanceof Error && (err.name === 'AbortError' || err.message?.includes('aborted'))) {
           console.warn('🔄 Wavesurfer initialization cancelled');
           setIsLoading(false);
           initializationRef.current = false;

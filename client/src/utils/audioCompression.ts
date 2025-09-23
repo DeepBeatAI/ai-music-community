@@ -1,11 +1,11 @@
 // Practical Audio Compression - Browser Compatible
-interface CompressionOptions {
+export interface CompressionOptions {
   quality: number; // 0.1 to 1.0
   maxFileSize: number; // in bytes
   targetFormat: 'mp3' | 'webm' | 'aac';
 }
 
-interface CompressionResult {
+export interface CompressionResult {
   compressedFile: File;
   originalSize: number;
   compressedSize: number;
@@ -20,7 +20,7 @@ export class AudioCompressor {
 
   constructor() {
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       this.audioContext = new AudioContextClass();
     } catch (error) {
       console.warn('AudioContext not available:', error);

@@ -53,7 +53,7 @@ export const getNotifications = async (
     // Transform data to include default values for missing fields
     const transformedData = (data || []).map(notification => ({
       ...notification,
-      action_url: null, // Default value since column doesn't exist yet
+      action_url: undefined, // Default value since column doesn't exist yet
       icon: getDefaultIcon(notification.type), // Generate icon based on type
       priority: 1 // Default priority
     }));
@@ -230,12 +230,21 @@ export const subscribeToNotifications = (
       },
       (payload) => {
         // Transform the payload to include default values
-        const notification = {
-          ...payload.new,
-          action_url: null,
+        const notification: Notification = {
+          id: payload.new.id,
+          created_at: payload.new.created_at,
+          user_id: payload.new.user_id,
+          type: payload.new.type,
+          title: payload.new.title,
+          message: payload.new.message,
+          read: payload.new.read,
+          related_post_id: payload.new.related_post_id,
+          related_user_id: payload.new.related_user_id,
+          data: payload.new.data,
+          action_url: undefined,
           icon: getDefaultIcon(payload.new.type),
           priority: 1
-        } as Notification;
+        };
         onNewNotification(notification);
       }
     )
@@ -249,12 +258,21 @@ export const subscribeToNotifications = (
       },
       (payload) => {
         // Transform the payload to include default values
-        const notification = {
-          ...payload.new,
-          action_url: null,
+        const notification: Notification = {
+          id: payload.new.id,
+          created_at: payload.new.created_at,
+          user_id: payload.new.user_id,
+          type: payload.new.type,
+          title: payload.new.title,
+          message: payload.new.message,
+          read: payload.new.read,
+          related_post_id: payload.new.related_post_id,
+          related_user_id: payload.new.related_user_id,
+          data: payload.new.data,
+          action_url: undefined,
           icon: getDefaultIcon(payload.new.type),
           priority: 1
-        } as Notification;
+        };
         onNotificationUpdate(notification);
       }
     )

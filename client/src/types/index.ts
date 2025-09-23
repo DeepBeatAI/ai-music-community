@@ -24,6 +24,9 @@ export interface Post {
   // Joined user profile data
   user_profiles?: {
     username: string;
+    user_id: string;
+    created_at: string;
+    updated_at: string;
   };
   // New interaction fields
   like_count?: number;
@@ -72,9 +75,15 @@ export interface Activity {
   // Joined data
   user_profiles?: {
     username: string;
+    user_id: string;
+    created_at: string;
+    updated_at: string;
   };
   target_user_profiles?: {
     username: string;
+    user_id: string;
+    created_at: string;
+    updated_at: string;
   };
   posts?: {
     content: string;
@@ -110,3 +119,6 @@ export interface ApiResponse<T> {
   error: string | null;
   needsEmailVerification?: boolean;
 }
+
+// Re-export pagination types
+export * from './pagination';

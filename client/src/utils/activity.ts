@@ -13,9 +13,15 @@ export interface Activity {
   // Joined data
   user_profiles?: {
     username: string;
+    user_id: string;
+    created_at: string;
+    updated_at: string;
   };
   target_user_profiles?: {
     username: string;
+    user_id: string;
+    created_at: string;
+    updated_at: string;
   };
   posts?: {
     content: string;

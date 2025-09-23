@@ -2,23 +2,30 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SearchFilters, searchContent, SearchResults } from '@/utils/search';
+import { PaginationState } from '@/types/pagination';
 
 interface SearchBarProps {
   onSearch: (results: SearchResults, query: string) => void;
   onFiltersChange?: (filters: SearchFilters) => void;
+  onPaginationReset?: () => void;
   initialFilters?: SearchFilters;
   className?: string;
   currentQuery?: string;
   showSuggestions?: boolean;
+  paginationState?: PaginationState;
+  isLoadingMore?: boolean;
 }
 
 export default function SearchBar({ 
   onSearch, 
   onFiltersChange,
+  onPaginationReset,
   initialFilters = {}, 
   className = '',
   currentQuery = '',
-  showSuggestions = true 
+  showSuggestions = true,
+  paginationState,
+  isLoadingMore = false
 }: SearchBarProps) {
   const [query, setQuery] = useState(currentQuery || initialFilters.query || '');
   const [postType, setPostType] = useState<SearchFilters['postType']>(initialFilters.postType || 'all');
@@ -27,10 +34,12 @@ export default function SearchBar({
   const [suggestions, setSuggestions] = useState<SearchResults>({ posts: [], users: [], totalResults: 0 });
   const [showSuggestionDropdown, setShowSuggestionDropdown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchResultsCache, setSearchResultsCache] = useState<Map<string, { results: SearchResults; timestamp: number }>>(new Map());
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastFiltersRef = useRef<string>('');
   const previousCurrentQueryRef = useRef(currentQuery);
+  const cacheExpiryTime = 5 * 60 * 1000; // 5 minutes
 
   // FIXED: Sync with external query changes without creating loops
   useEffect(() => {
@@ -39,46 +48,111 @@ export default function SearchBar({
       setQuery(currentQuery);
       previousCurrentQueryRef.current = currentQuery;
     }
-  }, [currentQuery]); // Remove query from dependencies
+  }, [currentQuery, query]); // Include query to satisfy dependency array
 
-  // Memoized filter change callback
-  const notifyFiltersChange = useCallback((filters: SearchFilters) => {
-    const filtersString = JSON.stringify(filters);
-    if (lastFiltersRef.current !== filtersString && onFiltersChange) {
-      lastFiltersRef.current = filtersString;
-      onFiltersChange(filters);
+  // Removed unused notifyFiltersChange callback - handled directly in useEffect
+
+  // Cache management functions
+  const getCacheKey = useCallback((filters: SearchFilters): string => {
+    return JSON.stringify({
+      query: filters.query || '',
+      postType: filters.postType || 'all',
+      sortBy: filters.sortBy || 'recent',
+      timeRange: filters.timeRange || 'all'
+    });
+  }, []);
+
+  const getCachedResults = useCallback((filters: SearchFilters): SearchResults | null => {
+    const key = getCacheKey(filters);
+    const cached = searchResultsCache.get(key);
+    
+    if (cached && (Date.now() - cached.timestamp) < cacheExpiryTime) {
+      console.log('🎯 SearchBar: Using cached search results');
+      return cached.results;
     }
-  }, [onFiltersChange]);
+    
+    return null;
+  }, [searchResultsCache, getCacheKey, cacheExpiryTime]);
 
-  // Memoized search function - FIXED dependencies
-  const performSearch = useCallback(async (searchFilters: SearchFilters) => {
+  const setCachedResults = useCallback((filters: SearchFilters, results: SearchResults): void => {
+    const key = getCacheKey(filters);
+    setSearchResultsCache(prev => {
+      const newCache = new Map(prev);
+      newCache.set(key, { results, timestamp: Date.now() });
+      
+      // Clean up old entries (keep only last 10)
+      if (newCache.size > 10) {
+        const entries = Array.from(newCache.entries());
+        entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
+        const newMap = new Map(entries.slice(0, 10));
+        return newMap;
+      }
+      
+      return newCache;
+    });
+  }, [getCacheKey]);
+
+  const invalidateSearchCache = useCallback((): void => {
+    console.log('🧹 SearchBar: Invalidating search cache');
+    setSearchResultsCache(new Map());
+  }, []);
+
+  // Memoized search function with caching and pagination integration
+  const performSearch = useCallback(async (searchFilters: SearchFilters, resetPagination: boolean = true) => {
     setShowSuggestionDropdown(false);
     
     if (!searchFilters.query?.trim() && searchFilters.postType === 'all' && searchFilters.sortBy === 'recent' && searchFilters.timeRange === 'all') {
       onSearch({ posts: [], users: [], totalResults: 0 }, '');
+      if (resetPagination && onPaginationReset) {
+        onPaginationReset();
+      }
+      return;
+    }
+
+    // Check cache first
+    const cachedResults = getCachedResults(searchFilters);
+    if (cachedResults) {
+      onSearch(cachedResults, searchFilters.query || '');
+      if (resetPagination && onPaginationReset) {
+        onPaginationReset();
+      }
       return;
     }
 
     setIsLoading(true);
     try {
+      console.log('🔍 SearchBar: Performing search with filters:', searchFilters);
       const results = await searchContent(searchFilters);
       
       const safeResults = results || { posts: [], users: [], totalResults: 0 };
       const safePosts = Array.isArray(safeResults.posts) ? safeResults.posts : [];
       const safeUsers = Array.isArray(safeResults.users) ? safeResults.users : [];
       
-      onSearch({
+      const finalResults = {
         posts: safePosts,
         users: safeUsers,
         totalResults: safeResults.totalResults || (safePosts.length + safeUsers.length)
-      }, searchFilters.query || '');
+      };
+
+      // Cache the results
+      setCachedResults(searchFilters, finalResults);
+      
+      onSearch(finalResults, searchFilters.query || '');
+      
+      // Reset pagination when search changes
+      if (resetPagination && onPaginationReset) {
+        onPaginationReset();
+      }
     } catch (error) {
       console.error('Error searching:', error);
       onSearch({ posts: [], users: [], totalResults: 0 }, searchFilters.query || '');
+      if (resetPagination && onPaginationReset) {
+        onPaginationReset();
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [onSearch]);
+  }, [onSearch, onPaginationReset, getCachedResults, setCachedResults]);
 
   // Debounced search and suggestions effect
   useEffect(() => {
@@ -120,11 +194,14 @@ export default function SearchBar({
       // Trigger search if we have content or active filters
       if (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') {
         console.log('🔍 SearchBar triggering search with filters:', currentFilters);
-        await performSearch(currentFilters);
+        await performSearch(currentFilters, true);
       } else {
         // Clear results if no query and no filters
         console.log('🧹 SearchBar clearing search - no query or filters active');
         onSearch({ posts: [], users: [], totalResults: 0 }, '');
+        if (onPaginationReset) {
+          onPaginationReset();
+        }
       }
     }, 300);
 
@@ -133,7 +210,7 @@ export default function SearchBar({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [query, postType, sortBy, timeRange, showSuggestions, performSearch, onSearch]);
+  }, [query, postType, sortBy, timeRange, showSuggestions, performSearch, onSearch, onPaginationReset]);
 
   // FIXED: Notify parent of filter changes without causing loops
   useEffect(() => {
@@ -150,7 +227,7 @@ export default function SearchBar({
 
   const handleSearch = useCallback(async () => {
     const currentFilters = { query, postType, sortBy, timeRange };
-    await performSearch(currentFilters);
+    await performSearch(currentFilters, true);
   }, [query, postType, sortBy, timeRange, performSearch]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
@@ -181,16 +258,67 @@ export default function SearchBar({
 
   const handleClearAll = useCallback(() => {
     console.log('🧹 SearchBar handleClearAll called');
+    
+    // Invalidate search cache
+    invalidateSearchCache();
+    
+    // Reset all filters
     setQuery('');
     setPostType('all');
     setSortBy('recent');
     setTimeRange('all');
+    
+    // Reset pagination immediately
+    if (onPaginationReset) {
+      onPaginationReset();
+    }
+    
     // The useEffect will trigger search automatically to clear results
     // This will also notify the parent through onFiltersChange
-  }, []);
+  }, [invalidateSearchCache, onPaginationReset]);
+
+  // Pagination state display helpers
+  const getPaginationInfo = useCallback(() => {
+    if (!paginationState) return null;
+    
+    const { paginationMode, currentPage, paginatedPosts, displayPosts, hasMorePosts } = paginationState;
+    const totalVisible = paginatedPosts.length;
+    const totalFiltered = displayPosts.length;
+    
+    return {
+      mode: paginationMode,
+      currentPage,
+      totalVisible,
+      totalFiltered,
+      hasMore: hasMorePosts,
+      isClientSide: paginationMode === 'client'
+    };
+  }, [paginationState]);
+
+  const paginationInfo = getPaginationInfo();
 
   return (
     <div className={`bg-gray-800 rounded-lg p-4 space-y-4 ${className}`}>
+      {/* Pagination Status Display */}
+      {paginationInfo && (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') && (
+        <div className="flex items-center justify-between text-xs text-gray-400 bg-gray-700 rounded px-3 py-2">
+          <div className="flex items-center space-x-4">
+            <span>
+              📊 Showing {paginationInfo.totalVisible} of {paginationInfo.totalFiltered} filtered results
+            </span>
+            <span className="text-blue-400">
+              {paginationInfo.isClientSide ? '🔍 Client-side pagination' : '🌐 Server-side pagination'}
+            </span>
+          </div>
+          {isLoadingMore && (
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-400"></div>
+              <span className="text-blue-400">Loading more...</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Search input section with Search button */}
       <div className="flex space-x-2">
         <div className="flex-1 relative">
@@ -200,7 +328,7 @@ export default function SearchBar({
             placeholder="Search creators, music, or content..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
             className="w-full bg-gray-700 text-white placeholder-gray-400 rounded-lg px-4 py-2 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -325,13 +453,20 @@ export default function SearchBar({
           </select>
         </div>
 
-        <div className="flex items-end">
+        <div className="flex items-end space-x-2">
           <button
             onClick={handleClearAll}
-            className="w-full px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm transition-colors"
+            className="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm transition-colors"
             title="Reset all search filters to default values"
           >
             Reset All
+          </button>
+          <button
+            onClick={invalidateSearchCache}
+            className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm transition-colors"
+            title="Clear search cache and refresh results"
+          >
+            🔄
           </button>
         </div>
       </div>

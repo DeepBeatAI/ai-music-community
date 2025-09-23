@@ -15,6 +15,8 @@ export interface CompressionResult {
   supabaseUrl?: string;
   error?: string;
   processingTime?: number;
+  compressionApplied?: boolean;
+  originalBitrate?: string;
 }
 
 export class ServerAudioCompressor {
@@ -150,7 +152,7 @@ export class ServerAudioCompressor {
       });
       
       // Create a minimal audio file for testing
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 1, audioContext.sampleRate);
       
       // This is just for testing - in real scenario we'd need proper MP3 encoding

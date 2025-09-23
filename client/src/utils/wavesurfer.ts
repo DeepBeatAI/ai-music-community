@@ -26,17 +26,9 @@ export const createWavesurferInstance = (config: WavesurferConfig): WaveSurfer =
     backend: 'WebAudio',
     mediaControls: false,
     // CRITICAL: Prevent unnecessary network requests
-    xhr: {
-      cache: 'default',
-      mode: 'cors',
-      credentials: 'same-origin',
-      headers: {
-        'Accept': 'audio/*,*/*;q=0.9',
-      }
-    },
+    // Note: xhr options removed as they may not be supported in current version
     // PERFORMANCE: Better decode settings
-    audioContext: null, // Let wavesurfer manage this
-    closeAudioContext: false, // Don't close shared context
+    // Note: audioContext options removed as they may not be supported in current version
   });
 };
 

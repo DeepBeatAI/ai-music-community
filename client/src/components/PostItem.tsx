@@ -74,15 +74,17 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
         ) : (
           // Load full WaveSurfer when user wants to play
           <div>
-            <WavesurferPlayer
-              key={`wavesurfer-${post.id}-${post.audio_url}`}
-              audioUrl={post.audio_url}
-              fileName={post.audio_filename}
-              duration={post.audio_duration}
-              showWaveform={showWaveform}
-              theme="ai_music"
-              className="audio-player-unique"
-            />
+            {post.audio_url && (
+              <WavesurferPlayer
+                key={`wavesurfer-${post.id}-${post.audio_url}`}
+                audioUrl={post.audio_url}
+                fileName={post.audio_filename}
+                duration={post.audio_duration}
+                showWaveform={showWaveform}
+                theme="ai_music"
+                className="audio-player-unique"
+              />
+            )}
             
             {audioLoadError && (
               <div className="text-red-400 text-sm text-center mt-2">

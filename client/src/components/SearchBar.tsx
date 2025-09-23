@@ -41,16 +41,20 @@ export default function SearchBar({
   const previousCurrentQueryRef = useRef(currentQuery);
   const cacheExpiryTime = 5 * 60 * 1000; // 5 minutes
 
+  // FIXED: Prevent state conflicts - only sync if it's an external change
+  const isInternalUpdate = useRef(false);
+
   // FIXED: Sync with external query changes without creating loops
   useEffect(() => {
-    // Only update if currentQuery actually changed from external source
-    if (currentQuery !== previousCurrentQueryRef.current && currentQuery !== query) {
+    // Only update if currentQuery actually changed from external source and it's not our own update
+    if (currentQuery !== previousCurrentQueryRef.current && 
+        currentQuery !== query && 
+        !isInternalUpdate.current) {
+      console.log('🔄 SearchBar: Syncing with external query change:', currentQuery);
       setQuery(currentQuery);
       previousCurrentQueryRef.current = currentQuery;
     }
   }, [currentQuery, query]); // Include query to satisfy dependency array
-
-  // Removed unused notifyFiltersChange callback - handled directly in useEffect
 
   // Cache management functions
   const getCacheKey = useCallback((filters: SearchFilters): string => {
@@ -102,6 +106,7 @@ export default function SearchBar({
     setShowSuggestionDropdown(false);
     
     if (!searchFilters.query?.trim() && searchFilters.postType === 'all' && searchFilters.sortBy === 'recent' && searchFilters.timeRange === 'all') {
+      console.log('🧹 SearchBar: Clearing search - no active filters');
       onSearch({ posts: [], users: [], totalResults: 0 }, '');
       if (resetPagination && onPaginationReset) {
         onPaginationReset();
@@ -112,6 +117,7 @@ export default function SearchBar({
     // Check cache first
     const cachedResults = getCachedResults(searchFilters);
     if (cachedResults) {
+      console.log('📋 SearchBar: Using cached results for search');
       onSearch(cachedResults, searchFilters.query || '');
       if (resetPagination && onPaginationReset) {
         onPaginationReset();
@@ -137,14 +143,17 @@ export default function SearchBar({
       // Cache the results
       setCachedResults(searchFilters, finalResults);
       
+      // Mark as internal update to prevent sync conflicts
+      isInternalUpdate.current = true;
       onSearch(finalResults, searchFilters.query || '');
+      setTimeout(() => { isInternalUpdate.current = false; }, 100);
       
       // Reset pagination when search changes
       if (resetPagination && onPaginationReset) {
         onPaginationReset();
       }
     } catch (error) {
-      console.error('Error searching:', error);
+      console.error('❌ SearchBar: Error searching:', error);
       onSearch({ posts: [], users: [], totalResults: 0 }, searchFilters.query || '');
       if (resetPagination && onPaginationReset) {
         onPaginationReset();
@@ -212,16 +221,22 @@ export default function SearchBar({
     };
   }, [query, postType, sortBy, timeRange, showSuggestions, performSearch, onSearch, onPaginationReset]);
 
-  // FIXED: Notify parent of filter changes without causing loops
+  // FIXED: Notify parent of filter changes without causing loops - add debouncing
   useEffect(() => {
     const currentFilters = { query, postType, sortBy, timeRange };
     const filtersString = JSON.stringify(currentFilters);
     
-    // Only notify if filters actually changed
-    if (lastFiltersRef.current !== filtersString && onFiltersChange) {
+    // Only notify if filters actually changed and it's not an internal update
+    if (lastFiltersRef.current !== filtersString && onFiltersChange && !isInternalUpdate.current) {
       lastFiltersRef.current = filtersString;
       console.log('🔄 SearchBar notifying parent of filter changes:', currentFilters);
-      onFiltersChange(currentFilters);
+      
+      // Add small delay to prevent conflicts with search operations
+      const timeoutId = setTimeout(() => {
+        onFiltersChange(currentFilters);
+      }, 50);
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [query, postType, sortBy, timeRange, onFiltersChange]);
 
@@ -262,6 +277,9 @@ export default function SearchBar({
     // Invalidate search cache
     invalidateSearchCache();
     
+    // Mark as internal update to prevent sync conflicts
+    isInternalUpdate.current = true;
+    
     // Reset all filters
     setQuery('');
     setPostType('all');
@@ -272,6 +290,9 @@ export default function SearchBar({
     if (onPaginationReset) {
       onPaginationReset();
     }
+    
+    // Clear internal update flag after a delay
+    setTimeout(() => { isInternalUpdate.current = false; }, 100);
     
     // The useEffect will trigger search automatically to clear results
     // This will also notify the parent through onFiltersChange

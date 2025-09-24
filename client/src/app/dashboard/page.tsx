@@ -10,32 +10,19 @@ import SearchBar from "@/components/SearchBar";
 import ActivityFeed from "@/components/ActivityFeed";
 import FollowButton from "@/components/FollowButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { ErrorDisplay } from "@/components/ErrorDisplay";
 import PerformanceMonitoringPanel from "@/components/PerformanceMonitoringPanel";
-// import { usePagination } from '@/contexts/PaginationContext';
-// import { useErrorRecovery } from '@/contexts/ErrorRecoveryContext';
-import type { Post, UserProfile, SearchFilters } from "@/types";
-import { defaultErrorRecovery } from "@/utils/errorRecovery";
-
-// Import pagination types
-import { PaginationState, INITIAL_PAGINATION_STATE } from "@/types/pagination";
-
-// Mock implementations for missing contexts
-const usePagination = () => ({
-  paginationState: INITIAL_PAGINATION_STATE as PaginationState,
-  paginationManagerRef: { current: { reset: () => {} } },
-  fetchPosts: async (_page: number, _reset: boolean) => {},
-  handleSearch: async (_query: string, _filters: SearchFilters) => {},
-  handleFiltersChange: async (_filters: SearchFilters) => {},
-  clearSearch: async () => {},
-  loadMore: async () => {},
-});
-
-const useErrorRecovery = () => ({
-  errorState: null,
-  setError: (_message: string, _type: string, _code: string) => {},
-  clearError: () => {},
-});
+import LoadMoreButton from "@/components/LoadMoreButton";
+import type { SearchFilters } from "@/utils/search";
+import {
+  fetchPosts,
+  createTextPost,
+  createAudioPost,
+  deletePost,
+} from "@/utils/posts";
+import { searchContent } from "@/utils/search";
+import { createUnifiedPaginationState } from "@/utils/unifiedPaginationState";
+import type { PaginationState } from "@/types/pagination";
+import type { UserProfile } from "@/types";
 
 // Error Boundary Components
 const AudioUploadErrorBoundary = ({
@@ -147,17 +134,6 @@ const POSTS_PER_PAGE = 15;
 
 export default function Dashboard() {
   const { user, profile, loading } = useAuth();
-  const {
-    paginationState,
-    paginationManagerRef,
-    fetchPosts,
-    handleSearch: paginationHandleSearch,
-    handleFiltersChange: paginationHandleFiltersChange,
-    clearSearch: paginationClearSearch,
-    loadMore: paginationLoadMore,
-  } = usePagination();
-
-  const { errorState, setError, clearError } = useErrorRecovery();
 
   // Component state
   const [activeTab, setActiveTab] = useState<"text" | "audio">("text");
@@ -165,63 +141,133 @@ export default function Dashboard() {
   const [audioDescription, setAudioDescription] = useState("");
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setLegacyError] = useState<string | null>(null);
-  const [currentSearchQuery, setCurrentSearchQuery] = useState("");
-  const [currentSearchFilters, setCurrentSearchFilters] =
-    useState<SearchFilters>({});
+  const [error, setError] = useState<string | null>(null);
   const [showPerformancePanel, setShowPerformancePanel] = useState(false);
+
+  // Unified pagination state
+  const [paginationManager] = useState(() => createUnifiedPaginationState());
+  const [paginationState, setPaginationState] = useState<PaginationState>(
+    paginationManager.getState()
+  );
+
+  // Legacy state for compatibility
+  const [currentSearchQuery, setCurrentSearchQuery] = useState("");
 
   // Refs for tracking state
   const hasInitiallyLoaded = useRef(false);
+
+  // Subscribe to pagination state changes
+  useEffect(() => {
+    const unsubscribe = paginationManager.subscribe((newState) => {
+      setPaginationState(newState);
+    });
+
+    return unsubscribe;
+  }, [paginationManager]);
+
+  // Load initial posts
+  const loadPosts = useCallback(
+    async (page: number = 1, append: boolean = false) => {
+      if (paginationState.fetchInProgress || paginationState.isLoadingMore) return;
+
+      try {
+        paginationManager.setLoadingState(true, append);
+        console.log(`Loading posts: page ${page}, append: ${append}`);
+
+        const { posts: newPosts, hasMore } = await fetchPosts(
+          page,
+          POSTS_PER_PAGE,
+          user?.id
+        );
+
+        // Update pagination state with new posts
+        paginationManager.updatePosts({
+          newPosts,
+          resetPagination: !append,
+          updateMetadata: {
+            totalServerPosts: hasMore ? (page * POSTS_PER_PAGE) + 1 : page * POSTS_PER_PAGE,
+            loadedServerPosts: append ? paginationState.allPosts.length + newPosts.length : newPosts.length,
+            currentBatch: page,
+            lastFetchTimestamp: Date.now(),
+          },
+        });
+
+        // Update total posts count
+        if (hasMore) {
+          paginationManager.updateTotalPostsCount((page * POSTS_PER_PAGE) + 1);
+        } else {
+          paginationManager.updateTotalPostsCount(page * POSTS_PER_PAGE);
+        }
+
+        console.log(`Loaded ${newPosts.length} posts, hasMore: ${hasMore}`);
+      } catch (error) {
+        console.error("Error loading posts:", error);
+        setError("Failed to load posts. Please try again.");
+      } finally {
+        paginationManager.setLoadingState(false);
+      }
+    },
+    [user?.id, paginationState.fetchInProgress, paginationState.isLoadingMore, paginationState.allPosts.length, paginationManager]
+  );
 
   // Initialize posts on component mount
   useEffect(() => {
     if (user && !hasInitiallyLoaded.current) {
       hasInitiallyLoaded.current = true;
-      fetchPosts(1, false);
+      loadPosts(1, false);
     }
-  }, [user, fetchPosts]);
+  }, [user, loadPosts]);
 
   // Handle search
   const handleSearch = useCallback(
     async (query: string, filters: SearchFilters) => {
-      setCurrentSearchQuery(query);
-      setCurrentSearchFilters(filters);
-      await paginationHandleSearch(query, filters);
+      try {
+        setCurrentSearchQuery(query);
+
+        const results = await searchContent({ ...filters, query }, 0, 50);
+        
+        // Update pagination state with search results
+        paginationManager.updateSearch(results, query, filters);
+      } catch (error) {
+        console.error("Search error:", error);
+        setError("Search failed. Please try again.");
+      }
     },
-    [paginationHandleSearch]
+    [paginationManager]
   );
 
   // Handle filters change
   const handleFiltersChange = useCallback(
     async (filters: SearchFilters) => {
-      setCurrentSearchFilters(filters);
-      await paginationHandleFiltersChange(filters);
+      await handleSearch(currentSearchQuery, filters);
     },
-    [paginationHandleFiltersChange]
+    [currentSearchQuery, handleSearch]
   );
 
   // Clear search
   const clearSearch = useCallback(async () => {
     setCurrentSearchQuery("");
-    setCurrentSearchFilters({});
-    await paginationClearSearch();
-  }, [paginationClearSearch]);
+    paginationManager.clearSearch();
+  }, [paginationManager]);
 
   // Handle load more
   const handleLoadMore = useCallback(async () => {
-    await paginationLoadMore();
-  }, [paginationLoadMore]);
+    const { canLoadMore, strategy } = paginationManager.loadMore();
+    
+    if (!canLoadMore) return;
+
+    if (strategy === 'server-fetch') {
+      // Server-side pagination: fetch more posts
+      await loadPosts(paginationState.currentPage + 1, true);
+    }
+    // Client-side pagination is handled automatically by the pagination manager
+  }, [paginationManager, paginationState.currentPage, loadPosts]);
 
   // Handle audio file selection
-  const handleAudioFileSelect = useCallback(
-    (file: File) => {
-      setSelectedAudioFile(file);
-      setLegacyError(null);
-      clearError();
-    },
-    [clearError]
-  );
+  const handleAudioFileSelect = useCallback((file: File) => {
+    setSelectedAudioFile(file);
+    setError(null);
+  }, []);
 
   // Handle audio file removal
   const handleAudioFileRemove = useCallback(() => {
@@ -233,41 +279,21 @@ export default function Dashboard() {
 
     try {
       setIsSubmitting(true);
-      setLegacyError(null);
-      clearError();
+      setError(null);
 
-      const { error: insertError } = await supabase.from("posts").insert({
-        user_id: user.id,
-        content: textContent.trim(),
-        post_type: "text",
-      });
-
-      if (insertError) throw insertError;
-
+      await createTextPost(user.id, textContent);
       setTextContent("");
 
       // Reset pagination and reload posts
-      if (paginationManagerRef.current) {
-        paginationManagerRef.current.reset();
-        hasInitiallyLoaded.current = false;
-        await fetchPosts(1, false);
-      }
+      paginationManager.reset();
+      await loadPosts(1, false);
     } catch (error) {
       console.error("Error creating text post:", error);
-      const textError = "Failed to create post. Please try again.";
-      setError(textError, "recoverable", "POST_CREATION_ERROR");
-      setLegacyError(textError);
+      setError("Failed to create post. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    user,
-    textContent,
-    clearError,
-    setError,
-    paginationManagerRef,
-    fetchPosts,
-  ]);
+  }, [user, textContent, loadPosts, paginationManager]);
 
   // Handle audio post submission
   const handleAudioPostSubmit = useCallback(async () => {
@@ -275,8 +301,7 @@ export default function Dashboard() {
 
     try {
       setIsSubmitting(true);
-      setLegacyError(null);
-      clearError();
+      setError(null);
 
       // Upload audio file
       const fileExt = selectedAudioFile.name.split(".").pop();
@@ -289,41 +314,21 @@ export default function Dashboard() {
       if (uploadError) throw uploadError;
 
       // Create post
-      const { error: insertError } = await supabase.from("posts").insert({
-        user_id: user.id,
-        content: audioDescription.trim() || null,
-        post_type: "audio",
-        audio_url: fileName,
-      });
-
-      if (insertError) throw insertError;
+      await createAudioPost(user.id, fileName, audioDescription);
 
       setAudioDescription("");
       setSelectedAudioFile(null);
 
       // Reset pagination and reload posts
-      if (paginationManagerRef.current) {
-        paginationManagerRef.current.reset();
-        hasInitiallyLoaded.current = false;
-        await fetchPosts(1, false);
-      }
+      paginationManager.reset();
+      await loadPosts(1, false);
     } catch (error) {
       console.error("Error creating audio post:", error);
-      const audioError = "Failed to upload audio post. Please try again.";
-      setError(audioError, "recoverable", "AUDIO_POST_CREATION_ERROR");
-      setLegacyError(audioError);
+      setError("Failed to upload audio post. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    user,
-    selectedAudioFile,
-    audioDescription,
-    clearError,
-    setError,
-    paginationManagerRef,
-    fetchPosts,
-  ]);
+  }, [user, selectedAudioFile, audioDescription, loadPosts, paginationManager]);
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -343,26 +348,16 @@ export default function Dashboard() {
   const handleDeletePost = useCallback(
     async (postId: string) => {
       try {
-        const { error } = await supabase
-          .from("posts")
-          .delete()
-          .eq("id", postId);
-
-        if (error) throw error;
-
-        if (paginationManagerRef.current) {
-          paginationManagerRef.current.reset();
-          hasInitiallyLoaded.current = false;
-          await fetchPosts(1, false);
-        }
+        await deletePost(postId);
+        // Reset pagination and reload posts
+        paginationManager.reset();
+        await loadPosts(1, false);
       } catch (error) {
         console.error("Error deleting post:", error);
-        const deleteError = "Failed to delete post. Please try again.";
-        setError(deleteError, "recoverable", "POST_DELETION_ERROR");
-        setLegacyError(deleteError);
+        setError("Failed to delete post. Please try again.");
       }
     },
-    [setError, setLegacyError, paginationManagerRef, fetchPosts]
+    [loadPosts, paginationManager]
   );
 
   if (loading) {
@@ -382,21 +377,11 @@ export default function Dashboard() {
     return null;
   }
 
-  // Determine what to show using unified pagination state
-  const hasSearchResults = paginationState?.isSearchActive || false;
-  const hasUserResults =
-    hasSearchResults && (paginationState?.searchResults.users.length || 0) > 0;
-  const showNoResults =
-    hasSearchResults &&
-    (paginationState?.searchResults.posts.length || 0) === 0 &&
-    (paginationState?.searchResults.users.length || 0) === 0;
-
-  // Calculate pagination stats for egress optimization display
-  const totalFilteredPosts = paginationState?.displayPosts.length || 0;
-  const currentlyShowing = paginationState?.paginatedPosts.length || 0;
-  const bandwidthSavings = Math.max(0, totalFilteredPosts - currentlyShowing);
-  const isLoadingMore = paginationState?.isLoadingMore || false;
-  const hasMorePosts = paginationState?.hasMorePosts || false;
+  // Determine what to show
+  const hasUserResults = paginationState.isSearchActive && paginationState.searchResults.users.length > 0;
+  const showNoResults = paginationState.isSearchActive && paginationState.searchResults.totalResults === 0;
+  const displayPosts = paginationState.paginatedPosts;
+  const totalFilteredPosts = paginationState.displayPosts.length;
 
   return (
     <MainLayout>
@@ -523,25 +508,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
-              {/* Enhanced Error Display */}
-              {errorState && (
-                <ErrorDisplay
-                  errorState={errorState}
-                  errorRecovery={defaultErrorRecovery}
-                  onErrorCleared={clearError}
-                  onRetry={async () => {
-                    if (activeTab === "text") {
-                      await handleTextPostSubmit();
-                    } else {
-                      await handleAudioPostSubmit();
-                    }
-                  }}
-                  className="mt-4"
-                />
-              )}
-
-              {/* Legacy Error Display for backward compatibility */}
-              {!errorState && error && (
+              {/* Error Display */}
+              {error && (
                 <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded">
                   <p className="text-red-400 text-sm">{error}</p>
                 </div>
@@ -578,81 +546,61 @@ export default function Dashboard() {
           <SearchErrorBoundary>
             <SearchBar
               onSearch={(results, query) => {
-                // Convert SearchResults to our expected format
-                handleSearch(query, currentSearchFilters);
+                handleSearch(query, paginationState.currentSearchFilters);
               }}
               onFiltersChange={handleFiltersChange}
               className="w-full"
               currentQuery={currentSearchQuery}
-              initialFilters={currentSearchFilters}
-              paginationState={paginationState || undefined}
-              isLoadingMore={isLoadingMore}
+              initialFilters={paginationState.currentSearchFilters}
+              isLoadingMore={paginationState.fetchInProgress || paginationState.isLoadingMore}
             />
           </SearchErrorBoundary>
 
           {/* Control Buttons - Updated to show search filters */}
-          {(hasSearchResults ||
-            Object.keys(paginationState?.currentSearchFilters || {}).some(
-              (key) => {
-                const filterKey = key as keyof SearchFilters;
-                const value = (
-                  paginationState?.currentSearchFilters as Record<
-                    string,
-                    unknown
-                  >
-                )?.[filterKey];
-                return value && value !== "all" && value !== "recent";
-              }
-            )) && (
+          {(paginationState.isSearchActive ||
+            Object.entries(paginationState.currentSearchFilters).some(([, value]) => {
+              return value && value !== "all" && value !== "recent";
+            })) && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center space-x-2 text-sm text-gray-300 flex-wrap gap-2">
-                {paginationState?.currentSearchFilters.query && (
+                {paginationState.currentSearchFilters.query && (
                   <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
-                    Search: &ldquo;{paginationState.currentSearchFilters.query}
-                    &rdquo;
+                    Search: &ldquo;{paginationState.currentSearchFilters.query}&rdquo;
                   </span>
                 )}
-                {paginationState?.currentSearchFilters.postType &&
+                {paginationState.currentSearchFilters.postType &&
                   paginationState.currentSearchFilters.postType !== "all" && (
                     <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded text-xs">
                       Type:{" "}
-                      {paginationState.currentSearchFilters.postType ===
-                      "creators"
+                      {paginationState.currentSearchFilters.postType === "creators"
                         ? "Creators"
-                        : paginationState.currentSearchFilters.postType ===
-                          "audio"
+                        : paginationState.currentSearchFilters.postType === "audio"
                         ? "Audio Posts"
                         : "Text Posts"}
                     </span>
                   )}
-                {paginationState?.currentSearchFilters.sortBy &&
-                  paginationState.currentSearchFilters.sortBy !==
-                    "relevance" && (
+                {paginationState.currentSearchFilters.sortBy &&
+                  paginationState.currentSearchFilters.sortBy !== "relevance" && (
                     <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
                       Sort:{" "}
                       {paginationState.currentSearchFilters.sortBy === "oldest"
                         ? "Oldest First"
-                        : paginationState.currentSearchFilters.sortBy ===
-                          "popular"
+                        : paginationState.currentSearchFilters.sortBy === "popular"
                         ? "Most Popular"
-                        : paginationState.currentSearchFilters.sortBy ===
-                          "likes"
+                        : paginationState.currentSearchFilters.sortBy === "likes"
                         ? "Most Liked"
                         : "Most Relevant"}
                     </span>
                   )}
-                {paginationState?.currentSearchFilters.timeRange &&
+                {paginationState.currentSearchFilters.timeRange &&
                   paginationState.currentSearchFilters.timeRange !== "all" && (
                     <span className="bg-orange-900/30 text-orange-400 px-2 py-1 rounded text-xs">
                       Time:{" "}
-                      {paginationState.currentSearchFilters.timeRange ===
-                      "today"
+                      {paginationState.currentSearchFilters.timeRange === "today"
                         ? "Today"
-                        : paginationState.currentSearchFilters.timeRange ===
-                          "week"
+                        : paginationState.currentSearchFilters.timeRange === "week"
                         ? "This Week"
-                        : paginationState.currentSearchFilters.timeRange ===
-                          "month"
+                        : paginationState.currentSearchFilters.timeRange === "month"
                         ? "This Month"
                         : paginationState.currentSearchFilters.timeRange}
                     </span>
@@ -677,61 +625,54 @@ export default function Dashboard() {
               Search Results: Creators
             </h3>
             <div className="grid gap-4">
-              {(paginationState?.searchResults.users || []).map(
-                (searchUser: unknown) => {
-                  const typedSearchUser = searchUser as UserProfile;
-                  const totalPosts =
-                    (typedSearchUser as UserProfile & { posts_count?: number })
-                      .posts_count || 0;
+              {(paginationState.searchResults.users as (UserProfile & { posts_count: number; followers_count: number; user_id: string })[]).map((searchUser) => {
+                const totalPosts = searchUser.posts_count || 0;
 
-                  return (
-                    <div
-                      key={typedSearchUser.id}
-                      className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                          <span className="text-white font-bold text-sm">
-                            {typedSearchUser.username.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-gray-200 font-medium">
-                            {typedSearchUser.username}
-                          </p>
-                          <p className="text-gray-400 text-sm">
-                            {totalPosts} posts
-                          </p>
-                          <p className="text-gray-500 text-xs">
-                            Member since{" "}
-                            {new Date(
-                              typedSearchUser.created_at
-                            ).toLocaleDateString()}
-                          </p>
-                        </div>
+                return (
+                  <div
+                    key={searchUser.id}
+                    className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">
+                          {searchUser.username.charAt(0).toUpperCase()}
+                        </span>
                       </div>
-
-                      {user && user.id !== typedSearchUser.user_id ? (
-                        <FollowButton
-                          userId={typedSearchUser.user_id}
-                          username={typedSearchUser.username}
-                          size="sm"
-                          variant="secondary"
-                          showFollowerCount={false}
-                        />
-                      ) : user && user.id === typedSearchUser.user_id ? (
-                        <div className="text-gray-500 text-sm px-3 py-1 bg-gray-700 rounded">
-                          That&apos;s you!
-                        </div>
-                      ) : (
-                        <div className="text-gray-500 text-sm px-3 py-1">
-                          Sign in to follow
-                        </div>
-                      )}
+                      <div>
+                        <p className="text-gray-200 font-medium">
+                          {searchUser.username}
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          {totalPosts} posts
+                        </p>
+                        <p className="text-gray-500 text-xs">
+                          Member since{" "}
+                          {new Date(searchUser.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                  );
-                }
-              )}
+
+                    {user && user.id !== searchUser.user_id ? (
+                      <FollowButton
+                        userId={searchUser.user_id}
+                        username={searchUser.username}
+                        size="sm"
+                        variant="secondary"
+                        showFollowerCount={false}
+                      />
+                    ) : user && user.id === searchUser.user_id ? (
+                      <div className="text-gray-500 text-sm px-3 py-1 bg-gray-700 rounded">
+                        That&apos;s you!
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm px-3 py-1">
+                        Sign in to follow
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -742,7 +683,7 @@ export default function Dashboard() {
             <div className="text-center py-12 bg-gray-800 rounded-lg border border-gray-700">
               <div className="text-4xl mb-4">🔍</div>
               <p className="text-gray-400 mb-2">
-                No results found for &ldquo;{currentSearchQuery}&rdquo;
+                No results found for &quot;{currentSearchQuery}&quot;
               </p>
               <p className="text-sm text-gray-500 mb-4">
                 Try different keywords, adjust your filters, or check your
@@ -760,7 +701,7 @@ export default function Dashboard() {
         {/* Posts List */}
         <div className="max-w-2xl mx-auto">
           <h2 className="text-xl font-bold mb-6">
-            {hasSearchResults ? "Search Results: Posts" : "Community Posts"}
+            {paginationState.isSearchActive ? "Search Results: Posts" : "Community Posts"}
             {totalFilteredPosts > 0 && (
               <span className="text-sm font-normal text-gray-400 ml-2">
                 ({totalFilteredPosts}{" "}
@@ -769,25 +710,30 @@ export default function Dashboard() {
             )}
           </h2>
 
-          {!showNoResults && totalFilteredPosts === 0 ? (
+          {!showNoResults && totalFilteredPosts === 0 && !paginationState.fetchInProgress && !paginationState.isLoadingMore ? (
             <div className="text-center py-12 bg-gray-800 rounded-lg">
               <div className="text-4xl mb-4">🎵</div>
               <p className="text-gray-400 mb-2">
-                {hasSearchResults || paginationState?.hasFiltersApplied
+                {paginationState.isSearchActive
                   ? "No posts match your current search and filters."
                   : "No posts yet. Be the first to share!"}
               </p>
               <p className="text-sm text-gray-500">
-                {hasSearchResults || paginationState?.hasFiltersApplied
+                {paginationState.isSearchActive
                   ? "Try adjusting your search terms or filters."
                   : "Share your AI music creations or thoughts with the community."}
               </p>
             </div>
+          ) : (paginationState.fetchInProgress || paginationState.isLoadingMore) && paginationState.allPosts.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+              <p className="text-gray-400">Loading posts...</p>
+            </div>
           ) : !showNoResults ? (
             <div className="space-y-6">
-              {/* Paginated Posts Display */}
+              {/* Posts Display */}
               <PaginationErrorBoundary>
-                {(paginationState?.paginatedPosts || []).map((post: Post) => (
+                {displayPosts.map((post) => (
                   <PostErrorBoundary key={post.id} postId={post.id}>
                     <PostItem
                       post={post}
@@ -799,194 +745,44 @@ export default function Dashboard() {
                 ))}
               </PaginationErrorBoundary>
 
-              {/* Load More Button */}
-              {hasMorePosts && (
+              {/* Enhanced Load More Button */}
+              {paginationState.hasMorePosts && (
                 <LoadMoreErrorBoundary>
-                  <div className="flex flex-col items-center space-y-4 pt-8">
-                    {/* Bandwidth Savings Info */}
-                    {bandwidthSavings > 0 && (
-                      <div className="bg-green-900/20 border border-green-700 rounded p-3 text-center max-w-md">
-                        <p className="text-green-400 text-sm font-medium">
-                          📊 Bandwidth Optimization Active
-                        </p>
-                        <p className="text-green-300 text-xs mt-1">
-                          Showing {currentlyShowing} of {totalFilteredPosts}{" "}
-                          posts • Saving bandwidth by not loading{" "}
-                          {bandwidthSavings} posts until needed
-                        </p>
-                        <p className="text-green-200 text-xs mt-1 opacity-75">
-                          🎵 Audio files load only when you click play
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Pagination Strategy Info */}
-                    <div
-                      className={`border rounded p-3 text-center max-w-md transition-colors ${
-                        paginationState?.paginationMode === "client"
-                          ? "bg-purple-900/20 border-purple-700"
-                          : "bg-blue-900/20 border-blue-700"
-                      }`}
-                    >
-                      <div className="flex items-center justify-center space-x-2 mb-2">
-                        <span className="text-lg">
-                          {paginationState?.paginationMode === "client"
-                            ? "📋"
-                            : "🔄"}
-                        </span>
-                        <p
-                          className={`text-sm font-medium ${
-                            paginationState?.paginationMode === "client"
-                              ? "text-purple-300"
-                              : "text-blue-300"
-                          }`}
-                        >
-                          {paginationState?.paginationMode === "client"
-                            ? "Client-side Pagination"
-                            : "Server-side Pagination"}
-                        </p>
-                      </div>
-                      <p
-                        className={`text-xs ${
-                          paginationState?.paginationMode === "client"
-                            ? "text-purple-200"
-                            : "text-blue-200"
-                        }`}
-                      >
-                        {paginationState?.paginationMode === "client"
-                          ? `${Math.min(
-                              15,
-                              totalFilteredPosts - currentlyShowing
-                            )} more from filtered results`
-                          : `Loading next 15 posts from database`}
-                      </p>
-                    </div>
-                    {/* Load More Button */}
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={isLoadingMore}
-                      className={`px-8 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 min-w-[200px] justify-center ${
-                        isLoadingMore
-                          ? "bg-gray-600 opacity-50 cursor-not-allowed"
-                          : paginationState?.paginationMode === "client"
-                          ? "bg-purple-600 hover:bg-purple-700 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
-                          : "bg-blue-600 hover:bg-blue-700 hover:scale-105 shadow-lg hover:shadow-blue-500/25"
-                      } text-white`}
-                    >
-                      {isLoadingMore ? (
-                        <>
-                          <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                          <span>
-                            {paginationState?.paginationMode === "client"
-                              ? "Expanding results..."
-                              : "Fetching from server..."}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-lg">
-                            {paginationState?.paginationMode === "client"
-                              ? "📋"
-                              : "🔄"}
-                          </span>
-                          <span>
-                            {paginationState?.paginationMode === "client"
-                              ? `Show More (${Math.min(
-                                  15,
-                                  totalFilteredPosts - currentlyShowing
-                                )})`
-                              : "Load More Posts (15)"}
-                          </span>
-                        </>
-                      )}
-                    </button>
-
-                    {/* Pagination Stats */}
-                    <div className="text-center text-xs text-gray-500 space-y-2">
-                      <div className="bg-gray-800/50 rounded p-2 border border-gray-700">
-                        {paginationState?.paginationMode === "client" ? (
-                          <>
-                            <p className="text-purple-300 font-medium">
-                              📋 Filtered View: {currentlyShowing} of{" "}
-                              {totalFilteredPosts} results
-                            </p>
-                            <p className="text-gray-400">
-                              🔍 Filtered from{" "}
-                              {paginationState?.allPosts.length || 0} loaded
-                              posts ({paginationState?.totalPostsCount || 0}{" "}
-                              total available)
-                            </p>
-                            <p className="text-gray-500 text-xs mt-1">
-                              Page {paginationState?.currentPage || 1} •
-                              Client-side pagination
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-blue-300 font-medium">
-                              🔄 Server View: {currentlyShowing} of{" "}
-                              {paginationState?.totalPostsCount || 0} total
-                              posts
-                            </p>
-                            <p className="text-gray-400">
-                              📊 Loaded {paginationState?.allPosts.length || 0}{" "}
-                              posts • 15 per batch
-                            </p>
-                            <p className="text-gray-500 text-xs mt-1">
-                              Batch{" "}
-                              {Math.ceil(
-                                (paginationState?.allPosts.length || 0) / 15
-                              )}{" "}
-                              • Server-side pagination
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <LoadMoreButton
+                    paginationState={paginationState}
+                    onLoadMore={handleLoadMore}
+                    isLoading={paginationState.fetchInProgress || paginationState.isLoadingMore}
+                    hasMorePosts={paginationState.hasMorePosts}
+                    totalFilteredPosts={totalFilteredPosts}
+                    currentlyShowing={displayPosts.length}
+                  />
                 </LoadMoreErrorBoundary>
               )}
-              {/* End of Posts Message */}
-              {!hasMorePosts &&
-                (paginationState?.paginatedPosts.length || 0) > 0 && (
-                  <div className="text-center py-8">
-                    <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                      <div className="text-3xl mb-2">🎉</div>
-                      <p className="text-gray-400 mb-2">
-                        You&apos;ve reached the end!
-                      </p>
-                      <p className="text-sm text-gray-500 mb-3">
-                        {paginationState?.paginationMode === "client"
-                          ? `All ${totalFilteredPosts} filtered results are now visible.`
-                          : `All ${
-                              paginationState?.totalPostsCount || 0
-                            } posts have been loaded.`}
-                      </p>
-
-                      <div className="flex justify-center space-x-3 mt-4">
-                        {(hasSearchResults ||
-                          paginationState?.hasFiltersApplied) && (
-                          <button
-                            onClick={clearSearch}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded transition-colors"
-                          >
-                            Clear Filters
-                          </button>
-                        )}
-                        <button
-                          onClick={() =>
-                            window.scrollTo({ top: 0, behavior: "smooth" })
-                          }
-                          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors"
-                        >
-                          Back to Top
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
             </div>
           ) : null}
+
+          {/* End of Posts Message */}
+          {!paginationState.isSearchActive && !paginationState.hasMorePosts && paginationState.allPosts.length > 0 && (
+            <div className="text-center py-8">
+              <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div className="text-3xl mb-2">🎉</div>
+                <p className="text-gray-400 mb-2">
+                  You&apos;ve reached the end!
+                </p>
+                <p className="text-sm text-gray-500 mb-3">
+                  All posts have been loaded.
+                </p>
+                <button
+                  onClick={() =>
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                  }
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors"
+                >
+                  Back to Top
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Activity Feed Section */}

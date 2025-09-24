@@ -8,10 +8,11 @@ const supabase = createClient(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const audioPath = params.path.join('/');
+    const resolvedParams = await params;
+    const audioPath = resolvedParams.path.join('/');
     
     // Basic validation
     if (!audioPath || audioPath.length === 0) {
@@ -90,10 +91,11 @@ export async function OPTIONS() {
 // Support HEAD requests for metadata
 export async function HEAD(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const audioPath = params.path.join('/');
+    const resolvedParams = await params;
+    const audioPath = resolvedParams.path.join('/');
     
     // Get signed URL from Supabase
     const { data, error } = await supabase.storage

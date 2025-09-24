@@ -238,7 +238,7 @@ export interface AutoFetchResult {
  */
 export const INITIAL_PAGINATION_STATE: PaginationState = {
   currentPage: 1,
-  hasMorePosts: true,
+  hasMorePosts: false,
   isLoadingMore: false,
   
   allPosts: [],

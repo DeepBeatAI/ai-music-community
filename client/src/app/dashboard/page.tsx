@@ -152,9 +152,77 @@ export default function Dashboard() {
 
   // Legacy state for compatibility
   const [currentSearchQuery, setCurrentSearchQuery] = useState("");
+  
+  // SIMPLE FILTER STATE - Direct approach
+  const [currentFilters, setCurrentFilters] = useState<SearchFilters>({});
+  const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
+  const [filterPage, setFilterPage] = useState(1);
 
   // Refs for tracking state
   const hasInitiallyLoaded = useRef(false);
+
+  // Deduplicate posts by ID
+  const deduplicatePosts = useCallback((posts: any[]) => {
+    const seen = new Set();
+    return posts.filter(post => {
+      if (seen.has(post.id)) {
+        return false;
+      }
+      seen.add(post.id);
+      return true;
+    });
+  }, []);
+
+  // Apply filters directly - SIMPLE APPROACH
+  const applyFiltersDirectly = useCallback((filters: SearchFilters, allPosts: unknown[]) => {
+    console.log('🔍 Applying filters directly:', filters);
+    
+    let filtered = [...allPosts];
+    
+    // Apply post type filter
+    if (filters.postType && filters.postType !== 'all') {
+      console.log(`Filtering by post type: ${filters.postType}`);
+      filtered = filtered.filter(post => post.post_type === filters.postType);
+      console.log(`After filter: ${filtered.length} posts`);
+    }
+    
+    // Apply time range filter
+    if (filters.timeRange && filters.timeRange !== 'all') {
+      const now = new Date();
+      const cutoff = new Date();
+      
+      switch (filters.timeRange) {
+        case 'today':
+          cutoff.setHours(0, 0, 0, 0);
+          break;
+        case 'week':
+          cutoff.setDate(now.getDate() - 7);
+          break;
+        case 'month':
+          cutoff.setMonth(now.getMonth() - 1);
+          break;
+      }
+      
+      filtered = filtered.filter(post => new Date(post.created_at) >= cutoff);
+    }
+    
+    // Apply sorting
+    if (filters.sortBy) {
+      filtered.sort((a, b) => {
+        switch (filters.sortBy) {
+          case 'oldest':
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          case 'likes':
+            return (b.like_count || 0) - (a.like_count || 0);
+          case 'recent':
+          default:
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }
+      });
+    }
+    
+    return filtered;
+  }, []);
 
   // Subscribe to pagination state changes
   useEffect(() => {
@@ -164,6 +232,22 @@ export default function Dashboard() {
 
     return unsubscribe;
   }, [paginationManager]);
+
+  // Update filtered posts when allPosts changes (to include newly loaded posts)
+  useEffect(() => {
+    if (filteredPosts.length > 0 && Object.keys(currentFilters).length > 0) {
+      console.log('🔄 Updating filtered posts due to allPosts change');
+      const deduplicatedAllPosts = deduplicatePosts(paginationState.allPosts);
+      const newFiltered = applyFiltersDirectly(currentFilters, deduplicatedAllPosts);
+      const deduplicatedFiltered = deduplicatePosts(newFiltered);
+      
+      // Only update if the filtered posts actually changed
+      if (deduplicatedFiltered.length !== filteredPosts.length) {
+        setFilteredPosts(deduplicatedFiltered);
+        console.log(`🔄 Updated filtered posts: ${deduplicatedFiltered.length} posts`);
+      }
+    }
+  }, [paginationState.allPosts, currentFilters, applyFiltersDirectly, deduplicatePosts]);
 
   // Load initial posts
   const loadPosts = useCallback(
@@ -224,7 +308,7 @@ export default function Dashboard() {
       try {
         setCurrentSearchQuery(query);
 
-        const results = await searchContent({ ...filters, query }, 0, 50);
+        const results = await searchContent({ ...filters, query }, 0, 200); // Fetch more results for comprehensive filtering
         
         // Update pagination state with search results
         paginationManager.updateSearch(results, query, filters);
@@ -236,22 +320,97 @@ export default function Dashboard() {
     [paginationManager]
   );
 
-  // Handle filters change
+  // Handle filters change - SIMPLIFIED APPROACH WITH DEDUPLICATION
   const handleFiltersChange = useCallback(
     async (filters: SearchFilters) => {
-      await handleSearch(currentSearchQuery, filters);
+      console.log('🔄 Dashboard: Handling filter change:', filters);
+      setCurrentFilters(filters);
+      setFilterPage(1); // Reset to first page
+      
+      // Check if we have active filters
+      const hasActiveFilters = filters.postType && filters.postType !== 'all';
+      
+      if (hasActiveFilters) {
+        console.log('🔍 Dashboard: Using direct filtering approach');
+        
+        // Get current posts and ensure deduplication
+        let allPosts = deduplicatePosts(paginationState.allPosts);
+        console.log(`📊 Starting with ${allPosts.length} deduplicated posts`);
+        
+        // Ensure we have enough posts for filtering
+        if (allPosts.length < 50) {
+          console.log('📥 Dashboard: Fetching more posts for filtering');
+          try {
+            // Track which pages we've already loaded to avoid duplicates
+            const currentPages = Math.ceil(allPosts.length / POSTS_PER_PAGE);
+            
+            // Fetch more pages to ensure good filtering
+            for (let i = currentPages + 1; i <= currentPages + 3; i++) {
+              const { posts: morePosts, hasMore } = await fetchPosts(i, POSTS_PER_PAGE, user?.id);
+              if (morePosts.length > 0) {
+                // Add new posts and deduplicate
+                const combinedPosts = [...allPosts, ...morePosts];
+                allPosts = deduplicatePosts(combinedPosts);
+                
+                console.log(`📥 Fetched page ${i}: ${morePosts.length} posts, total after dedup: ${allPosts.length}`);
+                
+                // Update pagination manager with deduplicated posts
+                paginationManager.updatePosts({
+                  newPosts: morePosts,
+                  resetPagination: false,
+                  updateMetadata: {
+                    totalServerPosts: hasMore ? (i * POSTS_PER_PAGE) + 1 : i * POSTS_PER_PAGE,
+                    loadedServerPosts: allPosts.length,
+                    currentBatch: i,
+                    lastFetchTimestamp: Date.now(),
+                  },
+                });
+              }
+              if (!hasMore) break;
+            }
+          } catch (error) {
+            console.error('Error fetching posts for filtering:', error);
+          }
+        }
+        
+        // Apply filters directly to deduplicated posts
+        const filtered = applyFiltersDirectly(filters, allPosts);
+        const deduplicatedFiltered = deduplicatePosts(filtered);
+        setFilteredPosts(deduplicatedFiltered);
+        console.log(`🎯 Direct filtering result: ${deduplicatedFiltered.length} posts (deduplicated)`);
+      } else {
+        // No active filters - clear filtered posts
+        setFilteredPosts([]);
+        paginationManager.clearSearch();
+      }
     },
-    [currentSearchQuery, handleSearch]
+    [paginationState.allPosts, user?.id, paginationManager, applyFiltersDirectly, deduplicatePosts]
   );
 
   // Clear search
   const clearSearch = useCallback(async () => {
     setCurrentSearchQuery("");
+    setCurrentFilters({});
+    setFilteredPosts([]);
+    setFilterPage(1);
     paginationManager.clearSearch();
   }, [paginationManager]);
 
+  // Handle load more for filtered content
+  const handleFilteredLoadMore = useCallback(() => {
+    console.log('🔄 Loading more filtered posts');
+    setFilterPage(prev => prev + 1);
+  }, []);
+
   // Handle load more
   const handleLoadMore = useCallback(async () => {
+    // If we have active filters, use simple pagination
+    if (filteredPosts.length > 0) {
+      handleFilteredLoadMore();
+      return;
+    }
+    
+    // Otherwise use the complex pagination system
     const { canLoadMore, strategy } = paginationManager.loadMore();
     
     if (!canLoadMore) return;
@@ -261,7 +420,7 @@ export default function Dashboard() {
       await loadPosts(paginationState.currentPage + 1, true);
     }
     // Client-side pagination is handled automatically by the pagination manager
-  }, [paginationManager, paginationState.currentPage, loadPosts]);
+  }, [filteredPosts.length, handleFilteredLoadMore, paginationManager, paginationState.currentPage, loadPosts]);
 
   // Handle audio file selection
   const handleAudioFileSelect = useCallback((file: File) => {
@@ -377,11 +536,27 @@ export default function Dashboard() {
     return null;
   }
 
-  // Determine what to show
+  // Determine what to show - SIMPLE APPROACH WITH DEDUPLICATION
   const hasUserResults = paginationState.isSearchActive && paginationState.searchResults.users.length > 0;
   const showNoResults = paginationState.isSearchActive && paginationState.searchResults.totalResults === 0;
-  const displayPosts = paginationState.paginatedPosts;
-  const totalFilteredPosts = paginationState.displayPosts.length;
+  
+  // Use simple filtered posts if available, otherwise use pagination system
+  const isUsingSimpleFilter = filteredPosts.length > 0;
+  
+  // Ensure no duplicates in display posts
+  const rawDisplayPosts = isUsingSimpleFilter 
+    ? filteredPosts.slice(0, filterPage * POSTS_PER_PAGE)
+    : paginationState.paginatedPosts;
+  const displayPosts = deduplicatePosts(rawDisplayPosts);
+  
+  const totalFilteredPosts = isUsingSimpleFilter 
+    ? filteredPosts.length 
+    : paginationState.displayPosts.length;
+  const hasMorePosts = isUsingSimpleFilter
+    ? (filterPage * POSTS_PER_PAGE) < filteredPosts.length
+    : paginationState.hasMorePosts;
+    
+  console.log(`📊 Display: ${displayPosts.length} posts (${isUsingSimpleFilter ? 'filtered' : 'paginated'}), hasMore: ${hasMorePosts}`);
 
   return (
     <MainLayout>
@@ -558,8 +733,8 @@ export default function Dashboard() {
 
           {/* Control Buttons - Updated to show search filters */}
           {(paginationState.isSearchActive ||
-            Object.entries(paginationState.currentSearchFilters).some(([, value]) => {
-              return value && value !== "all" && value !== "recent";
+            Object.entries(paginationState.currentSearchFilters).some(([key, value]) => {
+              return value && value !== "all" && value !== "recent" && value !== "relevance";
             })) && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center space-x-2 text-sm text-gray-300 flex-wrap gap-2">
@@ -580,6 +755,7 @@ export default function Dashboard() {
                     </span>
                   )}
                 {paginationState.currentSearchFilters.sortBy &&
+                  paginationState.currentSearchFilters.sortBy !== "recent" &&
                   paginationState.currentSearchFilters.sortBy !== "relevance" && (
                     <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
                       Sort:{" "}
@@ -589,7 +765,7 @@ export default function Dashboard() {
                         ? "Most Popular"
                         : paginationState.currentSearchFilters.sortBy === "likes"
                         ? "Most Liked"
-                        : "Most Relevant"}
+                        : "Most Recent"}
                     </span>
                   )}
                 {paginationState.currentSearchFilters.timeRange &&
@@ -745,17 +921,37 @@ export default function Dashboard() {
                 ))}
               </PaginationErrorBoundary>
 
-              {/* Enhanced Load More Button */}
-              {paginationState.hasMorePosts && (
+              {/* Enhanced Load More Button - SIMPLE APPROACH */}
+              {hasMorePosts && (
                 <LoadMoreErrorBoundary>
-                  <LoadMoreButton
-                    paginationState={paginationState}
-                    onLoadMore={handleLoadMore}
-                    isLoading={paginationState.fetchInProgress || paginationState.isLoadingMore}
-                    hasMorePosts={paginationState.hasMorePosts}
-                    totalFilteredPosts={totalFilteredPosts}
-                    currentlyShowing={displayPosts.length}
-                  />
+                  {isUsingSimpleFilter ? (
+                    // Simple Show More button for filtered content
+                    <div className="text-center py-8">
+                      <button
+                        onClick={handleFilteredLoadMore}
+                        className="px-8 py-4 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl font-medium transition-all duration-300 flex items-center space-x-3 mx-auto"
+                      >
+                        <span className="text-xl">📋</span>
+                        <span className="font-semibold">
+                          Show More ({Math.min(POSTS_PER_PAGE, filteredPosts.length - displayPosts.length)})
+                        </span>
+                        <span className="text-sm opacity-75">Instant</span>
+                      </button>
+                      <div className="mt-4 text-sm text-gray-400">
+                        Showing {displayPosts.length} of {filteredPosts.length} filtered posts
+                      </div>
+                    </div>
+                  ) : (
+                    // Original LoadMoreButton for unfiltered content
+                    <LoadMoreButton
+                      paginationState={paginationState}
+                      onLoadMore={handleLoadMore}
+                      isLoading={paginationState.fetchInProgress || paginationState.isLoadingMore}
+                      hasMorePosts={paginationState.hasMorePosts}
+                      totalFilteredPosts={totalFilteredPosts}
+                      currentlyShowing={displayPosts.length}
+                    />
+                  )}
                 </LoadMoreErrorBoundary>
               )}
             </div>

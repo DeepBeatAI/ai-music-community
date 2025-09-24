@@ -495,7 +495,7 @@ describe('UnifiedPaginationStateManager', () => {
       expect(debugInfo).toHaveProperty('state');
       expect(debugInfo).toHaveProperty('validation');
       expect(debugInfo).toHaveProperty('config');
-      expect(debugInfo.validation.isValid).toBe(true);
+      expect((debugInfo.validation as any).isValid).toBe(true);
     });
 
     it('should reset to initial state', () => {

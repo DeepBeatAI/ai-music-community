@@ -217,6 +217,16 @@ export class UnifiedPaginationStateManager {
     const newMode = forceMode || detectPaginationMode(context);
     const newStrategy = determineLoadMoreStrategy(newMode, context);
     
+    // Log mode changes for debugging
+    if (updatedState.paginationMode !== newMode) {
+      console.log(`🔄 Pagination mode change: ${updatedState.paginationMode} → ${newMode}`, {
+        isSearchActive: updatedState.isSearchActive,
+        hasActiveFilters: hasActiveSearchFilters(updatedState.currentSearchFilters),
+        allPostsCount: updatedState.allPosts.length,
+        displayPostsCount: updatedState.displayPosts.length
+      });
+    }
+    
     updatedState.paginationMode = newMode;
     updatedState.loadMoreStrategy = newStrategy;
     
@@ -238,10 +248,15 @@ export class UnifiedPaginationStateManager {
   private applyFiltersAndSearch(state: PaginationState): PaginationState {
     let filtered = [...state.allPosts];
     
-    // Apply search first if active
-    if (state.isSearchActive && state.searchResults.posts.length >= 0) {
+    console.log(`🔍 applyFiltersAndSearch: Starting with ${filtered.length} posts`);
+    console.log(`🔍 Search active: ${state.isSearchActive}, Search results: ${state.searchResults.posts.length}`);
+    
+    // FIXED: Apply search filter only if we have actual search results with posts
+    // This prevents filtering being skipped when search results are empty due to filter-only operations
+    if (state.isSearchActive && state.searchResults.posts.length > 0) {
       const searchPostIds = new Set(state.searchResults.posts.map(p => p.id));
       filtered = state.allPosts.filter(post => searchPostIds.has(post.id));
+      console.log(`🔍 After search filter: ${filtered.length} posts`);
     }
     
     // Determine active filters (search filters take precedence)
@@ -252,9 +267,17 @@ export class UnifiedPaginationStateManager {
       timeRange: state.currentSearchFilters.timeRange || 'all'
     } : state.filters;
     
-    // Apply post type filter
+    console.log(`🔍 Active filters:`, activeFilters);
+    console.log(`🔍 hasSearchFilters: ${hasSearchFilters}, currentSearchFilters:`, state.currentSearchFilters);
+    console.log(`🔍 Pagination mode: ${state.paginationMode}, isSearchActive: ${state.isSearchActive}`);
+    
+    // CRITICAL FIX: Apply post type filter regardless of search state
+    // This ensures filtering works even when search results are empty
     if (activeFilters.postType !== 'all' && activeFilters.postType !== 'creators') {
+      console.log(`🔍 Applying post type filter: ${activeFilters.postType}`);
+      console.log(`Before filter: ${filtered.length} posts`);
       filtered = filtered.filter(post => post.post_type === activeFilters.postType);
+      console.log(`After filter: ${filtered.length} posts`);
     }
     
     // Apply time range filter
@@ -274,28 +297,35 @@ export class UnifiedPaginationStateManager {
           break;
       }
       
+      console.log(`🔍 Applying time range filter: ${activeFilters.timeRange}`);
       filtered = filtered.filter(post => new Date(post.created_at) >= cutoff);
+      console.log(`After time filter: ${filtered.length} posts`);
     }
     
-    // Apply sorting
+    // Apply sorting - only if not using search relevance
     const sortBy = activeFilters.sortBy;
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'oldest':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        case 'popular':
-        case 'likes':
-          const likeDiff = (b.like_count || 0) - (a.like_count || 0);
-          if (likeDiff === 0) {
+    if (sortBy !== 'relevance' || !state.isSearchActive) {
+      filtered.sort((a, b) => {
+        switch (sortBy) {
+          case 'oldest':
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          case 'popular':
+          case 'likes':
+            const likeDiff = (b.like_count || 0) - (a.like_count || 0);
+            if (likeDiff === 0) {
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            }
+            return likeDiff;
+          case 'recent':
+          case 'newest':
+          default:
             return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          }
-          return likeDiff;
-        case 'recent':
-        case 'newest':
-        default:
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-    });
+        }
+      });
+    }
+    // If sortBy is 'relevance' and search is active, keep the search result order
+    
+    console.log(`🔍 Final filtered posts: ${filtered.length}`);
     
     return {
       ...state,
@@ -314,11 +344,22 @@ export class UnifiedPaginationStateManager {
       const startIndex = 0;
       const endIndex = currentPage * postsPerPage;
       const paginatedResults = displayPosts.slice(startIndex, endIndex);
+      const hasMore = endIndex < displayPosts.length;
+      
+      console.log(`🔍 CLIENT pagination state:`, {
+        currentPage,
+        postsPerPage,
+        displayPostsLength: displayPosts.length,
+        startIndex,
+        endIndex,
+        paginatedResultsLength: paginatedResults.length,
+        hasMorePosts: hasMore
+      });
       
       return {
         ...state,
         paginatedPosts: paginatedResults,
-        hasMorePosts: endIndex < displayPosts.length,
+        hasMorePosts: hasMore,
         metadata: {
           ...state.metadata,
           totalFilteredPosts: displayPosts.length,
@@ -348,12 +389,28 @@ export class UnifiedPaginationStateManager {
    * Updates search state (simplified to prevent recursive calls)
    */
   updateSearch(searchResults: SearchResults, query: string, searchFilters: SearchFilters): void {
-    const isActive = query.length > 0;
+    const hasQuery = query.length > 0;
+    const hasFilters = hasActiveSearchFilters(searchFilters);
+    const isActive = hasQuery; // Only search mode if there's an actual query
+    
+    console.log(`🔍 updateSearch called:`, { query, searchFilters, hasQuery, hasFilters, isActive });
+    
+    // Clean up searchFilters to remove default values that shouldn't trigger search mode
+    const cleanedFilters = { ...searchFilters };
+    if (cleanedFilters.sortBy === 'recent') {
+      delete cleanedFilters.sortBy;
+    }
+    if (cleanedFilters.postType === 'all') {
+      delete cleanedFilters.postType;
+    }
+    if (cleanedFilters.timeRange === 'all') {
+      delete cleanedFilters.timeRange;
+    }
     
     this.updateState({
       searchResults,
-      currentSearchFilters: searchFilters,
-      isSearchActive: isActive,
+      currentSearchFilters: cleanedFilters,
+      isSearchActive: hasQuery, // Only set search active if there's a query, not just filters
       currentPage: 1, // Reset pagination on search change
     });
     
@@ -502,7 +559,7 @@ export class UnifiedPaginationStateManager {
   /**
    * Gets debug information
    */
-  getDebugInfo(): Record<string, any> {
+  getDebugInfo(): Record<string, unknown> {
     return {
       state: createStateSnapshot(this.state),
       validation: validateStateConsistency(this.state),

@@ -81,7 +81,7 @@ export async function getPostsForFiltering(
 export async function searchContent(
   filters: SearchFilters,
   page: number = 0,
-  limit: number = 50  // FIXED: Increased default limit to show more results when filtering
+  limit: number = 200  // FIXED: Increased default limit to show more results when filtering
 ): Promise<SearchResults> {
   // Check cache first
   const cachedResults = searchCache.get(filters, page, limit);
@@ -119,7 +119,7 @@ export async function searchContent(
       // Build posts query with proper JOIN syntax
       // FIXED: For filtering, get more results to ensure we capture all matching content
       const isFiltering = filters.postType !== 'all' || filters.timeRange !== 'all' || filters.query;
-      const queryLimit = isFiltering ? Math.max(limit, 100) : limit; // Get more when filtering
+      const queryLimit = isFiltering ? Math.max(limit, 200) : limit; // Get significantly more when filtering
       
       let postsQuery = supabase
         .from('posts')

@@ -23,13 +23,22 @@ import {
 export function detectPaginationMode(context: ModeDetectionContext): PaginationMode {
   const { isSearchActive, hasFiltersApplied, searchFiltersActive } = context;
   
+  console.log(`🔍 detectPaginationMode:`, {
+    isSearchActive,
+    hasFiltersApplied,
+    searchFiltersActive,
+    shouldUseClient: isSearchActive || hasFiltersApplied || searchFiltersActive
+  });
+  
   // If search is active or filters are applied, use client-side pagination
   // This allows filtering through all loaded posts without additional server requests
   if (isSearchActive || hasFiltersApplied || searchFiltersActive) {
+    console.log(`🔍 Using CLIENT mode due to active search/filters`);
     return 'client';
   }
   
   // For unfiltered browsing, use server-side pagination for optimal bandwidth usage
+  console.log(`🔍 Using SERVER mode - no active search/filters`);
   return 'server';
 }
 
@@ -59,7 +68,7 @@ export function determineLoadMoreStrategy(
  * @returns True if any search filters are active
  */
 export function hasActiveSearchFilters(searchFilters: SearchFilters): boolean {
-  return Object.keys(searchFilters).some(key => {
+  const result = Object.keys(searchFilters).some(key => {
     const filterKey = key as keyof SearchFilters;
     const value = searchFilters[filterKey];
     
@@ -77,6 +86,9 @@ export function hasActiveSearchFilters(searchFilters: SearchFilters): boolean {
         return false;
     }
   });
+  
+  console.log(`🔍 hasActiveSearchFilters:`, { searchFilters, result });
+  return result;
 }
 
 /**

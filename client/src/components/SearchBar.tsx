@@ -105,7 +105,10 @@ export default function SearchBar({
   const performSearch = useCallback(async (searchFilters: SearchFilters, resetPagination: boolean = true) => {
     setShowSuggestionDropdown(false);
     
-    if (!searchFilters.query?.trim() && searchFilters.postType === 'all' && searchFilters.sortBy === 'recent' && searchFilters.timeRange === 'all') {
+    const hasQuery = searchFilters.query?.trim();
+    const hasFilters = searchFilters.postType !== 'all' || searchFilters.sortBy !== 'recent' || searchFilters.timeRange !== 'all';
+    
+    if (!hasQuery && !hasFilters) {
       console.log('🧹 SearchBar: Clearing search - no active filters');
       onSearch({ posts: [], users: [], totalResults: 0 }, '');
       if (resetPagination && onPaginationReset) {
@@ -114,7 +117,21 @@ export default function SearchBar({
       return;
     }
 
-    // Check cache first
+    // For filter-only changes (no search query), let the dashboard handle it
+    if (!hasQuery && hasFilters) {
+      console.log('🔍 SearchBar: Filter-only change, letting dashboard handle filtering');
+      // Mark as internal update to prevent sync conflicts
+      isInternalUpdate.current = true;
+      onSearch({ posts: [], users: [], totalResults: 0 }, '');
+      setTimeout(() => { isInternalUpdate.current = false; }, 100);
+      
+      if (resetPagination && onPaginationReset) {
+        onPaginationReset();
+      }
+      return;
+    }
+
+    // Check cache first for search queries
     const cachedResults = getCachedResults(searchFilters);
     if (cachedResults) {
       console.log('📋 SearchBar: Using cached results for search');
@@ -170,7 +187,21 @@ export default function SearchBar({
     }
 
     searchTimeoutRef.current = setTimeout(async () => {
-      const currentFilters = { query, postType, sortBy, timeRange };
+      // Only include non-default values in filters to prevent unwanted filter display
+      const currentFilters: SearchFilters = {};
+      
+      if (query.trim()) {
+        currentFilters.query = query;
+      }
+      if (postType !== 'all') {
+        currentFilters.postType = postType;
+      }
+      if (sortBy !== 'recent') {
+        currentFilters.sortBy = sortBy;
+      }
+      if (timeRange !== 'all') {
+        currentFilters.timeRange = timeRange;
+      }
       
       // Handle suggestions if enabled and query is long enough
       if (showSuggestions && query.length >= 2) {
@@ -201,7 +232,7 @@ export default function SearchBar({
       }
 
       // Trigger search if we have content or active filters
-      if (query.trim() || postType !== 'all' || sortBy !== 'recent' || timeRange !== 'all') {
+      if (Object.keys(currentFilters).length > 0) {
         console.log('🔍 SearchBar triggering search with filters:', currentFilters);
         await performSearch(currentFilters, true);
       } else {
@@ -223,7 +254,22 @@ export default function SearchBar({
 
   // FIXED: Notify parent of filter changes without causing loops - add debouncing
   useEffect(() => {
-    const currentFilters = { query, postType, sortBy, timeRange };
+    // Only include non-default values in filters to prevent unwanted filter display
+    const currentFilters: SearchFilters = {};
+    
+    if (query.trim()) {
+      currentFilters.query = query;
+    }
+    if (postType !== 'all') {
+      currentFilters.postType = postType;
+    }
+    if (sortBy !== 'recent') {
+      currentFilters.sortBy = sortBy;
+    }
+    if (timeRange !== 'all') {
+      currentFilters.timeRange = timeRange;
+    }
+    
     const filtersString = JSON.stringify(currentFilters);
     
     // Only notify if filters actually changed and it's not an internal update
@@ -241,7 +287,22 @@ export default function SearchBar({
   }, [query, postType, sortBy, timeRange, onFiltersChange]);
 
   const handleSearch = useCallback(async () => {
-    const currentFilters = { query, postType, sortBy, timeRange };
+    // Only include non-default values in filters
+    const currentFilters: SearchFilters = {};
+    
+    if (query.trim()) {
+      currentFilters.query = query;
+    }
+    if (postType !== 'all') {
+      currentFilters.postType = postType;
+    }
+    if (sortBy !== 'recent') {
+      currentFilters.sortBy = sortBy;
+    }
+    if (timeRange !== 'all') {
+      currentFilters.timeRange = timeRange;
+    }
+    
     await performSearch(currentFilters, true);
   }, [query, postType, sortBy, timeRange, performSearch]);
 

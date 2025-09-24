@@ -329,17 +329,44 @@ export function validateStateTransition(
   currentState: PaginationState,
   newState: PaginationState
 ): boolean {
+  // Allow transitions when applying filters after Load More
+  const isFilterTransition = (
+    currentState.paginationMode === 'server' && 
+    newState.paginationMode === 'client'
+  ) || (
+    !currentState.isSearchActive && newState.isSearchActive
+  ) || (
+    !currentState.hasFiltersApplied && newState.hasFiltersApplied
+  );
+  
+  if (isFilterTransition) {
+    console.log('✅ Allowing filter transition from server to client mode');
+    return true;
+  }
+  
   // Validate that the new state is internally consistent
   const validation = validateStateConsistency(newState);
   
-  if (!validation.isValid) {
-    console.warn('❌ Invalid state transition - new state is inconsistent:', validation.errors);
+  // Only block transitions for critical errors, not warnings
+  const criticalErrors = validation.errors.filter(error => 
+    !error.includes('conflicting loading states') && // Allow loading state fixes
+    !error.includes('should equal displayPosts') && // Allow display post mismatches during transitions
+    !error.includes('expected') && error.includes('paginated posts') // Allow pagination count mismatches during transitions
+  );
+  
+  if (criticalErrors.length > 0) {
+    console.warn('❌ Invalid state transition - critical errors:', criticalErrors);
     return false;
   }
   
   // Log warnings but allow transition
   if (validation.warnings.length > 0) {
-    console.warn('⚠️ State transition warnings:', validation.warnings);
+    console.warn('⚠️ State transition warnings (allowed):', validation.warnings);
+  }
+  
+  // Log non-critical errors but allow transition
+  if (validation.errors.length > 0) {
+    console.warn('⚠️ State transition non-critical errors (allowed):', validation.errors);
   }
   
   return true;

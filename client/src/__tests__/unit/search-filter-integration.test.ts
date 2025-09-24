@@ -271,8 +271,8 @@ describe('Search and Filter Integration Unit Tests', () => {
 
       // Validate state
       const debugInfo = paginationManager.getDebugInfo();
-      expect(debugInfo.validation.isValid).toBe(true);
-      expect(debugInfo.validation.errors).toHaveLength(0);
+      expect((debugInfo.validation as any).isValid).toBe(true);
+      expect((debugInfo.validation as any).errors).toHaveLength(0);
     });
 
     it('should maintain valid state during filter operations', () => {
@@ -285,8 +285,8 @@ describe('Search and Filter Integration Unit Tests', () => {
 
       // Validate state
       const debugInfo = paginationManager.getDebugInfo();
-      expect(debugInfo.validation.isValid).toBe(true);
-      expect(debugInfo.validation.errors).toHaveLength(0);
+      expect((debugInfo.validation as any).isValid).toBe(true);
+      expect((debugInfo.validation as any).errors).toHaveLength(0);
     });
 
     it('should recover from invalid states gracefully', () => {
@@ -330,7 +330,7 @@ describe('Search and Filter Integration Unit Tests', () => {
 
       // State should still be valid
       const debugInfo = paginationManager.getDebugInfo();
-      expect(debugInfo.validation.isValid).toBe(true);
+      expect((debugInfo.validation as any).isValid).toBe(true);
     });
 
     it('should handle large search results efficiently', () => {

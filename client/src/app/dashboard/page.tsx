@@ -22,7 +22,7 @@ import {
 import { searchContent } from "@/utils/search";
 import { createUnifiedPaginationState } from "@/utils/unifiedPaginationState";
 import type { PaginationState } from "@/types/pagination";
-import type { UserProfile } from "@/types";
+import type { UserProfile, Post } from "@/types";
 
 // Error Boundary Components
 const AudioUploadErrorBoundary = ({
@@ -152,7 +152,7 @@ export default function Dashboard() {
 
   // Legacy state for compatibility
   const [currentSearchQuery, setCurrentSearchQuery] = useState("");
-  
+
   // SIMPLE FILTER STATE - Direct approach
   const [currentFilters, setCurrentFilters] = useState<SearchFilters>({});
   const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
@@ -164,7 +164,7 @@ export default function Dashboard() {
   // Deduplicate posts by ID
   const deduplicatePosts = useCallback((posts: any[]) => {
     const seen = new Set();
-    return posts.filter(post => {
+    return posts.filter((post: any) => {
       if (seen.has(post.id)) {
         return false;
       }
@@ -175,15 +175,11 @@ export default function Dashboard() {
 
   // Apply filters directly - SIMPLE APPROACH
   const applyFiltersDirectly = useCallback((filters: SearchFilters, allPosts: unknown[]) => {
-    console.log('🔍 Applying filters directly:', filters);
-    
     let filtered = [...allPosts];
     
     // Apply post type filter
     if (filters.postType && filters.postType !== 'all') {
-      console.log(`Filtering by post type: ${filters.postType}`);
       filtered = filtered.filter(post => post.post_type === filters.postType);
-      console.log(`After filter: ${filtered.length} posts`);
     }
     
     // Apply time range filter
@@ -223,6 +219,10 @@ export default function Dashboard() {
     
     return filtered;
   }, []);
+    
+
+    
+
 
   // Subscribe to pagination state changes
   useEffect(() => {
@@ -236,7 +236,6 @@ export default function Dashboard() {
   // Update filtered posts when allPosts changes (to include newly loaded posts)
   useEffect(() => {
     if (filteredPosts.length > 0 && Object.keys(currentFilters).length > 0) {
-      console.log('🔄 Updating filtered posts due to allPosts change');
       const deduplicatedAllPosts = deduplicatePosts(paginationState.allPosts);
       const newFiltered = applyFiltersDirectly(currentFilters, deduplicatedAllPosts);
       const deduplicatedFiltered = deduplicatePosts(newFiltered);
@@ -244,7 +243,6 @@ export default function Dashboard() {
       // Only update if the filtered posts actually changed
       if (deduplicatedFiltered.length !== filteredPosts.length) {
         setFilteredPosts(deduplicatedFiltered);
-        console.log(`🔄 Updated filtered posts: ${deduplicatedFiltered.length} posts`);
       }
     }
   }, [paginationState.allPosts, currentFilters, applyFiltersDirectly, deduplicatePosts]);
@@ -256,7 +254,6 @@ export default function Dashboard() {
 
       try {
         paginationManager.setLoadingState(true, append);
-        console.log(`Loading posts: page ${page}, append: ${append}`);
 
         const { posts: newPosts, hasMore } = await fetchPosts(
           page,
@@ -283,7 +280,7 @@ export default function Dashboard() {
           paginationManager.updateTotalPostsCount(page * POSTS_PER_PAGE);
         }
 
-        console.log(`Loaded ${newPosts.length} posts, hasMore: ${hasMore}`);
+
       } catch (error) {
         console.error("Error loading posts:", error);
         setError("Failed to load posts. Please try again.");
@@ -320,10 +317,9 @@ export default function Dashboard() {
     [paginationManager]
   );
 
-  // Handle filters change - SIMPLIFIED APPROACH WITH DEDUPLICATION
+  // Handle filters change - SIMPLE APPROACH WITH MINIMAL DEBOUNCING
   const handleFiltersChange = useCallback(
     async (filters: SearchFilters) => {
-      console.log('🔄 Dashboard: Handling filter change:', filters);
       setCurrentFilters(filters);
       setFilterPage(1); // Reset to first page
       
@@ -331,15 +327,11 @@ export default function Dashboard() {
       const hasActiveFilters = filters.postType && filters.postType !== 'all';
       
       if (hasActiveFilters) {
-        console.log('🔍 Dashboard: Using direct filtering approach');
-        
         // Get current posts and ensure deduplication
         let allPosts = deduplicatePosts(paginationState.allPosts);
-        console.log(`📊 Starting with ${allPosts.length} deduplicated posts`);
         
         // Ensure we have enough posts for filtering
         if (allPosts.length < 50) {
-          console.log('📥 Dashboard: Fetching more posts for filtering');
           try {
             // Track which pages we've already loaded to avoid duplicates
             const currentPages = Math.ceil(allPosts.length / POSTS_PER_PAGE);
@@ -351,8 +343,6 @@ export default function Dashboard() {
                 // Add new posts and deduplicate
                 const combinedPosts = [...allPosts, ...morePosts];
                 allPosts = deduplicatePosts(combinedPosts);
-                
-                console.log(`📥 Fetched page ${i}: ${morePosts.length} posts, total after dedup: ${allPosts.length}`);
                 
                 // Update pagination manager with deduplicated posts
                 paginationManager.updatePosts({
@@ -376,8 +366,8 @@ export default function Dashboard() {
         // Apply filters directly to deduplicated posts
         const filtered = applyFiltersDirectly(filters, allPosts);
         const deduplicatedFiltered = deduplicatePosts(filtered);
+        
         setFilteredPosts(deduplicatedFiltered);
-        console.log(`🎯 Direct filtering result: ${deduplicatedFiltered.length} posts (deduplicated)`);
       } else {
         // No active filters - clear filtered posts
         setFilteredPosts([]);
@@ -386,6 +376,8 @@ export default function Dashboard() {
     },
     [paginationState.allPosts, user?.id, paginationManager, applyFiltersDirectly, deduplicatePosts]
   );
+      
+
 
   // Clear search
   const clearSearch = useCallback(async () => {
@@ -398,7 +390,6 @@ export default function Dashboard() {
 
   // Handle load more for filtered content
   const handleFilteredLoadMore = useCallback(() => {
-    console.log('🔄 Loading more filtered posts');
     setFilterPage(prev => prev + 1);
   }, []);
 
@@ -555,8 +546,6 @@ export default function Dashboard() {
   const hasMorePosts = isUsingSimpleFilter
     ? (filterPage * POSTS_PER_PAGE) < filteredPosts.length
     : paginationState.hasMorePosts;
-    
-  console.log(`📊 Display: ${displayPosts.length} posts (${isUsingSimpleFilter ? 'filtered' : 'paginated'}), hasMore: ${hasMorePosts}`);
 
   return (
     <MainLayout>

@@ -39,6 +39,7 @@ export default function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const lastFiltersRef = useRef<string>('');
   const previousCurrentQueryRef = useRef(currentQuery);
+  const previousPostTypeRef = useRef(postType);
   const cacheExpiryTime = 5 * 60 * 1000; // 5 minutes
 
   // FIXED: Prevent state conflicts - only sync if it's an external change
@@ -275,16 +276,36 @@ export default function SearchBar({
     // Only notify if filters actually changed and it's not an internal update
     if (lastFiltersRef.current !== filtersString && onFiltersChange && !isInternalUpdate.current) {
       lastFiltersRef.current = filtersString;
-      console.log('🔄 SearchBar notifying parent of filter changes:', currentFilters);
       
-      // Add small delay to prevent conflicts with search operations
-      const timeoutId = setTimeout(() => {
-        onFiltersChange(currentFilters);
-      }, 50);
-      
-      return () => clearTimeout(timeoutId);
+      // Immediate notification for better reliability - no debouncing
+      onFiltersChange(currentFilters);
     }
   }, [query, postType, sortBy, timeRange, onFiltersChange]);
+
+  // Additional reliability check for postType changes
+  useEffect(() => {
+    if (previousPostTypeRef.current !== postType && onFiltersChange) {
+      previousPostTypeRef.current = postType;
+      
+      // Force filter update when postType changes
+      const currentFilters: SearchFilters = {};
+      if (query.trim()) {
+        currentFilters.query = query;
+      }
+      if (postType !== 'all') {
+        currentFilters.postType = postType;
+      }
+      if (sortBy !== 'recent') {
+        currentFilters.sortBy = sortBy;
+      }
+      if (timeRange !== 'all') {
+        currentFilters.timeRange = timeRange;
+      }
+      
+      // Immediate notification to ensure reliability
+      onFiltersChange(currentFilters);
+    }
+  }, [postType, query, sortBy, timeRange, onFiltersChange]);
 
   const handleSearch = useCallback(async () => {
     // Only include non-default values in filters
@@ -496,7 +517,10 @@ export default function SearchBar({
           <label className="block text-sm font-medium text-gray-300 mb-2">Content Type</label>
           <select
             value={postType}
-            onChange={(e) => setPostType(e.target.value as SearchFilters['postType'])}
+            onChange={(e) => {
+              const newPostType = e.target.value as SearchFilters['postType'];
+              setPostType(newPostType);
+            }}
             className="w-full bg-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Content</option>

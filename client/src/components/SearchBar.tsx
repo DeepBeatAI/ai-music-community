@@ -102,6 +102,16 @@ export default function SearchBar({
     setSearchResultsCache(new Map());
   }, []);
 
+  // Store callbacks in refs to avoid dependency issues
+  const onSearchRef = useRef(onSearch);
+  const onPaginationResetRef = useRef(onPaginationReset);
+  
+  // Update refs when props change
+  useEffect(() => {
+    onSearchRef.current = onSearch;
+    onPaginationResetRef.current = onPaginationReset;
+  }, [onSearch, onPaginationReset]);
+
   // Memoized search function with caching and pagination integration
   const performSearch = useCallback(async (searchFilters: SearchFilters, resetPagination: boolean = true) => {
     setShowSuggestionDropdown(false);
@@ -111,9 +121,9 @@ export default function SearchBar({
     
     if (!hasQuery && !hasFilters) {
       console.log('🧹 SearchBar: Clearing search - no active filters');
-      onSearch({ posts: [], users: [], totalResults: 0 }, '');
-      if (resetPagination && onPaginationReset) {
-        onPaginationReset();
+      onSearchRef.current({ posts: [], users: [], totalResults: 0 }, '');
+      if (resetPagination && onPaginationResetRef.current) {
+        onPaginationResetRef.current();
       }
       return;
     }
@@ -123,11 +133,11 @@ export default function SearchBar({
       console.log('🔍 SearchBar: Filter-only change, letting dashboard handle filtering');
       // Mark as internal update to prevent sync conflicts
       isInternalUpdate.current = true;
-      onSearch({ posts: [], users: [], totalResults: 0 }, '');
+      onSearchRef.current({ posts: [], users: [], totalResults: 0 }, '');
       setTimeout(() => { isInternalUpdate.current = false; }, 100);
       
-      if (resetPagination && onPaginationReset) {
-        onPaginationReset();
+      if (resetPagination && onPaginationResetRef.current) {
+        onPaginationResetRef.current();
       }
       return;
     }
@@ -136,9 +146,9 @@ export default function SearchBar({
     const cachedResults = getCachedResults(searchFilters);
     if (cachedResults) {
       console.log('📋 SearchBar: Using cached results for search');
-      onSearch(cachedResults, searchFilters.query || '');
-      if (resetPagination && onPaginationReset) {
-        onPaginationReset();
+      onSearchRef.current(cachedResults, searchFilters.query || '');
+      if (resetPagination && onPaginationResetRef.current) {
+        onPaginationResetRef.current();
       }
       return;
     }
@@ -163,23 +173,23 @@ export default function SearchBar({
       
       // Mark as internal update to prevent sync conflicts
       isInternalUpdate.current = true;
-      onSearch(finalResults, searchFilters.query || '');
+      onSearchRef.current(finalResults, searchFilters.query || '');
       setTimeout(() => { isInternalUpdate.current = false; }, 100);
       
       // Reset pagination when search changes
-      if (resetPagination && onPaginationReset) {
-        onPaginationReset();
+      if (resetPagination && onPaginationResetRef.current) {
+        onPaginationResetRef.current();
       }
     } catch (error) {
       console.error('❌ SearchBar: Error searching:', error);
-      onSearch({ posts: [], users: [], totalResults: 0 }, searchFilters.query || '');
-      if (resetPagination && onPaginationReset) {
-        onPaginationReset();
+      onSearchRef.current({ posts: [], users: [], totalResults: 0 }, searchFilters.query || '');
+      if (resetPagination && onPaginationResetRef.current) {
+        onPaginationResetRef.current();
       }
     } finally {
       setIsLoading(false);
     }
-  }, [onSearch, onPaginationReset, getCachedResults, setCachedResults]);
+  }, [getCachedResults, setCachedResults]);
 
   // Debounced search and suggestions effect
   useEffect(() => {
@@ -239,9 +249,9 @@ export default function SearchBar({
       } else {
         // Clear results if no query and no filters
         console.log('🧹 SearchBar clearing search - no query or filters active');
-        onSearch({ posts: [], users: [], totalResults: 0 }, '');
-        if (onPaginationReset) {
-          onPaginationReset();
+        onSearchRef.current({ posts: [], users: [], totalResults: 0 }, '');
+        if (onPaginationResetRef.current) {
+          onPaginationResetRef.current();
         }
       }
     }, 300);
@@ -251,7 +261,8 @@ export default function SearchBar({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [query, postType, sortBy, timeRange, showSuggestions, performSearch, onSearch, onPaginationReset]);
+  }, [query, postType, sortBy, timeRange, showSuggestions]);
+  // NOTE: performSearch, onSearch, onPaginationReset intentionally excluded to prevent infinite loops
 
   // Controlled filter change handlers to prevent infinite loops
   const handlePostTypeChange = useCallback((newType: SearchFilters['postType']) => {
@@ -361,17 +372,22 @@ export default function SearchBar({
     setSortBy('recent');
     setTimeRange('all');
     
+    // Immediately notify parent of cleared filters
+    if (onFiltersChange) {
+      onFiltersChange({});
+    }
+    
+    // Clear search results
+    onSearchRef.current({ posts: [], users: [], totalResults: 0 }, '');
+    
     // Reset pagination immediately
-    if (onPaginationReset) {
-      onPaginationReset();
+    if (onPaginationResetRef.current) {
+      onPaginationResetRef.current();
     }
     
     // Clear internal update flag after a delay
     setTimeout(() => { isInternalUpdate.current = false; }, 100);
-    
-    // The useEffect will trigger search automatically to clear results
-    // This will also notify the parent through onFiltersChange
-  }, [invalidateSearchCache, onPaginationReset]);
+  }, [invalidateSearchCache, onFiltersChange]);
 
   // Pagination state display helpers
   const getPaginationInfo = useCallback(() => {
@@ -549,20 +565,13 @@ export default function SearchBar({
           </select>
         </div>
 
-        <div className="flex items-end space-x-2">
+        <div className="flex items-end">
           <button
             onClick={handleClearAll}
-            className="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm transition-colors"
-            title="Reset all search filters to default values"
+            className="w-full px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm transition-colors"
+            title="Reset all filters and refresh results"
           >
             Reset All
-          </button>
-          <button
-            onClick={invalidateSearchCache}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm transition-colors"
-            title="Clear search cache and refresh results"
-          >
-            🔄
           </button>
         </div>
       </div>

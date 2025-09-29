@@ -185,61 +185,121 @@ export default function Dashboard() {
       console.log(`  ✓ Post type filter (${filters.postType}): ${before} → ${filtered.length}`);
     }
     
-    // Apply time range filter
+    // Apply time range filter (UTC-based)
     if (filters.timeRange && filters.timeRange !== 'all') {
       const now = new Date();
-      const cutoff = new Date();
+      let cutoff: Date;
       
       switch (filters.timeRange) {
         case 'today':
-          cutoff.setHours(0, 0, 0, 0);
+          // Get start of today in UTC
+          cutoff = new Date(now);
+          cutoff.setUTCHours(0, 0, 0, 0);
           break;
         case 'week':
-          cutoff.setDate(now.getDate() - 7);
+          // Get 7 days ago in UTC
+          cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
         case 'month':
-          cutoff.setMonth(now.getMonth() - 1);
+          // Get 30 days ago in UTC
+          cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           break;
+        default:
+          cutoff = new Date(0); // Unix epoch
       }
       
       const before = filtered.length;
-      filtered = filtered.filter(post => new Date(post.created_at) >= cutoff);
-      console.log(`  ✓ Time range filter (${filters.timeRange}): ${before} → ${filtered.length}`);
+      filtered = filtered.filter(post => {
+        const postDate = new Date(post.created_at);
+        return postDate >= cutoff;
+      });
+      console.log(`  ✓ Time range filter (${filters.timeRange}): ${before} → ${filtered.length} (cutoff: ${cutoff.toISOString()})`);
     }
     
     // Apply sorting
     const sortBy = filters.sortBy || 'recent';
-    if (sortBy !== 'relevance') {
-      switch (sortBy) {
-        case 'oldest':
-          filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-          console.log(`  ✓ Sorted by: oldest first`);
-          break;
-        case 'likes':
+    switch (sortBy) {
+      case 'oldest':
+        filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        console.log(`  ✓ Sorted by: oldest first`);
+        break;
+        
+      case 'likes':
+        // Simple sort by like count only
+        filtered.sort((a, b) => {
+          const likeDiff = (b.like_count || 0) - (a.like_count || 0);
+          if (likeDiff === 0) {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }
+          return likeDiff;
+        });
+        console.log(`  ✓ Sorted by: most liked`);
+        break;
+        
+      case 'popular':
+        // Popular algorithm: weighted score combining likes and recency
+        filtered.sort((a, b) => {
+          const now = Date.now();
+          const dayMs = 24 * 60 * 60 * 1000;
+          
+          // Calculate recency score (0-7 based on days old, max 7 days)
+          const aDaysOld = Math.floor((now - new Date(a.created_at).getTime()) / dayMs);
+          const bDaysOld = Math.floor((now - new Date(b.created_at).getTime()) / dayMs);
+          const aRecencyScore = Math.max(0, 7 - aDaysOld);
+          const bRecencyScore = Math.max(0, 7 - bDaysOld);
+          
+          // Weighted score: likes * 2 + recency score
+          const aScore = ((a.like_count || 0) * 2) + aRecencyScore;
+          const bScore = ((b.like_count || 0) * 2) + bRecencyScore;
+          
+          return bScore - aScore;
+        });
+        console.log(`  ✓ Sorted by: popular (likes*2 + recency)`);
+        break;
+        
+      case 'relevance':
+        // Relevance algorithm: prioritize based on search query matches
+        if (filters.query && filters.query.trim()) {
+          const queryLower = filters.query.toLowerCase();
           filtered.sort((a, b) => {
-            const likeDiff = (b.like_count || 0) - (a.like_count || 0);
-            if (likeDiff === 0) {
+            let aScore = 0;
+            let bScore = 0;
+            
+            // Exact matches in content get highest score
+            if (a.content.toLowerCase().includes(queryLower)) aScore += 10;
+            if (b.content.toLowerCase().includes(queryLower)) bScore += 10;
+            
+            // Audio filename matches
+            if (a.audio_filename && a.audio_filename.toLowerCase().includes(queryLower)) aScore += 8;
+            if (b.audio_filename && b.audio_filename.toLowerCase().includes(queryLower)) bScore += 8;
+            
+            // Username matches
+            if (a.user_profile?.username?.toLowerCase().includes(queryLower)) aScore += 5;
+            if (b.user_profile?.username?.toLowerCase().includes(queryLower)) bScore += 5;
+            
+            // Add like bonus for equal relevance (max 5 points)
+            aScore += Math.min(a.like_count || 0, 5);
+            bScore += Math.min(b.like_count || 0, 5);
+            
+            if (bScore === aScore) {
+              // If equal relevance, sort by recency
               return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
             }
-            return likeDiff;
+            
+            return bScore - aScore;
           });
-          console.log(`  ✓ Sorted by: most liked`);
-          break;
-        case 'popular':
-          filtered.sort((a, b) => {
-            const likeDiff = (b.like_count || 0) - (a.like_count || 0);
-            if (likeDiff === 0) {
-              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-            }
-            return likeDiff;
-          });
-          console.log(`  ✓ Sorted by: popular`);
-          break;
-        case 'recent':
-        default:
+          console.log(`  ✓ Sorted by: relevance (query-based scoring)`);
+        } else {
+          // No query - default to recent
           filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          console.log(`  ✓ Sorted by: most recent`);
-      }
+          console.log(`  ✓ Sorted by: relevance (no query, using recent)`);
+        }
+        break;
+        
+      case 'recent':
+      default:
+        filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        console.log(`  ✓ Sorted by: most recent`);
     }
     
     console.log(`✅ Final filtered count: ${filtered.length}`);
@@ -776,8 +836,9 @@ export default function Dashboard() {
                   <span className="bg-purple-900/30 text-purple-400 px-3 py-1 rounded-full text-xs font-medium border border-purple-700">
                     ⬇️ {
                       currentFilters.sortBy === 'oldest' ? 'Oldest First' :
-                      currentFilters.sortBy === 'popular' ? 'Popular' :
+                      currentFilters.sortBy === 'popular' ? 'Most Popular' :
                       currentFilters.sortBy === 'likes' ? 'Most Liked' :
+                      currentFilters.sortBy === 'relevance' ? 'Most Relevant' :
                       'Recent'
                     }
                   </span>

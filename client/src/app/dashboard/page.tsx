@@ -651,7 +651,13 @@ export default function Dashboard() {
   const showNoResults = paginationState.isSearchActive && paginationState.searchResults.totalResults === 0;
   
   // Use simple filtered posts if available, otherwise use pagination system
-  const isUsingSimpleFilter = filteredPosts.length > 0;
+  // FIXED: Check if filters are active, not just if filtered posts exist
+  const hasActiveFilters = 
+    (currentFilters.postType && currentFilters.postType !== 'all') ||
+    (currentFilters.sortBy && currentFilters.sortBy !== 'recent') ||
+    (currentFilters.timeRange && currentFilters.timeRange !== 'all');
+  
+  const isUsingSimpleFilter = hasActiveFilters;
   
   // Ensure no duplicates in display posts
   const rawDisplayPosts = isUsingSimpleFilter 

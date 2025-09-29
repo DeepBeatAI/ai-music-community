@@ -174,12 +174,15 @@ export default function Dashboard() {
   }, []);
 
   // Apply filters directly - SIMPLE APPROACH
-  const applyFiltersDirectly = useCallback((filters: SearchFilters, allPosts: unknown[]) => {
+  const applyFiltersDirectly = useCallback((filters: SearchFilters, allPosts: Post[]) => {
+    console.log('🔧 Applying filters:', filters, 'to', allPosts.length, 'posts');
     let filtered = [...allPosts];
     
     // Apply post type filter
-    if (filters.postType && filters.postType !== 'all') {
+    if (filters.postType && filters.postType !== 'all' && filters.postType !== 'creators') {
+      const before = filtered.length;
       filtered = filtered.filter(post => post.post_type === filters.postType);
+      console.log(`  ✓ Post type filter (${filters.postType}): ${before} → ${filtered.length}`);
     }
     
     // Apply time range filter
@@ -199,24 +202,47 @@ export default function Dashboard() {
           break;
       }
       
+      const before = filtered.length;
       filtered = filtered.filter(post => new Date(post.created_at) >= cutoff);
+      console.log(`  ✓ Time range filter (${filters.timeRange}): ${before} → ${filtered.length}`);
     }
     
     // Apply sorting
-    if (filters.sortBy) {
-      filtered.sort((a, b) => {
-        switch (filters.sortBy) {
-          case 'oldest':
-            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-          case 'likes':
-            return (b.like_count || 0) - (a.like_count || 0);
-          case 'recent':
-          default:
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        }
-      });
+    const sortBy = filters.sortBy || 'recent';
+    if (sortBy !== 'relevance') {
+      switch (sortBy) {
+        case 'oldest':
+          filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          console.log(`  ✓ Sorted by: oldest first`);
+          break;
+        case 'likes':
+          filtered.sort((a, b) => {
+            const likeDiff = (b.like_count || 0) - (a.like_count || 0);
+            if (likeDiff === 0) {
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            }
+            return likeDiff;
+          });
+          console.log(`  ✓ Sorted by: most liked`);
+          break;
+        case 'popular':
+          filtered.sort((a, b) => {
+            const likeDiff = (b.like_count || 0) - (a.like_count || 0);
+            if (likeDiff === 0) {
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            }
+            return likeDiff;
+          });
+          console.log(`  ✓ Sorted by: popular`);
+          break;
+        case 'recent':
+        default:
+          filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          console.log(`  ✓ Sorted by: most recent`);
+      }
     }
     
+    console.log(`✅ Final filtered count: ${filtered.length}`);
     return filtered;
   }, []);
     
@@ -323,8 +349,11 @@ export default function Dashboard() {
       setCurrentFilters(filters);
       setFilterPage(1); // Reset to first page
       
-      // Check if we have active filters
-      const hasActiveFilters = filters.postType && filters.postType !== 'all';
+      // Check if we have active filters (extended to include Sort By and Time Range)
+      const hasActiveFilters = 
+        (filters.postType && filters.postType !== 'all') ||
+        (filters.sortBy && filters.sortBy !== 'recent') ||
+        (filters.timeRange && filters.timeRange !== 'all');
       
       if (hasActiveFilters) {
         // Get current posts and ensure deduplication
@@ -720,66 +749,65 @@ export default function Dashboard() {
             />
           </SearchErrorBoundary>
 
-          {/* Control Buttons - Updated to show search filters */}
-          {(paginationState.isSearchActive ||
-            Object.entries(paginationState.currentSearchFilters).some(([key, value]) => {
-              return value && value !== "all" && value !== "recent" && value !== "relevance";
-            })) && (
+          {/* Active Filters Display Bar */}
+          {(filteredPosts.length > 0 || 
+            currentFilters.query ||
+            (currentFilters.postType && currentFilters.postType !== 'all') ||
+            (currentFilters.sortBy && currentFilters.sortBy !== 'recent') ||
+            (currentFilters.timeRange && currentFilters.timeRange !== 'all')) && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center space-x-2 text-sm text-gray-300 flex-wrap gap-2">
-                {paginationState.currentSearchFilters.query && (
-                  <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs">
-                    Search: &ldquo;{paginationState.currentSearchFilters.query}&rdquo;
+                {/* Search Query Badge */}
+                {currentFilters.query && (
+                  <span className="bg-blue-900/30 text-blue-400 px-3 py-1 rounded-full text-xs font-medium border border-blue-700">
+                    🔍 Search: "{currentFilters.query}"
                   </span>
                 )}
-                {paginationState.currentSearchFilters.postType &&
-                  paginationState.currentSearchFilters.postType !== "all" && (
-                    <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded text-xs">
-                      Type:{" "}
-                      {paginationState.currentSearchFilters.postType === "creators"
-                        ? "Creators"
-                        : paginationState.currentSearchFilters.postType === "audio"
-                        ? "Audio Posts"
-                        : "Text Posts"}
-                    </span>
-                  )}
-                {paginationState.currentSearchFilters.sortBy &&
-                  paginationState.currentSearchFilters.sortBy !== "recent" &&
-                  paginationState.currentSearchFilters.sortBy !== "relevance" && (
-                    <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded text-xs">
-                      Sort:{" "}
-                      {paginationState.currentSearchFilters.sortBy === "oldest"
-                        ? "Oldest First"
-                        : paginationState.currentSearchFilters.sortBy === "popular"
-                        ? "Most Popular"
-                        : paginationState.currentSearchFilters.sortBy === "likes"
-                        ? "Most Liked"
-                        : "Most Recent"}
-                    </span>
-                  )}
-                {paginationState.currentSearchFilters.timeRange &&
-                  paginationState.currentSearchFilters.timeRange !== "all" && (
-                    <span className="bg-orange-900/30 text-orange-400 px-2 py-1 rounded text-xs">
-                      Time:{" "}
-                      {paginationState.currentSearchFilters.timeRange === "today"
-                        ? "Today"
-                        : paginationState.currentSearchFilters.timeRange === "week"
-                        ? "This Week"
-                        : paginationState.currentSearchFilters.timeRange === "month"
-                        ? "This Month"
-                        : paginationState.currentSearchFilters.timeRange}
-                    </span>
-                  )}
+                
+                {/* Content Type Badge */}
+                {currentFilters.postType && currentFilters.postType !== 'all' && (
+                  <span className="bg-green-900/30 text-green-400 px-3 py-1 rounded-full text-xs font-medium border border-green-700">
+                    📁 {currentFilters.postType === 'audio' ? 'Audio Posts' : currentFilters.postType === 'text' ? 'Text Posts' : 'Creators'}
+                  </span>
+                )}
+                
+                {/* Sort By Badge */}
+                {currentFilters.sortBy && currentFilters.sortBy !== 'recent' && (
+                  <span className="bg-purple-900/30 text-purple-400 px-3 py-1 rounded-full text-xs font-medium border border-purple-700">
+                    ⬇️ {
+                      currentFilters.sortBy === 'oldest' ? 'Oldest First' :
+                      currentFilters.sortBy === 'popular' ? 'Popular' :
+                      currentFilters.sortBy === 'likes' ? 'Most Liked' :
+                      'Recent'
+                    }
+                  </span>
+                )}
+                
+                {/* Time Range Badge */}
+                {currentFilters.timeRange && currentFilters.timeRange !== 'all' && (
+                  <span className="bg-orange-900/30 text-orange-400 px-3 py-1 rounded-full text-xs font-medium border border-orange-700">
+                    📅 {
+                      currentFilters.timeRange === 'today' ? 'Today' :
+                      currentFilters.timeRange === 'week' ? 'This Week' :
+                      'This Month'
+                    }
+                  </span>
+                )}
+                
+                {/* Results Count */}
+                {filteredPosts.length > 0 && (
+                  <span className="text-gray-400 text-xs ml-2">
+                    • {filteredPosts.length} {filteredPosts.length === 1 ? 'result' : 'results'}
+                  </span>
+                )}
               </div>
 
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={clearSearch}
-                  className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-900/20 transition-colors"
-                >
-                  Clear All
-                </button>
-              </div>
+              <button
+                onClick={clearSearch}
+                className="text-xs text-blue-400 hover:text-blue-300 px-3 py-1 rounded-full hover:bg-blue-900/20 transition-colors font-medium"
+              >
+                ✕ Clear All
+              </button>
             </div>
           )}
         </div>

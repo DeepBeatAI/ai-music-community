@@ -185,35 +185,48 @@ export default function Dashboard() {
       console.log(`  ✓ Post type filter (${filters.postType}): ${before} → ${filtered.length}`);
     }
     
-    // Apply time range filter (UTC-based)
+    // Apply time range filter (UTC-based) - FIXED: More strict filtering
     if (filters.timeRange && filters.timeRange !== 'all') {
       const now = new Date();
-      let cutoff: Date;
+      const nowMs = now.getTime();
+      let cutoffMs: number;
       
       switch (filters.timeRange) {
         case 'today':
-          // Get start of today in UTC
-          cutoff = new Date(now);
-          cutoff.setUTCHours(0, 0, 0, 0);
+          // Get start of today in UTC (00:00:00)
+          const todayUTC = new Date(now);
+          todayUTC.setUTCHours(0, 0, 0, 0);
+          cutoffMs = todayUTC.getTime();
           break;
         case 'week':
-          // Get 7 days ago in UTC
-          cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          // Exactly 7 days ago
+          cutoffMs = nowMs - (7 * 24 * 60 * 60 * 1000);
           break;
         case 'month':
-          // Get 30 days ago in UTC
-          cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          // Exactly 30 days ago
+          cutoffMs = nowMs - (30 * 24 * 60 * 60 * 1000);
           break;
         default:
-          cutoff = new Date(0); // Unix epoch
+          cutoffMs = 0; // Unix epoch
       }
       
       const before = filtered.length;
+      const cutoffDate = new Date(cutoffMs);
+      
       filtered = filtered.filter(post => {
         const postDate = new Date(post.created_at);
-        return postDate >= cutoff;
+        const postMs = postDate.getTime();
+        const isAfterCutoff = postMs >= cutoffMs;
+        
+        if (!isAfterCutoff) {
+          console.log(`  ✗ Filtered out: "${post.content.substring(0, 30)}" from ${postDate.toISOString()} (before cutoff ${cutoffDate.toISOString()})`);
+        }
+        
+        return isAfterCutoff;
       });
-      console.log(`  ✓ Time range filter (${filters.timeRange}): ${before} → ${filtered.length} (cutoff: ${cutoff.toISOString()})`);
+      
+      console.log(`  ✓ Time range filter (${filters.timeRange}): ${before} → ${filtered.length} (cutoff: ${cutoffDate.toISOString()})`);
+      console.log(`  ✓ Current UTC time: ${now.toISOString()}`);
     }
     
     // Apply sorting
@@ -225,9 +238,15 @@ export default function Dashboard() {
         break;
         
       case 'likes':
-        // Simple sort by like count only
+        // Simple sort by like count only - FIXED: Handle both like_count and likes_count
         filtered.sort((a, b) => {
-          const likeDiff = (b.like_count || 0) - (a.like_count || 0);
+          // Check both possible property names
+          const aLikes = (a.like_count ?? (a as any).likes_count ?? 0);
+          const bLikes = (b.like_count ?? (b as any).likes_count ?? 0);
+          
+          console.log(`  👍 Comparing likes: "${a.content.substring(0, 20)}" (${aLikes}) vs "${b.content.substring(0, 20)}" (${bLikes})`);
+          
+          const likeDiff = bLikes - aLikes;
           if (likeDiff === 0) {
             return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
           }
@@ -237,10 +256,14 @@ export default function Dashboard() {
         break;
         
       case 'popular':
-        // Popular algorithm: weighted score combining likes and recency
+        // Popular algorithm: weighted score combining likes and recency - FIXED: Handle both like_count and likes_count
         filtered.sort((a, b) => {
           const now = Date.now();
           const dayMs = 24 * 60 * 60 * 1000;
+          
+          // Check both possible property names
+          const aLikes = (a.like_count ?? (a as any).likes_count ?? 0);
+          const bLikes = (b.like_count ?? (b as any).likes_count ?? 0);
           
           // Calculate recency score (0-7 based on days old, max 7 days)
           const aDaysOld = Math.floor((now - new Date(a.created_at).getTime()) / dayMs);
@@ -249,8 +272,13 @@ export default function Dashboard() {
           const bRecencyScore = Math.max(0, 7 - bDaysOld);
           
           // Weighted score: likes * 2 + recency score
-          const aScore = ((a.like_count || 0) * 2) + aRecencyScore;
-          const bScore = ((b.like_count || 0) * 2) + bRecencyScore;
+          const aScore = (aLikes * 2) + aRecencyScore;
+          const bScore = (bLikes * 2) + bRecencyScore;
+          
+          // If scores are equal, sort by recency (newest first)
+          if (bScore === aScore) {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }
           
           return bScore - aScore;
         });
@@ -258,7 +286,7 @@ export default function Dashboard() {
         break;
         
       case 'relevance':
-        // Relevance algorithm: prioritize based on search query matches
+        // Relevance algorithm: prioritize based on search query matches - FIXED: Handle both like_count and likes_count
         if (filters.query && filters.query.trim()) {
           const queryLower = filters.query.toLowerCase();
           filtered.sort((a, b) => {
@@ -277,9 +305,11 @@ export default function Dashboard() {
             if (a.user_profile?.username?.toLowerCase().includes(queryLower)) aScore += 5;
             if (b.user_profile?.username?.toLowerCase().includes(queryLower)) bScore += 5;
             
-            // Add like bonus for equal relevance (max 5 points)
-            aScore += Math.min(a.like_count || 0, 5);
-            bScore += Math.min(b.like_count || 0, 5);
+            // Add like bonus for equal relevance (max 5 points) - check both property names
+            const aLikes = (a.like_count ?? (a as any).likes_count ?? 0);
+            const bLikes = (b.like_count ?? (b as any).likes_count ?? 0);
+            aScore += Math.min(aLikes, 5);
+            bScore += Math.min(bLikes, 5);
             
             if (bScore === aScore) {
               // If equal relevance, sort by recency

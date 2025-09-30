@@ -297,11 +297,6 @@ export default function AudioUpload({
               <p className="text-sm text-gray-400">
                 Supports MP3, WAV, FLAC, M4A, OGG • Max {formatFileSize(maxFileSize)} • Max 10 minutes
               </p>
-              {enableCompression && (
-                <p className="text-xs text-purple-400">
-                  🚀 Aggressive compression enabled - files will be compressed to reduce bandwidth costs
-                </p>
-              )}
             </div>
           </div>
         )}

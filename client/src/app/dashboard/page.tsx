@@ -142,6 +142,7 @@ export default function Dashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPerformancePanel, setShowPerformancePanel] = useState(false);
+  const [isPostFormExpanded, setIsPostFormExpanded] = useState(false); // New state for expandable form
 
   // Unified pagination state
   const [paginationManager] = useState(() => createUnifiedPaginationState());
@@ -348,6 +349,19 @@ export default function Dashboard() {
     return unsubscribe;
   }, [paginationManager]);
 
+  // Keyboard shortcut to toggle post form (Ctrl+N or Cmd+N)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        setIsPostFormExpanded(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
   // Update filtered posts when allPosts changes (to include newly loaded posts)
   useEffect(() => {
     if (filteredPosts.length > 0 && Object.keys(currentFilters).length > 0) {
@@ -552,6 +566,9 @@ export default function Dashboard() {
       await createTextPost(user.id, textContent);
       setTextContent("");
 
+      // Collapse the form after successful submission
+      setIsPostFormExpanded(false);
+
       // Reset pagination and reload posts
       paginationManager.reset();
       await loadPosts(1, false);
@@ -586,6 +603,9 @@ export default function Dashboard() {
 
       setAudioDescription("");
       setSelectedAudioFile(null);
+
+      // Collapse the form after successful submission
+      setIsPostFormExpanded(false);
 
       // Reset pagination and reload posts
       paginationManager.reset();
@@ -678,38 +698,101 @@ export default function Dashboard() {
 
 
 
-        {/* Post Creation Form */}
-        <div className="max-w-2xl mx-auto mb-8 bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-          {/* Tab Headers */}
-          <div className="flex border-b border-gray-700">
-            <button
-              type="button"
-              onClick={() => setActiveTab("text")}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
-                activeTab === "text"
-                  ? "bg-gray-700 text-white border-b-2 border-blue-500"
-                  : "text-gray-400 hover:text-gray-200 hover:bg-gray-750"
-              }`}
-            >
-              📝 Text Post
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("audio")}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
-                activeTab === "audio"
-                  ? "bg-gray-700 text-white border-b-2 border-blue-500"
-                  : "text-gray-400 hover:text-gray-200 hover:bg-gray-750"
-              }`}
-            >
-              🎵 Audio Post
-            </button>
-          </div>
+        {/* Post Creation Form - Expandable */}
+        <div className="max-w-2xl mx-auto mb-8">
+          {/* Expand/Collapse Button */}
+          <button
+            type="button"
+            onClick={() => setIsPostFormExpanded(!isPostFormExpanded)}
+            className={`w-full bg-gray-800 hover:bg-gray-750 rounded-lg shadow-lg p-4 transition-all duration-200 border ${
+              isPostFormExpanded ? "border-blue-600 bg-gray-750" : "border-gray-700 hover:border-gray-600"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-2xl">{isPostFormExpanded ? "✏️" : "➕"}</span>
+                <div className="text-left">
+                  <p className="text-white font-semibold flex items-center gap-2">
+                    {isPostFormExpanded ? "Create New Post" : "Create a New Post"}
+                    {/* Indicator badge for unsaved content */}
+                    {!isPostFormExpanded && (textContent || selectedAudioFile) && (
+                      <span className="bg-yellow-600 text-white text-xs px-2 py-0.5 rounded-full">
+                        Draft
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-gray-400 text-sm">
+                    {isPostFormExpanded 
+                      ? "Share your thoughts or music with the community" 
+                      : (textContent || selectedAudioFile) 
+                        ? "You have unsaved content - click to continue"
+                        : "Click to share text or audio content"}
+                    {!isPostFormExpanded && (
+                      <span className="hidden md:inline text-gray-500 text-xs ml-2">
+                        (Ctrl+N)
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <svg
+                className={`w-5 h-5 text-gray-400 transform transition-transform duration-200 ${
+                  isPostFormExpanded ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </div>
+          </button>
 
-          {/* Tab Content */}
-          <div className="p-6">
-            <form onSubmit={handleSubmit}>
-              {activeTab === "text" ? (
+          {/* Expandable Content with smooth animation */}
+          <div
+            className={`transition-all duration-300 ease-in-out overflow-hidden ${
+              isPostFormExpanded ? "max-h-[1000px] opacity-100 mt-4" : "max-h-0 opacity-0"
+            }`}
+            style={{
+              transitionProperty: "max-height, opacity, margin-top"
+            }}
+          >
+            <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
+              {/* Tab Headers */}
+              <div className="flex border-b border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("text")}
+                  className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+                    activeTab === "text"
+                      ? "bg-gray-700 text-white border-b-2 border-blue-500"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-gray-750"
+                  }`}
+                >
+                  📝 Text Post
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("audio")}
+                  className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+                    activeTab === "audio"
+                      ? "bg-gray-700 text-white border-b-2 border-blue-500"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-gray-750"
+                  }`}
+                >
+                  🎵 Audio Post
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="p-6">
+                <form onSubmit={handleSubmit}>
+                  {activeTab === "text" ? (
                 <div className="space-y-4">
                   <div>
                     <label
@@ -780,38 +863,47 @@ export default function Dashboard() {
                       </span>
                     </div>
                   </div>
-                </div>
-              )}
-              {/* Error Display */}
-              {error && (
-                <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded">
-                  <p className="text-red-400 text-sm">{error}</p>
-                </div>
-              )}
-
-              <div className="mt-6 flex justify-end">
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium
-                    disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  disabled={
-                    isSubmitting ||
-                    (activeTab === "audio" && !selectedAudioFile)
-                  }
-                >
-                  {isSubmitting ? (
-                    <span className="flex items-center space-x-2">
-                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                      <span>
-                        {activeTab === "audio" ? "Uploading..." : "Posting..."}
-                      </span>
-                    </span>
-                  ) : (
-                    `Create ${activeTab === "text" ? "Text" : "Audio"} Post`
+                    </div>
                   )}
-                </button>
+                  {/* Error Display */}
+                  {error && (
+                    <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded">
+                      <p className="text-red-400 text-sm">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsPostFormExpanded(false)}
+                      className="px-4 py-2 text-gray-400 hover:text-gray-200 transition-colors text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium
+                        disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      disabled={
+                        isSubmitting ||
+                        (activeTab === "audio" && !selectedAudioFile)
+                      }
+                    >
+                      {isSubmitting ? (
+                        <span className="flex items-center space-x-2">
+                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                          <span>
+                            {activeTab === "audio" ? "Uploading..." : "Posting..."}
+                          </span>
+                        </span>
+                      ) : (
+                        `Create ${activeTab === "text" ? "Text" : "Audio"} Post`
+                      )}
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
           </div>
         </div>
 
@@ -1081,6 +1173,29 @@ export default function Dashboard() {
           onToggle={() => setShowPerformancePanel(!showPerformancePanel)}
         />
       )}
+
+      {/* Floating Action Button for Mobile - Quick Post Creation */}
+      <button
+        onClick={() => setIsPostFormExpanded(true)}
+        className={`md:hidden fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center z-50 transition-all duration-200 hover:scale-110 ${
+          isPostFormExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
+        aria-label="Create new post"
+      >
+        <svg
+          className="w-6 h-6"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 4v16m8-8H4"
+          />
+        </svg>
+      </button>
     </MainLayout>
   );
 }

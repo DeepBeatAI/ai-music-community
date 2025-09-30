@@ -169,7 +169,7 @@ export default function NotificationsPage() {
                   onClick={() => router.push('/discover')}
                   className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
                 >
-                  Discover Creators
+                  Discover Music and Creators
                 </button>
               </div>
             </div>
@@ -250,14 +250,14 @@ export default function NotificationsPage() {
               className="flex items-center justify-center space-x-2 bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-lg transition-colors"
             >
               <span>📱</span>
-              <span className="text-sm">View Feed</span>
+              <span className="text-sm">View Activity Feed</span>
             </button>
             <button
               onClick={() => router.push('/discover')}
               className="flex items-center justify-center space-x-2 bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-lg transition-colors"
             >
               <span>🔍</span>
-              <span className="text-sm">Discover</span>
+              <span className="text-sm">Discover Music and Creators</span>
             </button>
           </div>
         </div>

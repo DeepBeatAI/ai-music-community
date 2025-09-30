@@ -67,13 +67,13 @@ export default function AuthenticatedHome() {
             onClick={() => router.push('/dashboard')}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-500 transition-colors"
           >
-            Create New Post
+            Connect with the Community
           </button>
           <button
             onClick={() => router.push('/discover')}
             className="bg-gray-700 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors"
           >
-            Explore Community
+            Discover Music and Creators
           </button>
         </div>
       </div>

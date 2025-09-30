@@ -301,8 +301,8 @@ export default function Dashboard() {
             if (b.audio_filename && b.audio_filename.toLowerCase().includes(queryLower)) bScore += 8;
             
             // Username matches
-            if (a.user_profile?.username?.toLowerCase().includes(queryLower)) aScore += 5;
-            if (b.user_profile?.username?.toLowerCase().includes(queryLower)) bScore += 5;
+            if (a.user_profiles?.username?.toLowerCase().includes(queryLower)) aScore += 5;
+            if (b.user_profiles?.username?.toLowerCase().includes(queryLower)) bScore += 5;
             
             // Add like bonus for equal relevance (max 5 points) - check both property names
             const aLikes = (a.like_count ?? (a as any).likes_count ?? 0);
@@ -676,21 +676,7 @@ export default function Dashboard() {
       <div className="min-h-screen p-4 bg-gray-900 text-white">
         <h1 className="text-3xl font-bold mb-6 text-center">Community Board</h1>
 
-        {profile && (
-          <div className="text-center text-gray-300 mb-8">
-            <p>
-              Welcome back,{" "}
-              <span className="text-blue-400 font-medium">
-                {profile.username}
-              </span>
-              !
-            </p>
-            <div className="mt-2 text-xs text-green-400">
-              🎯 Bandwidth optimized: Loading {POSTS_PER_PAGE} posts at a time •
-              Audio files load only when played
-            </div>
-          </div>
-        )}
+
 
         {/* Post Creation Form */}
         <div className="max-w-2xl mx-auto mb-8 bg-gray-800 rounded-lg shadow-lg overflow-hidden">
@@ -1048,7 +1034,7 @@ export default function Dashboard() {
                         <span className="font-semibold">
                           Show More ({Math.min(POSTS_PER_PAGE, filteredPosts.length - displayPosts.length)})
                         </span>
-                        <span className="text-sm opacity-75">Instant</span>
+
                       </button>
                       <div className="mt-4 text-sm text-gray-400">
                         Showing {displayPosts.length} of {filteredPosts.length} filtered posts
@@ -1073,23 +1059,14 @@ export default function Dashboard() {
           {/* End of Posts Message */}
           {!paginationState.isSearchActive && !paginationState.hasMorePosts && paginationState.allPosts.length > 0 && (
             <div className="text-center py-8">
-              <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                <div className="text-3xl mb-2">🎉</div>
-                <p className="text-gray-400 mb-2">
-                  You&apos;ve reached the end!
-                </p>
-                <p className="text-sm text-gray-500 mb-3">
-                  All posts have been loaded.
-                </p>
-                <button
-                  onClick={() =>
-                    window.scrollTo({ top: 0, behavior: "smooth" })
-                  }
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors"
-                >
-                  Back to Top
-                </button>
-              </div>
+              <button
+                onClick={() =>
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                }
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors"
+              >
+                Back to Top
+              </button>
             </div>
           )}
         </div>

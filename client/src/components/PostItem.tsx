@@ -41,13 +41,6 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
             {post.audio_filename || 'Audio Track'}
           </span>
         </div>
-        
-        {/* Bandwidth savings indicator */}
-        {!audioLoaded && (
-          <div className="text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
-            📊 Audio loads on play
-          </div>
-        )}
       </div>
       
       {/* Optimized Audio Player Implementation */}
@@ -62,11 +55,8 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
               <span>▶️</span>
               <span>Load & Play Audio</span>
             </button>
-            <p className="text-xs text-gray-400 mt-2">
-              💾 Bandwidth optimized: {post.audio_file_size ? (post.audio_file_size / 1024 / 1024).toFixed(1) + 'MB' : 'Audio file'} will load when you click play
-            </p>
             {post.audio_duration && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 mt-2">
                 Duration: {Math.floor(post.audio_duration / 60)}:{String(Math.floor(post.audio_duration % 60)).padStart(2, '0')}
               </p>
             )}
@@ -135,7 +125,7 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: P
                 )}
               </div>
               
-              {/* User Stats - Show for other users' posts */}
+              {/* User Stats - Show for all posts (both audio and text) */}
               {!isOwner && (
                 <UserStatsCard 
                   userId={post.user_id} 
@@ -222,13 +212,10 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: P
             </button>
           </div>
           
-          {/* File Info for Audio Posts */}
-          {post.post_type === 'audio' && post.audio_file_size && (
-            <div className="text-xs text-gray-500 flex items-center space-x-2">
-              <span>{(post.audio_file_size / (1024 * 1024)).toFixed(1)}MB</span>
-              {post.audio_duration && (
-                <span>• {Math.floor(post.audio_duration / 60)}:{String(Math.floor(post.audio_duration % 60)).padStart(2, '0')}</span>
-              )}
+          {/* Duration for Audio Posts (removed file size) */}
+          {post.post_type === 'audio' && post.audio_duration && (
+            <div className="text-xs text-gray-500">
+              {Math.floor(post.audio_duration / 60)}:{String(Math.floor(post.audio_duration % 60)).padStart(2, '0')}
             </div>
           )}
         </div>

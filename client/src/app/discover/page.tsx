@@ -51,11 +51,12 @@ export default function DiscoverPage() {
       
       setSearchResults(safeResults);
       // Only mark as searched if there's actually a query or active non-default filters
-      const hasActiveFilters = 
+      const hasActiveFilters = Boolean(
         (query && query.length > 0) || 
         (currentFilters.postType && currentFilters.postType !== 'all') || 
         (currentFilters.sortBy && currentFilters.sortBy !== 'recent') || 
-        (currentFilters.timeRange && currentFilters.timeRange !== 'all');
+        (currentFilters.timeRange && currentFilters.timeRange !== 'all')
+      );
       setHasSearched(hasActiveFilters);
     } catch (error) {
       console.error('Search error:', error);

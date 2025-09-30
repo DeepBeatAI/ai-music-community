@@ -7,7 +7,6 @@ import MainLayout from "@/components/layout/MainLayout";
 import PostItem from "@/components/PostItem";
 import AudioUpload from "@/components/AudioUpload";
 import SearchBar from "@/components/SearchBar";
-import ActivityFeed from "@/components/ActivityFeed";
 import FollowButton from "@/components/FollowButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PerformanceMonitoringPanel from "@/components/PerformanceMonitoringPanel";
@@ -675,7 +674,7 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="min-h-screen p-4 bg-gray-900 text-white">
-        <h1 className="text-3xl font-bold mb-6 text-center">Dashboard</h1>
+        <h1 className="text-3xl font-bold mb-6 text-center">Community Board</h1>
 
         {profile && (
           <div className="text-center text-gray-300 mb-8">
@@ -1095,34 +1094,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Activity Feed Section */}
-        <div className="max-w-2xl mx-auto mt-12">
-          <ErrorBoundary
-            fallback={
-              <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4 text-center">
-                <div className="text-gray-400 mb-2">📱</div>
-                <p className="text-gray-400 text-sm mb-3">
-                  Activity feed temporarily unavailable
-                </p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-                >
-                  Refresh
-                </button>
-              </div>
-            }
-            onError={(error, errorInfo) => {
-              console.error("❌ ActivityFeed Error:", {
-                error: error.message,
-                componentStack: errorInfo.componentStack,
-                timestamp: new Date().toISOString(),
-              });
-            }}
-          >
-            <ActivityFeed showHeader={true} maxItems={10} />
-          </ErrorBoundary>
-        </div>
+
       </div>
 
       {/* Performance Monitoring Panel */}

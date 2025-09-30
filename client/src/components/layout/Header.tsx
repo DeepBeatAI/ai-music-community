@@ -34,19 +34,13 @@ export default function Header() {
               Discover
             </Link>
             {user && (
-                <Link href="/feed" className="text-gray-300 hover:text-white transition-colors">
-                  Feed
-                </Link>
-            )}
-
-            {user && (
                 <Link href="/dashboard" className="text-gray-300 hover:text-white transition-colors">
-                  Dashboard
+                  Community Board
                 </Link>
             )}
             {user && (
-                <Link href="/upload" className="text-gray-300 hover:text-white transition-colors">
-                  Upload
+                <Link href="/feed" className="text-gray-300 hover:text-white transition-colors">
+                  Activity Feed
                 </Link>
             )}
           </nav>
@@ -101,14 +95,10 @@ export default function Header() {
             <Link href="/" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Home</Link>
             <Link href="/discover" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Discover</Link>
             {user && (
-                <Link href="/feed" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Feed</Link>
-            )}
-
-            {user && (
-                <Link href="/dashboard" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Dashboard</Link>
+                <Link href="/dashboard" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Community Board</Link>
             )}
             {user && (
-                <Link href="/upload" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Upload</Link>
+                <Link href="/feed" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Activity Feed</Link>
             )}
             {user ? (
               <>

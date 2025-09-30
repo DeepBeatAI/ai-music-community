@@ -50,7 +50,13 @@ export default function DiscoverPage() {
       };
       
       setSearchResults(safeResults);
-      setHasSearched(query.length > 0 || currentFilters.postType !== 'all' || currentFilters.sortBy !== 'recent' || currentFilters.timeRange !== 'all');
+      // Only mark as searched if there's actually a query or active non-default filters
+      const hasActiveFilters = 
+        (query && query.length > 0) || 
+        (currentFilters.postType && currentFilters.postType !== 'all') || 
+        (currentFilters.sortBy && currentFilters.sortBy !== 'recent') || 
+        (currentFilters.timeRange && currentFilters.timeRange !== 'all');
+      setHasSearched(hasActiveFilters);
     } catch (error) {
       console.error('Search error:', error);
       setSearchResults({ posts: [], users: [], totalResults: 0 });

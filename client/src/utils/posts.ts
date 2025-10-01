@@ -126,17 +126,21 @@ export async function createTextPost(
 
 export async function createAudioPost(
   userId: string,
-  audioFilename: string,
+  storagePath: string,
   description?: string,
   fileSize?: number,
   duration?: number,
-  mimeType?: string
+  mimeType?: string,
+  originalFileName?: string
 ): Promise<Post> {
   try {
     // Generate the public URL for the audio file
     const { data: { publicUrl } } = supabase.storage
       .from('audio-files')
-      .getPublicUrl(audioFilename);
+      .getPublicUrl(storagePath);
+
+    // Use original filename for display, or extract from storage path as fallback
+    const displayName = originalFileName || storagePath.split('/').pop() || 'Audio Track';
 
     const { data, error } = await supabase
       .from('posts')
@@ -145,7 +149,7 @@ export async function createAudioPost(
         content: description?.trim() || '',  // Use empty string instead of null since content is NOT NULL
         post_type: 'audio',
         audio_url: publicUrl,
-        audio_filename: audioFilename,
+        audio_filename: displayName,  // Store the original/display filename here
         audio_file_size: fileSize || null,
         audio_duration: duration || null,
         audio_mime_type: mimeType || null

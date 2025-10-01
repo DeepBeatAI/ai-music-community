@@ -595,13 +595,14 @@ export default function Dashboard() {
 
       // Upload audio file
       const fileExt = selectedAudioFile.name.split(".").pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const storagePath = `${user.id}/${Date.now()}.${fileExt}`;
+      const originalFileName = selectedAudioFile.name; // Keep original filename
 
-      console.log('Uploading audio file:', fileName, 'Size:', selectedAudioFile.size);
+      console.log('Uploading audio file:', storagePath, 'Original name:', originalFileName, 'Size:', selectedAudioFile.size);
       
       const { error: uploadError } = await supabase.storage
         .from("audio-files")
-        .upload(fileName, selectedAudioFile);
+        .upload(storagePath, selectedAudioFile);
 
       if (uploadError) {
         console.error('Storage upload error:', uploadError);
@@ -611,13 +612,15 @@ export default function Dashboard() {
       console.log('File uploaded successfully, creating post...');
       
       // Create post with additional metadata
+      // Pass the storage path and original filename separately
       await createAudioPost(
         user.id, 
-        fileName, 
-        audioDescription,
+        storagePath, 
+        audioDescription || originalFileName, // Use filename as fallback description
         selectedAudioFile.size,
         undefined, // duration will be calculated client-side if needed
-        selectedAudioFile.type
+        selectedAudioFile.type,
+        originalFileName // Pass original filename
       );
 
       console.log('Audio post created successfully');

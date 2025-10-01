@@ -37,9 +37,36 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">
           <span className="text-blue-400">🎵</span>
-          <span className="text-sm text-gray-300">
-            {post.audio_filename || 'Audio Track'}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-sm text-gray-200 font-medium">
+              {(() => {
+                if (!post.audio_filename || post.audio_filename === '') return 'Audio Track';
+                
+                // Check if it's a storage path (contains UUID pattern)
+                const isStoragePath = post.audio_filename.includes('/') && 
+                  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(post.audio_filename);
+                
+                if (isStoragePath) {
+                  // For storage paths, just show a generic title with the timestamp if available
+                  const timestamp = post.audio_filename.match(/\d{13,}/)?.[0];
+                  if (timestamp) {
+                    const date = new Date(parseInt(timestamp));
+                    return `Audio Track - ${date.toLocaleDateString()}`;
+                  }
+                  return 'Audio Track';
+                } else {
+                  // For proper filenames, remove the extension
+                  return post.audio_filename.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, '');
+                }
+              })()}
+            </span>
+            {post.audio_mime_type && (
+              <span className="text-xs text-gray-500">
+                {post.audio_mime_type.split('/')[1]?.toUpperCase() || 'Audio'}
+                {post.audio_file_size && ` • ${(post.audio_file_size / (1024 * 1024)).toFixed(1)} MB`}
+              </span>
+            )}
+          </div>
         </div>
       </div>
       

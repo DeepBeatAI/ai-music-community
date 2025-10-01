@@ -126,22 +126,37 @@ export async function createTextPost(
 
 export async function createAudioPost(
   userId: string,
-  audioUrl: string,
-  description?: string
+  audioFilename: string,
+  description?: string,
+  fileSize?: number,
+  duration?: number,
+  mimeType?: string
 ): Promise<Post> {
   try {
+    // Generate the public URL for the audio file
+    const { data: { publicUrl } } = supabase.storage
+      .from('audio-files')
+      .getPublicUrl(audioFilename);
+
     const { data, error } = await supabase
       .from('posts')
       .insert({
         user_id: userId,
-        content: description?.trim() || null,
+        content: description?.trim() || '',  // Use empty string instead of null since content is NOT NULL
         post_type: 'audio',
-        audio_url: audioUrl
+        audio_url: publicUrl,
+        audio_filename: audioFilename,
+        audio_file_size: fileSize || null,
+        audio_duration: duration || null,
+        audio_mime_type: mimeType || null
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database error creating audio post:', error);
+      throw error;
+    }
     
     return data;
   } catch (error) {

@@ -349,10 +349,11 @@ export default function Dashboard() {
     return unsubscribe;
   }, [paginationManager]);
 
-  // Keyboard shortcut to toggle post form (Ctrl+N or Cmd+N)
+  // Keyboard shortcut to toggle post form (Alt+N to avoid browser conflicts)
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      // Use Alt+N instead of Ctrl+N to avoid browser new tab conflict
+      if (e.altKey && e.key === 'n') {
         e.preventDefault();
         setIsPostFormExpanded(prev => !prev);
       }
@@ -554,7 +555,11 @@ export default function Dashboard() {
   // Handle audio file removal
   const handleAudioFileRemove = useCallback(() => {
     setSelectedAudioFile(null);
-  }, []);
+    // Also clear the audio description when switching tabs to avoid confusion
+    if (activeTab !== "audio") {
+      setAudioDescription("");
+    }
+  }, [activeTab]);
   // Handle text post submission
   const handleTextPostSubmit = useCallback(async () => {
     if (!user || !textContent.trim()) return;
@@ -592,15 +597,31 @@ export default function Dashboard() {
       const fileExt = selectedAudioFile.name.split(".").pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
+      console.log('Uploading audio file:', fileName, 'Size:', selectedAudioFile.size);
+      
       const { error: uploadError } = await supabase.storage
         .from("audio-files")
         .upload(fileName, selectedAudioFile);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        throw uploadError;
+      }
 
-      // Create post
-      await createAudioPost(user.id, fileName, audioDescription);
+      console.log('File uploaded successfully, creating post...');
+      
+      // Create post with additional metadata
+      await createAudioPost(
+        user.id, 
+        fileName, 
+        audioDescription,
+        selectedAudioFile.size,
+        undefined, // duration will be calculated client-side if needed
+        selectedAudioFile.type
+      );
 
+      console.log('Audio post created successfully');
+      
       setAudioDescription("");
       setSelectedAudioFile(null);
 
@@ -612,7 +633,8 @@ export default function Dashboard() {
       await loadPosts(1, false);
     } catch (error) {
       console.error("Error creating audio post:", error);
-      setError("Failed to upload audio post. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Failed to upload audio post. Please try again.";
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -715,7 +737,10 @@ export default function Dashboard() {
                   <p className="text-white font-semibold flex items-center gap-2">
                     {isPostFormExpanded ? "Create New Post" : "Create a New Post"}
                     {/* Indicator badge for unsaved content */}
-                    {!isPostFormExpanded && (textContent || selectedAudioFile) && (
+                    {!isPostFormExpanded && (
+                      (activeTab === "text" && textContent) || 
+                      (activeTab === "audio" && (selectedAudioFile || audioDescription))
+                    ) && (
                       <span className="bg-yellow-600 text-white text-xs px-2 py-0.5 rounded-full">
                         Draft
                       </span>
@@ -724,12 +749,13 @@ export default function Dashboard() {
                   <p className="text-gray-400 text-sm">
                     {isPostFormExpanded 
                       ? "Share your thoughts or music with the community" 
-                      : (textContent || selectedAudioFile) 
+                      : ((activeTab === "text" && textContent) || 
+                         (activeTab === "audio" && (selectedAudioFile || audioDescription))) 
                         ? "You have unsaved content - click to continue"
                         : "Click to share text or audio content"}
                     {!isPostFormExpanded && (
                       <span className="hidden md:inline text-gray-500 text-xs ml-2">
-                        (Ctrl+N)
+                        (Alt+N)
                       </span>
                     )}
                   </p>
@@ -767,7 +793,14 @@ export default function Dashboard() {
               <div className="flex border-b border-gray-700">
                 <button
                   type="button"
-                  onClick={() => setActiveTab("text")}
+                  onClick={() => {
+                    setActiveTab("text");
+                    // Clear audio-specific content when switching to text
+                    if (activeTab === "audio") {
+                      setSelectedAudioFile(null);
+                      setAudioDescription("");
+                    }
+                  }}
                   className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
                     activeTab === "text"
                       ? "bg-gray-700 text-white border-b-2 border-blue-500"
@@ -778,7 +811,13 @@ export default function Dashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveTab("audio")}
+                  onClick={() => {
+                    setActiveTab("audio");
+                    // Clear text content when switching to audio
+                    if (activeTab === "text") {
+                      setTextContent("");
+                    }
+                  }}
                   className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
                     activeTab === "audio"
                       ? "bg-gray-700 text-white border-b-2 border-blue-500"

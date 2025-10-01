@@ -171,8 +171,13 @@ export default function WavesurferPlayer({
           const loadTime = Date.now() - startTime;
           console.log('✅ Wavesurfer ready');
           const duration = wavesurfer.getDuration();
-          setIsWaveformReady(true);
-          setIsLoading(false);
+          
+          // Small delay to prevent flicker
+          setTimeout(() => {
+            setIsWaveformReady(true);
+            setIsLoading(false);
+          }, 100);
+          
           setTotalDuration(duration);
           
           // Track successful audio load
@@ -484,18 +489,26 @@ export default function WavesurferPlayer({
 
       {/* Waveform */}
       {showWaveform && (
-        <div className="mb-4">
-          <div 
-            ref={waveformRef} 
-            className={`rounded ${isLoading ? 'animate-pulse bg-gray-700' : ''}`}
-            style={{ minHeight: '80px' }}
-          />
+        <div className="mb-4 relative" style={{ minHeight: '80px' }}>
+          {/* Loading placeholder */}
           {isLoading && (
-            <div className="flex items-center justify-center py-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent"></div>
-              <span className="ml-2 text-sm text-gray-400">Loading waveform...</span>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="animate-pulse bg-gray-700 rounded w-full h-20"></div>
             </div>
           )}
+          
+          {/* Actual waveform - hidden while loading to prevent flicker */}
+          <div 
+            ref={waveformRef} 
+            className={`rounded transition-opacity duration-500 ${
+              isWaveformReady ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{ 
+              minHeight: '80px',
+              position: 'relative',
+              zIndex: isWaveformReady ? 1 : 0
+            }}
+          />
         </div>
       )}
 

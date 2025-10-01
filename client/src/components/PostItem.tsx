@@ -60,12 +60,6 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
                 }
               })()}
             </span>
-            {post.audio_mime_type && (
-              <span className="text-xs text-gray-500">
-                {post.audio_mime_type.split('/')[1]?.toUpperCase() || 'Audio'}
-                {post.audio_file_size && ` • ${(post.audio_file_size / (1024 * 1024)).toFixed(1)} MB`}
-              </span>
-            )}
           </div>
         </div>
       </div>
@@ -95,7 +89,7 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
               <WavesurferPlayer
                 key={`wavesurfer-${post.id}-${post.audio_url}`}
                 audioUrl={post.audio_url}
-                fileName={post.audio_filename}
+                fileName={undefined}  // Don't pass fileName to avoid duplicate display
                 duration={post.audio_duration}
                 showWaveform={showWaveform}
                 theme="ai_music"

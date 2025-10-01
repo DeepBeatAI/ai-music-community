@@ -433,7 +433,10 @@ export default function Dashboard() {
   const handleSearch = useCallback(
     async (query: string, filters: SearchFilters) => {
       try {
-        setCurrentSearchQuery(query);
+        // Only update currentSearchQuery if it's actually different to prevent loops
+        if (currentSearchQuery !== query) {
+          setCurrentSearchQuery(query);
+        }
 
         const results = await searchContent({ ...filters, query }, 0, 200); // Fetch more results for comprehensive filtering
         
@@ -444,7 +447,7 @@ export default function Dashboard() {
         setError("Search failed. Please try again.");
       }
     },
-    [paginationManager]
+    [paginationManager, currentSearchQuery]
   );
 
   // Handle filters change - SIMPLE APPROACH WITH MINIMAL DEBOUNCING

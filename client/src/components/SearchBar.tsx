@@ -36,6 +36,7 @@ export default function SearchBar({
   const [isLoading, setIsLoading] = useState(false);
   const [searchResultsCache, setSearchResultsCache] = useState<Map<string, { results: SearchResults; timestamp: number }>>(new Map());
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastFiltersRef = useRef<string>('');
   const previousCurrentQueryRef = useRef(currentQuery);
@@ -44,15 +45,27 @@ export default function SearchBar({
 
   // FIXED: Prevent state conflicts - only sync if it's an external change
   const isInternalUpdate = useRef(false);
+  const isTyping = useRef(false);
 
   // FIXED: Sync with external query changes without creating loops
   useEffect(() => {
-    // Only update if currentQuery actually changed from external source and it's not our own update
+    // Only update if currentQuery actually changed from external source, 
+    // it's not our own update, and user is not actively typing
     if (currentQuery !== previousCurrentQueryRef.current && 
         currentQuery !== query && 
-        !isInternalUpdate.current) {
-      console.log('🔄 SearchBar: Syncing with external query change:', currentQuery);
+        !isInternalUpdate.current &&
+        !isTyping.current) {
+      console.log('🔄 SearchBar: Syncing with external query change:', {
+        currentQuery,
+        previousQuery: previousCurrentQueryRef.current,
+        localQuery: query,
+        isInternalUpdate: isInternalUpdate.current,
+        isTyping: isTyping.current
+      });
       setQuery(currentQuery);
+      previousCurrentQueryRef.current = currentQuery;
+    } else if (currentQuery !== previousCurrentQueryRef.current) {
+      // Update the ref even if we don't sync to prevent future syncs
       previousCurrentQueryRef.current = currentQuery;
     }
   }, [currentQuery, query]); // Include query to satisfy dependency array
@@ -260,6 +273,9 @@ export default function SearchBar({
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
   }, [query, postType, sortBy, timeRange, showSuggestions]);
   // NOTE: performSearch, onSearch, onPaginationReset intentionally excluded to prevent infinite loops
@@ -365,6 +381,12 @@ export default function SearchBar({
     
     // Mark as internal update to prevent sync conflicts
     isInternalUpdate.current = true;
+    isTyping.current = false; // Clear typing flag
+    
+    // Clear typing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
     
     // Reset all filters
     setQuery('');
@@ -439,7 +461,21 @@ export default function SearchBar({
             type="text"
             placeholder="Search creators, music, or content..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              const newValue = e.target.value;
+              isTyping.current = true;
+              setQuery(newValue);
+              
+              // Clear existing typing timeout
+              if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+              }
+              
+              // Set a timeout to clear the typing flag after user stops typing
+              typingTimeoutRef.current = setTimeout(() => {
+                isTyping.current = false;
+              }, 1500); // Longer delay to ensure user has stopped typing
+            }}
             onKeyDown={handleKeyPress}
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
@@ -448,7 +484,13 @@ export default function SearchBar({
           <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
             {query.length > 0 && (
               <button
-                onClick={() => setQuery('')}
+                onClick={() => {
+                  isTyping.current = false; // Clear typing flag
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                  }
+                  setQuery('');
+                }}
                 className="text-gray-400 hover:text-white transition-colors p-1"
                 title="Clear search"
               >

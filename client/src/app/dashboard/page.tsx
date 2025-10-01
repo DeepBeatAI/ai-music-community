@@ -178,6 +178,30 @@ export default function Dashboard() {
     console.log('🔧 Applying filters:', filters, 'to', allPosts.length, 'posts');
     let filtered = [...allPosts];
     
+    // FIXED: Apply search query filter FIRST if present
+    if (filters.query && filters.query.trim()) {
+      const queryLower = filters.query.toLowerCase().trim();
+      const before = filtered.length;
+      
+      filtered = filtered.filter(post => {
+        // Check content
+        if (post.content && post.content.toLowerCase().includes(queryLower)) return true;
+        
+        // Check audio filename for audio posts
+        if (post.post_type === 'audio' && post.audio_filename) {
+          const filename = post.audio_filename.toLowerCase();
+          if (filename.includes(queryLower)) return true;
+        }
+        
+        // Note: We don't filter by username here as per requirements
+        // Users matching the search should appear in "Search Results: Creators" section
+        
+        return false;
+      });
+      
+      console.log(`  ✓ Search query filter ("${filters.query}"): ${before} → ${filtered.length}`);
+    }
+    
     // Apply post type filter
     if (filters.postType && filters.postType !== 'all' && filters.postType !== 'creators') {
       const before = filtered.length;
@@ -456,11 +480,27 @@ export default function Dashboard() {
       setCurrentFilters(filters);
       setFilterPage(1); // Reset to first page
       
-      // Check if we have active filters (extended to include Sort By and Time Range)
+      // FIXED: Include search query in active filters check
       const hasActiveFilters = 
+        (filters.query && filters.query.trim()) ||
         (filters.postType && filters.postType !== 'all') ||
         (filters.sortBy && filters.sortBy !== 'recent') ||
         (filters.timeRange && filters.timeRange !== 'all');
+      
+      // FIXED: Handle search separately for creator results
+      if (filters.query && filters.query.trim()) {
+        // Perform search for users when there's a query
+        try {
+          const results = await searchContent(filters, 0, 200);
+          // Update search results for displaying creators
+          paginationManager.updateSearch(results, filters.query, filters);
+        } catch (error) {
+          console.error('Search error:', error);
+        }
+      } else {
+        // Clear search results if no query
+        paginationManager.clearSearch();
+      }
       
       if (hasActiveFilters) {
         // Get current posts and ensure deduplication
@@ -517,12 +557,15 @@ export default function Dashboard() {
 
   // Clear search
   const clearSearch = useCallback(async () => {
+    console.log('🧹 Dashboard: Clearing all search and filters');
     setCurrentSearchQuery("");
     setCurrentFilters({});
     setFilteredPosts([]);
     setFilterPage(1);
     paginationManager.clearSearch();
-  }, [paginationManager]);
+    // Force refresh to show unfiltered posts
+    await loadPosts(1, false);
+  }, [paginationManager, loadPosts]);
 
   // Handle load more for filtered content
   const handleFilteredLoadMore = useCallback(() => {
@@ -698,8 +741,9 @@ export default function Dashboard() {
   const showNoResults = paginationState.isSearchActive && paginationState.searchResults.totalResults === 0;
   
   // Use simple filtered posts if available, otherwise use pagination system
-  // FIXED: Check if filters are active, not just if filtered posts exist
+  // FIXED: Check if filters are active, including search query
   const hasActiveFilters = 
+    (currentFilters.query && currentFilters.query.trim()) ||
     (currentFilters.postType && currentFilters.postType !== 'all') ||
     (currentFilters.sortBy && currentFilters.sortBy !== 'recent') ||
     (currentFilters.timeRange && currentFilters.timeRange !== 'all');
@@ -1013,12 +1057,7 @@ export default function Dashboard() {
                   </span>
                 )}
                 
-                {/* Results Count */}
-                {filteredPosts.length > 0 && (
-                  <span className="text-gray-400 text-xs ml-2">
-                    • {filteredPosts.length} {filteredPosts.length === 1 ? 'result' : 'results'}
-                  </span>
-                )}
+                {/* REMOVED: Results Count per requirements */}
               </div>
 
               <button

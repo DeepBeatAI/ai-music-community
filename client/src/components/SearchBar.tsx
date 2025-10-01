@@ -227,6 +227,11 @@ export default function SearchBar({
         currentFilters.timeRange = timeRange;
       }
       
+      // FIXED: Always notify parent about filter changes, even when clearing
+      if (onFiltersChange) {
+        onFiltersChange(currentFilters);
+      }
+      
       // Handle suggestions if enabled and query is long enough
       if (showSuggestions && query.length >= 2) {
         try {
@@ -490,6 +495,15 @@ export default function SearchBar({
                     clearTimeout(typingTimeoutRef.current);
                   }
                   setQuery('');
+                  
+                  // FIXED: Immediately notify parent about cleared query
+                  if (onFiltersChange) {
+                    const clearedFilters: SearchFilters = {};
+                    if (postType !== 'all') clearedFilters.postType = postType;
+                    if (sortBy !== 'recent') clearedFilters.sortBy = sortBy;
+                    if (timeRange !== 'all') clearedFilters.timeRange = timeRange;
+                    onFiltersChange(clearedFilters);
+                  }
                 }}
                 className="text-gray-400 hover:text-white transition-colors p-1"
                 title="Clear search"

@@ -54,6 +54,7 @@ export default function SearchBar({
   // FIXED: Prevent state conflicts - only sync if it's an external change
   const isInternalUpdate = useRef(false);
   const isTyping = useRef(false);
+  const hasInitiallyMounted = useRef(false); // Track if component has mounted
 
   // FIXED: Sync with external query changes without creating loops
   useEffect(() => {
@@ -242,9 +243,22 @@ export default function SearchBar({
         currentFilters.timeRange = timeRange;
       }
       
-      // FIXED: Always notify parent about filter changes, even when clearing
-      if (onFiltersChange) {
+      // CRITICAL FIX: Don't notify parent if we have no filters AND haven't mounted yet
+      // This prevents clearing the creator filter on SearchBar re-mount
+      const hasAnyFilters = Object.keys(currentFilters).length > 0;
+      const shouldNotify = hasInitiallyMounted.current || hasAnyFilters;
+      
+      if (!hasInitiallyMounted.current) {
+        hasInitiallyMounted.current = true;
+        console.log('🔗 SearchBar: Initial mount - skipping filter notification');
+      }
+      
+      // Only notify parent if we should
+      if (shouldNotify && onFiltersChange) {
+        console.log('🔔 SearchBar: Notifying parent of filter change:', currentFilters);
         onFiltersChange(currentFilters);
+      } else {
+        console.log('⏭️ SearchBar: Skipping filter notification (initial mount with no filters)');
       }
       
       // Handle suggestions if enabled and query is long enough

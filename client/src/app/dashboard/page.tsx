@@ -160,6 +160,7 @@ export default function Dashboard() {
 
   // Legacy state for compatibility
   const [currentSearchQuery, setCurrentSearchQuery] = useState("");
+  const [searchBarKey, setSearchBarKey] = useState(0); // Force SearchBar re-render
 
   // SIMPLE FILTER STATE - Direct approach
   const [currentFilters, setCurrentFilters] = useState<SearchFilters>({});
@@ -549,6 +550,8 @@ export default function Dashboard() {
       // Check if creator filter is active
       if (filters.creatorId && filters.creatorId.trim()) {
         console.log('📚 Creator filter active - fetching creator posts');
+        console.log('📚 Filter object:', filters);
+        
         try {
           // Fetch ALL posts from the creator (increased limit)
           const { posts: creatorPosts } = await fetchPostsByCreator(
@@ -563,16 +566,21 @@ export default function Dashboard() {
           // Apply additional filters if any
           let filtered = [...creatorPosts];
           
-          // Apply search query filter if present
-          if (filters.query && filters.query.trim()) {
-            const queryLower = filters.query.toLowerCase().trim();
+          // CRITICAL FIX: Only apply search query filter if it's explicitly set AND not empty
+          // This prevents filtering by a stale query when switching from search to creator filter
+          const hasValidQuery = filters.query && filters.query.trim() && filters.query.trim().length > 0;
+          if (hasValidQuery) {
+            const queryLower = filters.query!.toLowerCase().trim();
             const before = filtered.length;
+            console.log(`🔍 Applying search query filter: "${filters.query}"`);
             filtered = filtered.filter(post => {
               if (post.content && post.content.toLowerCase().includes(queryLower)) return true;
               if (post.post_type === 'audio' && post.audio_filename?.toLowerCase().includes(queryLower)) return true;
               return false;
             });
             console.log(`  ✓ Applied query filter: ${before} → ${filtered.length}`);
+          } else if (filters.query !== undefined) {
+            console.log(`⚠️ Ignoring empty/invalid query: "${filters.query}"`);
           }
           
           // Apply post type filter
@@ -711,15 +719,20 @@ export default function Dashboard() {
         
         console.log('🔍 Non-creator filter - hasActiveFilters:', hasActiveFilters);
         
-        // Handle search for users when there's a query
-        if (filters.query && filters.query.trim()) {
+        // Handle search for users when there's a query - FIXED: Only search if query is valid
+        const hasValidQuery = filters.query && filters.query.trim() && filters.query.trim().length > 0;
+        if (hasValidQuery) {
+          console.log(`🔍 Non-creator path: Searching with query "${filters.query}"`);
           try {
             const results = await searchContent(filters, 0, 200);
-            paginationManager.updateSearch(results, filters.query, filters);
+            paginationManager.updateSearch(results, filters.query!, filters);
           } catch (error) {
             console.error('Search error:', error);
           }
         } else {
+          if (filters.query !== undefined) {
+            console.log(`⚠️ Non-creator path: Ignoring empty/invalid query: "${filters.query}"`);
+          }
           paginationManager.clearSearch();
         }
         
@@ -776,6 +789,7 @@ export default function Dashboard() {
   const clearSearch = useCallback(async () => {
     console.log('🧹 Dashboard: Clearing all search and filters');
     setCurrentSearchQuery("");
+    setSearchBarKey(prev => prev + 1); // Force SearchBar re-mount
     setCurrentFilters({});
     setFilteredPosts([]);
     setFilterPage(1);
@@ -800,23 +814,22 @@ export default function Dashboard() {
   // Handle creator filter
   const handleCreatorFilter = useCallback(async (creatorId: string, username: string) => {
     console.log('🎯 Dashboard: Filtering by creator:', username, creatorId);
-    console.log('🧹 Dashboard: Resetting ALL filters before applying creator filter');
+    console.log('🧹 Dashboard: FORCE clearing search query in SearchBar');
     
-    // IMPORTANT: When filtering by creator, reset ALL filters first
-    // The user wants to see ALL posts from this creator without any filters applied
+    // CRITICAL FIX: Clear search query AND force SearchBar re-render
+    setCurrentSearchQuery('');
+    setSearchBarKey(prev => prev + 1); // Force SearchBar to re-mount with empty query
+    
+    // IMPORTANT: Create a completely clean filter object with ONLY creator info
     const newFilters: SearchFilters = {
       creatorId,
-      creatorUsername: username,
-      // All other filters are reset to defaults
-      postType: 'all',
-      sortBy: 'recent',
-      timeRange: 'all'
-      // query is intentionally omitted (undefined) to clear it
+      creatorUsername: username
+      // ALL other properties intentionally omitted - no query, no filters
     };
     
-    // Also clear the search query state
-    setCurrentSearchQuery('');
+    console.log('🎯 Applying creator-only filters:', newFilters);
     
+    // Apply filters immediately
     await handleFiltersChange(newFilters);
   }, [handleFiltersChange]);
 
@@ -1261,6 +1274,7 @@ export default function Dashboard() {
         <div className="max-w-2xl mx-auto mb-8 space-y-4">
           <SearchErrorBoundary>
             <SearchBar
+              key={searchBarKey} // Force re-mount when key changes
               onSearch={(results, query) => {
                 handleSearch(query, currentFilters);
               }}

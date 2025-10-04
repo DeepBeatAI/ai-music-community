@@ -57,26 +57,33 @@ export default function SearchBar({
 
   // FIXED: Sync with external query changes without creating loops
   useEffect(() => {
-    // Only update if currentQuery actually changed from external source, 
-    // it's not our own update, and user is not actively typing
+    // CRITICAL: Always sync when currentQuery changes, even if it's empty
+    // This ensures the search bar clears when the dashboard clears currentSearchQuery
     if (currentQuery !== previousCurrentQueryRef.current && 
-        currentQuery !== query && 
-        !isInternalUpdate.current &&
-        !isTyping.current) {
+        !isInternalUpdate.current && 
+        !isTyping.current) { // CRITICAL: Don't override while user is typing
       console.log('🔄 SearchBar: Syncing with external query change:', {
         currentQuery,
         previousQuery: previousCurrentQueryRef.current,
         localQuery: query,
-        isInternalUpdate: isInternalUpdate.current,
+        willUpdate: true,
         isTyping: isTyping.current
       });
       setQuery(currentQuery);
       previousCurrentQueryRef.current = currentQuery;
     } else if (currentQuery !== previousCurrentQueryRef.current) {
-      // Update the ref even if we don't sync to prevent future syncs
-      previousCurrentQueryRef.current = currentQuery;
+      console.log('🚫 SearchBar: Blocked sync (internal update or typing):', {
+        currentQuery,
+        previousQuery: previousCurrentQueryRef.current,
+        isInternalUpdate: isInternalUpdate.current,
+        isTyping: isTyping.current
+      });
+      // Update the ref even if we don't sync, to prevent repeated attempts
+      if (!isTyping.current) {
+        previousCurrentQueryRef.current = currentQuery;
+      }
     }
-  }, [currentQuery, query]); // Include query to satisfy dependency array
+  }, [currentQuery, query]); // Added query to dependencies to detect changes
 
   // Cache management functions
   const getCacheKey = useCallback((filters: SearchFilters): string => {

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { creatorCache } from './creatorCache';
 import type { Post, UserProfile } from '@/types';
 
 export interface PostWithProfile extends Post {
@@ -166,6 +167,116 @@ export async function createAudioPost(
   } catch (error) {
     console.error('Error creating audio post:', error);
     throw error;
+  }
+}
+
+export async function fetchPostsByCreator(
+  creatorId: string,
+  page: number = 1,
+  limit: number = 50,
+  currentUserId?: string
+): Promise<{ posts: PostWithProfile[]; hasMore: boolean }> {
+  try {
+    // Check cache first (only for first page)
+    if (page === 1) {
+      const cached = creatorCache.get(creatorId);
+      if (cached) {
+        // Return cached posts, sliced to the requested limit
+        const cachedWithProfile = cached as PostWithProfile[];
+        return { 
+          posts: cachedWithProfile.slice(0, limit), 
+          hasMore: cachedWithProfile.length > limit 
+        };
+      }
+    }
+    
+    const offset = (page - 1) * limit;
+    
+    console.log(`🔍 Fetching posts by creator: ${creatorId}, page ${page}, limit ${limit}`);
+    
+    // Query posts specifically from this creator
+    const { data, error, count } = await supabase
+      .from('posts')
+      .select(`
+        *,
+        user_profiles!posts_user_id_fkey (
+          id,
+          username,
+          user_id,
+          created_at
+        )
+      `, { count: 'exact' })
+      .eq('user_id', creatorId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('Error fetching creator posts:', error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      console.log('No posts found for creator');
+      // Cache empty result for first page
+      if (page === 1) {
+        creatorCache.set(creatorId, []);
+      }
+      return { posts: [], hasMore: false };
+    }
+
+    // Get interaction data
+    const posts = await Promise.all(
+      data.map(async (post) => {
+        try {
+          const [likeData, userLikeData] = await Promise.all([
+            supabase
+              .from('post_likes')
+              .select('id', { count: 'exact', head: true })
+              .eq('post_id', post.id),
+            currentUserId
+              ? supabase
+                  .from('post_likes')
+                  .select('id')
+                  .eq('post_id', post.id)
+                  .eq('user_id', currentUserId)
+                  .single()
+              : Promise.resolve({ data: null })
+          ]);
+
+          return {
+            ...post,
+            user_profiles: post.user_profiles,
+            likes_count: likeData.count || 0,
+            liked_by_user: !!userLikeData.data,
+            like_count: likeData.count || 0 // Add both properties for compatibility
+          };
+        } catch (error) {
+          console.error(`Error fetching interactions for post ${post.id}:`, error);
+          return {
+            ...post,
+            user_profiles: post.user_profiles,
+            likes_count: 0,
+            liked_by_user: false,
+            like_count: 0
+          };
+        }
+      })
+    );
+
+    const totalCount = count || 0;
+    const hasMore = offset + limit < totalCount;
+
+    console.log(`✅ Fetched ${posts.length} posts from creator (total: ${totalCount}, hasMore: ${hasMore})`);
+
+    // Cache the results if first page
+    if (page === 1 && posts.length > 0) {
+      creatorCache.set(creatorId, posts);
+    }
+
+    return { posts, hasMore };
+  } catch (error) {
+    console.error('Error in fetchPostsByCreator:', error);
+    return { posts: [], hasMore: false };
   }
 }
 

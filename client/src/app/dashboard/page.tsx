@@ -8,18 +8,26 @@ import PostItem from "@/components/PostItem";
 import AudioUpload from "@/components/AudioUpload";
 import SearchBar from "@/components/SearchBar";
 import FollowButton from "@/components/FollowButton";
+import CreatorFilterButton from "@/components/CreatorFilterButton";
+import CreatorFilterIndicator from "@/components/CreatorFilterIndicator";
+import CreatorFilterNoResults from "@/components/CreatorFilterNoResults";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PerformanceMonitoringPanel from "@/components/PerformanceMonitoringPanel";
 import LoadMoreButton from "@/components/LoadMoreButton";
 import type { SearchFilters } from "@/utils/search";
 import {
   fetchPosts,
+  fetchPostsByCreator,
   createTextPost,
   createAudioPost,
   deletePost,
 } from "@/utils/posts";
 import { searchContent } from "@/utils/search";
 import { createUnifiedPaginationState } from "@/utils/unifiedPaginationState";
+import { 
+  optimizedCreatorFilterWithDeduplication,
+  validateCreatorFilterPerformance 
+} from "@/utils/creatorFilterOptimizer";
 import type { PaginationState } from "@/types/pagination";
 import type { UserProfile, Post } from "@/types";
 
@@ -161,21 +169,45 @@ export default function Dashboard() {
   // Refs for tracking state
   const hasInitiallyLoaded = useRef(false);
 
-  // Deduplicate posts by ID
+  // Optimized deduplication with performance tracking
   const deduplicatePosts = useCallback((posts: any[]) => {
+    const startTime = performance.now();
     const seen = new Set();
-    return posts.filter((post: any) => {
+    const deduplicated = posts.filter((post: any) => {
       if (seen.has(post.id)) {
         return false;
       }
       seen.add(post.id);
       return true;
     });
+    
+    const endTime = performance.now();
+    const duplicatesRemoved = posts.length - deduplicated.length;
+    
+    if (duplicatesRemoved > 0) {
+      console.log(`🧹 Deduplication: Removed ${duplicatesRemoved} duplicates from ${posts.length} posts in ${(endTime - startTime).toFixed(2)}ms`);
+    }
+    
+    return deduplicated;
   }, []);
 
-  // Apply filters directly - SIMPLE APPROACH
+  // Apply filters directly - OPTIMIZED APPROACH
   const applyFiltersDirectly = useCallback((filters: SearchFilters, allPosts: Post[]) => {
+    const startTime = performance.now();
     console.log('🔧 Applying filters:', filters, 'to', allPosts.length, 'posts');
+    
+    // Early return if no filters to apply
+    const hasFilters = 
+      (filters.query && filters.query.trim()) ||
+      (filters.creatorId && filters.creatorId.trim()) ||
+      (filters.postType && filters.postType !== 'all' && filters.postType !== 'creators') ||
+      (filters.timeRange && filters.timeRange !== 'all');
+    
+    if (!hasFilters) {
+      console.log('✅ No filters to apply, returning original posts');
+      return allPosts;
+    }
+    
     let filtered = [...allPosts];
     
     // FIXED: Apply search query filter FIRST if present
@@ -200,6 +232,38 @@ export default function Dashboard() {
       });
       
       console.log(`  ✓ Search query filter ("${filters.query}"): ${before} → ${filtered.length}`);
+    }
+    
+    // Apply creator filter - OPTIMIZED with dedicated optimizer
+    if (filters.creatorId) {
+      // Use optimized creator filtering with built-in deduplication
+      const { filteredPosts: creatorFiltered, totalMetrics } = optimizedCreatorFilterWithDeduplication(
+        filtered, 
+        filters.creatorId, 
+        filters.creatorUsername
+      );
+      
+      // Validate performance and log suggestions
+      const performanceValidation = validateCreatorFilterPerformance(
+        filtered.length,
+        totalMetrics.processingTime,
+        creatorFiltered.length
+      );
+      
+      if (!performanceValidation.isOptimal) {
+        console.warn(`⚠️ Creator filter performance grade: ${performanceValidation.performanceGrade}`);
+        performanceValidation.suggestions.forEach(suggestion => {
+          console.warn(`💡 Suggestion: ${suggestion}`);
+        });
+      }
+      
+      filtered = creatorFiltered;
+      
+      // Early return if no posts found for this creator to avoid unnecessary processing
+      if (filtered.length === 0) {
+        console.log('⚡ Early return: No posts found for creator, skipping remaining filters');
+        return filtered;
+      }
     }
     
     // Apply post type filter
@@ -356,7 +420,16 @@ export default function Dashboard() {
         console.log(`  ✓ Sorted by: most recent`);
     }
     
-    console.log(`✅ Final filtered count: ${filtered.length}`);
+    const endTime = performance.now();
+    const totalTime = endTime - startTime;
+    
+    console.log(`✅ Final filtered count: ${filtered.length} (processed in ${totalTime.toFixed(2)}ms)`);
+    
+    // Performance warning for slow filtering
+    if (totalTime > 100) {
+      console.warn(`⚠️ Slow filtering detected: ${totalTime.toFixed(2)}ms for ${allPosts.length} posts`);
+    }
+    
     return filtered;
   }, []);
     
@@ -388,7 +461,14 @@ export default function Dashboard() {
   }, []);
 
   // Update filtered posts when allPosts changes (to include newly loaded posts)
+  // IMPORTANT: Skip this when creator filter is active - creator posts are fetched separately
   useEffect(() => {
+    // Skip if creator filter is active - those posts are managed separately
+    if (currentFilters.creatorId && currentFilters.creatorId.trim()) {
+      console.log('⏭️ Skipping useEffect update - creator filter active');
+      return;
+    }
+    
     if (filteredPosts.length > 0 && Object.keys(currentFilters).length > 0) {
       const deduplicatedAllPosts = deduplicatePosts(paginationState.allPosts);
       const newFiltered = applyFiltersDirectly(currentFilters, deduplicatedAllPosts);
@@ -399,7 +479,7 @@ export default function Dashboard() {
         setFilteredPosts(deduplicatedFiltered);
       }
     }
-  }, [paginationState.allPosts, currentFilters, applyFiltersDirectly, deduplicatePosts]);
+  }, [paginationState.allPosts, currentFilters, applyFiltersDirectly, deduplicatePosts, filteredPosts.length]);
 
   // Load initial posts
   const loadPosts = useCallback(
@@ -474,81 +554,212 @@ export default function Dashboard() {
     [paginationManager, currentSearchQuery]
   );
 
-  // Handle filters change - SIMPLE APPROACH WITH MINIMAL DEBOUNCING
+  // Handle filters change - OPTIMIZED APPROACH WITH DIRECT CREATOR QUERY
   const handleFiltersChange = useCallback(
     async (filters: SearchFilters) => {
+      const filterChangeStart = performance.now();
+      console.log('🎯 Filter change started:', filters);
+      
       setCurrentFilters(filters);
       setFilterPage(1); // Reset to first page
       
-      // FIXED: Include search query in active filters check
-      const hasActiveFilters = 
-        (filters.query && filters.query.trim()) ||
-        (filters.postType && filters.postType !== 'all') ||
-        (filters.sortBy && filters.sortBy !== 'recent') ||
-        (filters.timeRange && filters.timeRange !== 'all');
-      
-      // FIXED: Handle search separately for creator results
-      if (filters.query && filters.query.trim()) {
-        // Perform search for users when there's a query
+      // Check if creator filter is active
+      if (filters.creatorId && filters.creatorId.trim()) {
         try {
-          const results = await searchContent(filters, 0, 200);
-          // Update search results for displaying creators
-          paginationManager.updateSearch(results, filters.query, filters);
+          // Fetch posts directly from the creator
+          const { posts: creatorPosts } = await fetchPostsByCreator(
+            filters.creatorId,
+            1,
+            100, // Get up to 100 posts initially
+            user?.id
+          );
+          
+          console.log(`📚 Fetched ${creatorPosts.length} posts from creator`);
+          
+          // Apply additional filters if any
+          let filtered = [...creatorPosts];
+          
+          // Apply search query filter if present
+          if (filters.query && filters.query.trim()) {
+            const queryLower = filters.query.toLowerCase().trim();
+            filtered = filtered.filter(post => {
+              if (post.content && post.content.toLowerCase().includes(queryLower)) return true;
+              if (post.post_type === 'audio' && post.audio_filename?.toLowerCase().includes(queryLower)) return true;
+              return false;
+            });
+            console.log(`  ✓ Applied query filter: ${creatorPosts.length} → ${filtered.length}`);
+          }
+          
+          // Apply post type filter
+          if (filters.postType && filters.postType !== 'all' && filters.postType !== 'creators') {
+            const before = filtered.length;
+            filtered = filtered.filter(post => post.post_type === filters.postType);
+            console.log(`  ✓ Applied type filter: ${before} → ${filtered.length}`);
+          }
+          
+          // Apply time range filter
+          if (filters.timeRange && filters.timeRange !== 'all') {
+            const now = Date.now();
+            let cutoffMs: number;
+            
+            switch (filters.timeRange) {
+              case 'today':
+                const todayUTC = new Date();
+                todayUTC.setUTCHours(0, 0, 0, 0);
+                cutoffMs = todayUTC.getTime();
+                break;
+              case 'week':
+                cutoffMs = now - (7 * 24 * 60 * 60 * 1000);
+                break;
+              case 'month':
+                cutoffMs = now - (30 * 24 * 60 * 60 * 1000);
+                break;
+              default:
+                cutoffMs = 0;
+            }
+            
+            const before = filtered.length;
+            filtered = filtered.filter(post => {
+              return new Date(post.created_at).getTime() >= cutoffMs;
+            });
+            console.log(`  ✓ Applied time filter: ${before} → ${filtered.length}`);
+          }
+          
+          // Apply sorting
+          const sortBy = filters.sortBy || 'recent';
+          switch (sortBy) {
+            case 'oldest':
+              filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+              break;
+            case 'likes':
+              filtered.sort((a, b) => {
+                const aLikes = a.like_count ?? a.likes_count ?? 0;
+                const bLikes = b.like_count ?? b.likes_count ?? 0;
+                if (bLikes === aLikes) {
+                  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                }
+                return bLikes - aLikes;
+              });
+              break;
+            case 'popular':
+              filtered.sort((a, b) => {
+                const now = Date.now();
+                const dayMs = 24 * 60 * 60 * 1000;
+                const aDaysOld = Math.floor((now - new Date(a.created_at).getTime()) / dayMs);
+                const bDaysOld = Math.floor((now - new Date(b.created_at).getTime()) / dayMs);
+                const aRecencyScore = Math.max(0, 7 - aDaysOld);
+                const bRecencyScore = Math.max(0, 7 - bDaysOld);
+                const aLikes = a.like_count ?? a.likes_count ?? 0;
+                const bLikes = b.like_count ?? b.likes_count ?? 0;
+                const aScore = (aLikes * 2) + aRecencyScore;
+                const bScore = (bLikes * 2) + bRecencyScore;
+                if (bScore === aScore) {
+                  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                }
+                return bScore - aScore;
+              });
+              break;
+            case 'relevance':
+              if (filters.query && filters.query.trim()) {
+                const queryLower = filters.query.toLowerCase();
+                filtered.sort((a, b) => {
+                  let aScore = 0;
+                  let bScore = 0;
+                  
+                  if (a.content.toLowerCase().includes(queryLower)) aScore += 10;
+                  if (b.content.toLowerCase().includes(queryLower)) bScore += 10;
+                  
+                  if (a.audio_filename?.toLowerCase().includes(queryLower)) aScore += 8;
+                  if (b.audio_filename?.toLowerCase().includes(queryLower)) bScore += 8;
+                  
+                  if (a.user_profiles?.username?.toLowerCase().includes(queryLower)) aScore += 5;
+                  if (b.user_profiles?.username?.toLowerCase().includes(queryLower)) bScore += 5;
+                  
+                  const aLikes = a.like_count ?? a.likes_count ?? 0;
+                  const bLikes = b.like_count ?? b.likes_count ?? 0;
+                  aScore += Math.min(aLikes, 5);
+                  bScore += Math.min(bLikes, 5);
+                  
+                  if (bScore === aScore) {
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                  }
+                  
+                  return bScore - aScore;
+                });
+              } else {
+                filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              }
+              break;
+            default:
+              filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          }
+          console.log(`  ✓ Applied sorting: ${sortBy}`);
+          
+          console.log(`🎯 CRITICAL DEBUG: About to set filteredPosts with ${filtered.length} posts`);
+          console.log(`🎯 First 3 posts:`, filtered.slice(0, 3).map(p => ({ id: p.id, content: p.content.substring(0, 30) })));
+          setFilteredPosts(filtered);
+          console.log(`🎯 CRITICAL DEBUG: filteredPosts state should now be updated`);
+          
+          // Also handle search for users if query is present
+          if (filters.query && filters.query.trim()) {
+            try {
+              const results = await searchContent(filters, 0, 200);
+              paginationManager.updateSearch(results, filters.query, filters);
+            } catch (error) {
+              console.error('Search error:', error);
+            }
+          } else {
+            paginationManager.clearSearch();
+          }
+          
         } catch (error) {
-          console.error('Search error:', error);
+          console.error('Error fetching creator posts:', error);
+          setError('Failed to load creator posts');
+          setFilteredPosts([]);
         }
       } else {
-        // Clear search results if no query
-        paginationManager.clearSearch();
+        // Handle non-creator filters using existing logic
+        const hasActiveFilters = 
+          (filters.query && filters.query.trim()) ||
+          (filters.postType && filters.postType !== 'all') ||
+          (filters.sortBy && filters.sortBy !== 'recent') ||
+          (filters.timeRange && filters.timeRange !== 'all');
+        
+        // Handle search for users when there's a query
+        if (filters.query && filters.query.trim()) {
+          try {
+            const results = await searchContent(filters, 0, 200);
+            paginationManager.updateSearch(results, filters.query, filters);
+          } catch (error) {
+            console.error('Search error:', error);
+          }
+        } else {
+          paginationManager.clearSearch();
+        }
+        
+        if (hasActiveFilters) {
+          // Use existing logic for non-creator filters
+          let allPosts = deduplicatePosts(paginationState.allPosts);
+          
+          if (allPosts.length < 50) {
+            try {
+              const { posts: morePosts } = await fetchPosts(2, 50, user?.id);
+              allPosts = deduplicatePosts([...allPosts, ...morePosts]);
+            } catch (error) {
+              console.error('Error fetching additional posts:', error);
+            }
+          }
+          
+          const filtered = applyFiltersDirectly(filters, allPosts);
+          setFilteredPosts(deduplicatePosts(filtered));
+        } else {
+          setFilteredPosts([]);
+          paginationManager.clearSearch();
+        }
       }
       
-      if (hasActiveFilters) {
-        // Get current posts and ensure deduplication
-        let allPosts = deduplicatePosts(paginationState.allPosts);
-        
-        // Ensure we have enough posts for filtering
-        if (allPosts.length < 50) {
-          try {
-            // Track which pages we've already loaded to avoid duplicates
-            const currentPages = Math.ceil(allPosts.length / POSTS_PER_PAGE);
-            
-            // Fetch more pages to ensure good filtering
-            for (let i = currentPages + 1; i <= currentPages + 3; i++) {
-              const { posts: morePosts, hasMore } = await fetchPosts(i, POSTS_PER_PAGE, user?.id);
-              if (morePosts.length > 0) {
-                // Add new posts and deduplicate
-                const combinedPosts = [...allPosts, ...morePosts];
-                allPosts = deduplicatePosts(combinedPosts);
-                
-                // Update pagination manager with deduplicated posts
-                paginationManager.updatePosts({
-                  newPosts: morePosts,
-                  resetPagination: false,
-                  updateMetadata: {
-                    totalServerPosts: hasMore ? (i * POSTS_PER_PAGE) + 1 : i * POSTS_PER_PAGE,
-                    loadedServerPosts: allPosts.length,
-                    currentBatch: i,
-                    lastFetchTimestamp: Date.now(),
-                  },
-                });
-              }
-              if (!hasMore) break;
-            }
-          } catch (error) {
-            console.error('Error fetching posts for filtering:', error);
-          }
-        }
-        
-        // Apply filters directly to deduplicated posts
-        const filtered = applyFiltersDirectly(filters, allPosts);
-        const deduplicatedFiltered = deduplicatePosts(filtered);
-        
-        setFilteredPosts(deduplicatedFiltered);
-      } else {
-        // No active filters - clear filtered posts
-        setFilteredPosts([]);
-        paginationManager.clearSearch();
-      }
+      const filterChangeEnd = performance.now();
+      console.log(`✅ Filter change completed in ${(filterChangeEnd - filterChangeStart).toFixed(2)}ms`);
     },
     [paginationState.allPosts, user?.id, paginationManager, applyFiltersDirectly, deduplicatePosts]
   );
@@ -566,6 +777,38 @@ export default function Dashboard() {
     // Force refresh to show unfiltered posts
     await loadPosts(1, false);
   }, [paginationManager, loadPosts]);
+
+  // Clear creator filter while preserving other filters
+  const clearCreatorFilter = useCallback(async () => {
+    console.log('🧹 Dashboard: Clearing creator filter');
+    
+    const newFilters: SearchFilters = {
+      ...currentFilters,
+      creatorId: undefined,
+      creatorUsername: undefined
+    };
+    
+    await handleFiltersChange(newFilters);
+  }, [currentFilters, handleFiltersChange]);
+
+  // Handle creator filter
+  const handleCreatorFilter = useCallback(async (creatorId: string, username: string) => {
+    console.log('🎯 Dashboard: Filtering by creator:', username, creatorId);
+    
+    // IMPORTANT: When filtering by creator, clear the search query
+    // The user wants to see ALL posts from this creator, not filtered by the search term
+    const newFilters: SearchFilters = {
+      ...currentFilters,
+      query: undefined, // Clear search query when filtering by creator
+      creatorId,
+      creatorUsername: username
+    };
+    
+    // Also clear the search query state
+    setCurrentSearchQuery('');
+    
+    await handleFiltersChange(newFilters);
+  }, [currentFilters, handleFiltersChange]);
 
   // Handle load more for filtered content
   const handleFilteredLoadMore = useCallback(() => {
@@ -741,20 +984,28 @@ export default function Dashboard() {
   const showNoResults = paginationState.isSearchActive && paginationState.searchResults.totalResults === 0;
   
   // Use simple filtered posts if available, otherwise use pagination system
-  // FIXED: Check if filters are active, including search query
+  // FIXED: Check if filters are active, including search query and creator filter
   const hasActiveFilters = 
     (currentFilters.query && currentFilters.query.trim()) ||
     (currentFilters.postType && currentFilters.postType !== 'all') ||
     (currentFilters.sortBy && currentFilters.sortBy !== 'recent') ||
-    (currentFilters.timeRange && currentFilters.timeRange !== 'all');
+    (currentFilters.timeRange && currentFilters.timeRange !== 'all') ||
+    (currentFilters.creatorId && currentFilters.creatorId.trim());
   
   const isUsingSimpleFilter = hasActiveFilters;
   
   // Ensure no duplicates in display posts
+  console.log(`🔍 DISPLAY DEBUG: isUsingSimpleFilter=${isUsingSimpleFilter}, hasActiveFilters=${hasActiveFilters}`);
+  console.log(`🔍 DISPLAY DEBUG: filteredPosts.length=${filteredPosts.length}, filterPage=${filterPage}`);
+  console.log(`🔍 DISPLAY DEBUG: currentFilters=`, currentFilters);
+  
   const rawDisplayPosts = isUsingSimpleFilter 
     ? filteredPosts.slice(0, filterPage * POSTS_PER_PAGE)
     : paginationState.paginatedPosts;
+  
+  console.log(`🔍 DISPLAY DEBUG: rawDisplayPosts.length=${rawDisplayPosts.length}`);
   const displayPosts = deduplicatePosts(rawDisplayPosts);
+  console.log(`🔍 DISPLAY DEBUG: displayPosts.length=${displayPosts.length} (after deduplication)`);
   
   const totalFilteredPosts = isUsingSimpleFilter 
     ? filteredPosts.length 
@@ -1082,7 +1333,11 @@ export default function Dashboard() {
                 return (
                   <div
                     key={searchUser.id}
-                    className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center justify-between"
+                    className={`p-4 rounded-lg flex items-center justify-between transition-all duration-300 ${
+                      currentFilters.creatorId === searchUser.user_id
+                        ? 'bg-blue-900/30 border-2 border-blue-500 shadow-lg shadow-blue-500/20 transform scale-[1.02]'
+                        : 'bg-gray-800 border border-gray-700 hover:border-gray-600 hover:bg-gray-750'
+                    }`}
                   >
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
@@ -1091,9 +1346,17 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div>
-                        <p className="text-gray-200 font-medium">
-                          {searchUser.username}
-                        </p>
+                        <div className="flex items-center space-x-2">
+                          <p className="text-gray-200 font-medium">
+                            {searchUser.username}
+                          </p>
+                          {currentFilters.creatorId === searchUser.user_id && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-600 text-blue-100 animate-pulse">
+                              <span className="w-1.5 h-1.5 bg-blue-200 rounded-full mr-1"></span>
+                              Active Filter
+                            </span>
+                          )}
+                        </div>
                         <p className="text-gray-400 text-sm">
                           {totalPosts} posts
                         </p>
@@ -1104,23 +1367,33 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {user && user.id !== searchUser.user_id ? (
-                      <FollowButton
-                        userId={searchUser.user_id}
-                        username={searchUser.username}
+                    <div className="flex items-center space-x-2">
+                      <CreatorFilterButton
+                        creatorId={searchUser.user_id}
+                        creatorUsername={searchUser.username}
+                        onFilterByCreator={handleCreatorFilter}
+                        isActive={currentFilters.creatorId === searchUser.user_id}
                         size="sm"
                         variant="secondary"
-                        showFollowerCount={false}
                       />
-                    ) : user && user.id === searchUser.user_id ? (
-                      <div className="text-gray-500 text-sm px-3 py-1 bg-gray-700 rounded">
-                        That&apos;s you!
-                      </div>
-                    ) : (
-                      <div className="text-gray-500 text-sm px-3 py-1">
-                        Sign in to follow
-                      </div>
-                    )}
+                      {user && user.id !== searchUser.user_id ? (
+                        <FollowButton
+                          userId={searchUser.user_id}
+                          username={searchUser.username}
+                          size="sm"
+                          variant="secondary"
+                          showFollowerCount={false}
+                        />
+                      ) : user && user.id === searchUser.user_id ? (
+                        <div className="text-gray-500 text-sm px-3 py-1 bg-gray-700 rounded">
+                          That&apos;s you!
+                        </div>
+                      ) : (
+                        <div className="text-gray-500 text-sm px-3 py-1">
+                          Sign in to follow
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1149,6 +1422,14 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+        {/* Creator Filter Indicator */}
+        {currentFilters.creatorId && currentFilters.creatorUsername && (
+          <CreatorFilterIndicator
+            creatorUsername={currentFilters.creatorUsername}
+            onClearFilter={clearCreatorFilter}
+          />
+        )}
+
         {/* Posts List */}
         <div className="max-w-2xl mx-auto">
           <h2 className="text-xl font-bold mb-6">
@@ -1162,19 +1443,34 @@ export default function Dashboard() {
           </h2>
 
           {!showNoResults && totalFilteredPosts === 0 && !paginationState.fetchInProgress && !paginationState.isLoadingMore ? (
-            <div className="text-center py-12 bg-gray-800 rounded-lg">
-              <div className="text-4xl mb-4">🎵</div>
-              <p className="text-gray-400 mb-2">
-                {paginationState.isSearchActive
-                  ? "No posts match your current search and filters."
-                  : "No posts yet. Be the first to share!"}
-              </p>
-              <p className="text-sm text-gray-500">
-                {paginationState.isSearchActive
-                  ? "Try adjusting your search terms or filters."
-                  : "Share your AI music creations or thoughts with the community."}
-              </p>
-            </div>
+            // Check if this is a creator filter with no results
+            currentFilters.creatorId && currentFilters.creatorUsername ? (
+              <CreatorFilterNoResults
+                creatorUsername={currentFilters.creatorUsername}
+                onClearCreatorFilter={clearCreatorFilter}
+                onClearAllFilters={clearSearch}
+                hasOtherFilters={Boolean(
+                  (currentFilters.query && currentFilters.query.trim() !== '') ||
+                  (currentFilters.postType && currentFilters.postType !== 'all') ||
+                  (currentFilters.sortBy && currentFilters.sortBy !== 'recent') ||
+                  (currentFilters.timeRange && currentFilters.timeRange !== 'all')
+                )}
+              />
+            ) : (
+              <div className="text-center py-12 bg-gray-800 rounded-lg">
+                <div className="text-4xl mb-4">🎵</div>
+                <p className="text-gray-400 mb-2">
+                  {paginationState.isSearchActive
+                    ? "No posts match your current search and filters."
+                    : "No posts yet. Be the first to share!"}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {paginationState.isSearchActive
+                    ? "Try adjusting your search terms or filters."
+                    : "Share your AI music creations or thoughts with the community."}
+                </p>
+              </div>
+            )
           ) : (paginationState.fetchInProgress || paginationState.isLoadingMore) && paginationState.allPosts.length === 0 ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>

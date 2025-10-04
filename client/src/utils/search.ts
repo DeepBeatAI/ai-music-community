@@ -8,6 +8,8 @@ export interface SearchFilters {
   aiTool?: string;
   sortBy?: 'relevance' | 'recent' | 'oldest' | 'popular' | 'likes';
   timeRange?: 'all' | 'today' | 'week' | 'month';
+  creatorId?: string; // NEW: Filter by specific creator
+  creatorUsername?: string; // NEW: For display purposes
 }
 
 export interface SearchResults {

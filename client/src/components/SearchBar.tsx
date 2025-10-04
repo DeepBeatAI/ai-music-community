@@ -31,6 +31,14 @@ export default function SearchBar({
   const [postType, setPostType] = useState<SearchFilters['postType']>(initialFilters.postType || 'all');
   const [sortBy, setSortBy] = useState<SearchFilters['sortBy']>(initialFilters.sortBy || 'recent');
   const [timeRange, setTimeRange] = useState<SearchFilters['timeRange']>(initialFilters.timeRange || 'all');
+  
+  // CRITICAL: Sync with external filter changes (e.g., when creator filter resets all filters)
+  useEffect(() => {
+    // Update local state when initialFilters change externally
+    setPostType(initialFilters.postType || 'all');
+    setSortBy(initialFilters.sortBy || 'recent');
+    setTimeRange(initialFilters.timeRange || 'all');
+  }, [initialFilters.postType, initialFilters.sortBy, initialFilters.timeRange]);
   const [suggestions, setSuggestions] = useState<SearchResults>({ posts: [], users: [], totalResults: 0 });
   const [showSuggestionDropdown, setShowSuggestionDropdown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

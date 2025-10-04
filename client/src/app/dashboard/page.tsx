@@ -460,26 +460,8 @@ export default function Dashboard() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
-  // Update filtered posts when allPosts changes (to include newly loaded posts)
-  // IMPORTANT: Skip this when creator filter is active - creator posts are fetched separately
-  useEffect(() => {
-    // Skip if creator filter is active - those posts are managed separately
-    if (currentFilters.creatorId && currentFilters.creatorId.trim()) {
-      console.log('⏭️ Skipping useEffect update - creator filter active');
-      return;
-    }
-    
-    if (filteredPosts.length > 0 && Object.keys(currentFilters).length > 0) {
-      const deduplicatedAllPosts = deduplicatePosts(paginationState.allPosts);
-      const newFiltered = applyFiltersDirectly(currentFilters, deduplicatedAllPosts);
-      const deduplicatedFiltered = deduplicatePosts(newFiltered);
-      
-      // Only update if the filtered posts actually changed
-      if (deduplicatedFiltered.length !== filteredPosts.length) {
-        setFilteredPosts(deduplicatedFiltered);
-      }
-    }
-  }, [paginationState.allPosts, currentFilters, applyFiltersDirectly, deduplicatePosts, filteredPosts.length]);
+  // REMOVED: This useEffect was causing issues with filter updates
+  // Filters are now managed entirely within handleFiltersChange
 
   // Load initial posts
   const loadPosts = useCallback(
@@ -554,23 +536,25 @@ export default function Dashboard() {
     [paginationManager, currentSearchQuery]
   );
 
-  // Handle filters change - OPTIMIZED APPROACH WITH DIRECT CREATOR QUERY
+  // Handle filters change - COMPLETELY REWRITTEN FOR RELIABILITY
   const handleFiltersChange = useCallback(
     async (filters: SearchFilters) => {
       const filterChangeStart = performance.now();
       console.log('🎯 Filter change started:', filters);
       
+      // CRITICAL: Always update currentFilters state immediately
       setCurrentFilters(filters);
       setFilterPage(1); // Reset to first page
       
       // Check if creator filter is active
       if (filters.creatorId && filters.creatorId.trim()) {
+        console.log('📚 Creator filter active - fetching creator posts');
         try {
-          // Fetch posts directly from the creator
+          // Fetch ALL posts from the creator (increased limit)
           const { posts: creatorPosts } = await fetchPostsByCreator(
             filters.creatorId,
             1,
-            100, // Get up to 100 posts initially
+            200, // Increased from 100 to ensure we get all posts
             user?.id
           );
           
@@ -582,12 +566,13 @@ export default function Dashboard() {
           // Apply search query filter if present
           if (filters.query && filters.query.trim()) {
             const queryLower = filters.query.toLowerCase().trim();
+            const before = filtered.length;
             filtered = filtered.filter(post => {
               if (post.content && post.content.toLowerCase().includes(queryLower)) return true;
               if (post.post_type === 'audio' && post.audio_filename?.toLowerCase().includes(queryLower)) return true;
               return false;
             });
-            console.log(`  ✓ Applied query filter: ${creatorPosts.length} → ${filtered.length}`);
+            console.log(`  ✓ Applied query filter: ${before} → ${filtered.length}`);
           }
           
           // Apply post type filter
@@ -695,10 +680,9 @@ export default function Dashboard() {
           }
           console.log(`  ✓ Applied sorting: ${sortBy}`);
           
-          console.log(`🎯 CRITICAL DEBUG: About to set filteredPosts with ${filtered.length} posts`);
-          console.log(`🎯 First 3 posts:`, filtered.slice(0, 3).map(p => ({ id: p.id, content: p.content.substring(0, 30) })));
+          // Set filtered posts
           setFilteredPosts(filtered);
-          console.log(`🎯 CRITICAL DEBUG: filteredPosts state should now be updated`);
+          console.log(`✅ Creator filter: Set ${filtered.length} filtered posts`);
           
           // Also handle search for users if query is present
           if (filters.query && filters.query.trim()) {
@@ -718,12 +702,14 @@ export default function Dashboard() {
           setFilteredPosts([]);
         }
       } else {
-        // Handle non-creator filters using existing logic
+        // Handle non-creator filters
         const hasActiveFilters = 
           (filters.query && filters.query.trim()) ||
           (filters.postType && filters.postType !== 'all') ||
           (filters.sortBy && filters.sortBy !== 'recent') ||
           (filters.timeRange && filters.timeRange !== 'all');
+        
+        console.log('🔍 Non-creator filter - hasActiveFilters:', hasActiveFilters);
         
         // Handle search for users when there's a query
         if (filters.query && filters.query.trim()) {
@@ -738,21 +724,41 @@ export default function Dashboard() {
         }
         
         if (hasActiveFilters) {
-          // Use existing logic for non-creator filters
+          // CRITICAL FIX: Fetch MORE posts to ensure we have enough to filter
+          console.log('📥 Fetching more posts for filtering...');
           let allPosts = deduplicatePosts(paginationState.allPosts);
           
-          if (allPosts.length < 50) {
+          // ALWAYS fetch at least 100 posts for filtering to work properly
+          const targetPostCount = 100;
+          if (allPosts.length < targetPostCount) {
+            console.log(`📥 Current posts: ${allPosts.length}, fetching more to reach ${targetPostCount}...`);
             try {
-              const { posts: morePosts } = await fetchPosts(2, 50, user?.id);
-              allPosts = deduplicatePosts([...allPosts, ...morePosts]);
+              // Calculate how many pages we need
+              const postsNeeded = targetPostCount - allPosts.length;
+              const pagesNeeded = Math.ceil(postsNeeded / POSTS_PER_PAGE);
+              
+              // Fetch multiple pages
+              for (let i = 0; i < pagesNeeded; i++) {
+                const page = Math.floor(allPosts.length / POSTS_PER_PAGE) + 1;
+                console.log(`📥 Fetching page ${page}...`);
+                const { posts: morePosts } = await fetchPosts(page, POSTS_PER_PAGE, user?.id);
+                if (morePosts.length === 0) break; // No more posts available
+                allPosts = deduplicatePosts([...allPosts, ...morePosts]);
+                console.log(`📥 Now have ${allPosts.length} total posts`);
+                if (allPosts.length >= targetPostCount) break;
+              }
             } catch (error) {
               console.error('Error fetching additional posts:', error);
             }
           }
           
+          console.log(`🔍 Applying filters to ${allPosts.length} posts`);
           const filtered = applyFiltersDirectly(filters, allPosts);
-          setFilteredPosts(deduplicatePosts(filtered));
+          const dedupedFiltered = deduplicatePosts(filtered);
+          console.log(`✅ Filter result: ${dedupedFiltered.length} posts`);
+          setFilteredPosts(dedupedFiltered);
         } else {
+          console.log('✅ No active filters - clearing filtered posts');
           setFilteredPosts([]);
           paginationManager.clearSearch();
         }
@@ -794,21 +800,25 @@ export default function Dashboard() {
   // Handle creator filter
   const handleCreatorFilter = useCallback(async (creatorId: string, username: string) => {
     console.log('🎯 Dashboard: Filtering by creator:', username, creatorId);
+    console.log('🧹 Dashboard: Resetting ALL filters before applying creator filter');
     
-    // IMPORTANT: When filtering by creator, clear the search query
-    // The user wants to see ALL posts from this creator, not filtered by the search term
+    // IMPORTANT: When filtering by creator, reset ALL filters first
+    // The user wants to see ALL posts from this creator without any filters applied
     const newFilters: SearchFilters = {
-      ...currentFilters,
-      query: undefined, // Clear search query when filtering by creator
       creatorId,
-      creatorUsername: username
+      creatorUsername: username,
+      // All other filters are reset to defaults
+      postType: 'all',
+      sortBy: 'recent',
+      timeRange: 'all'
+      // query is intentionally omitted (undefined) to clear it
     };
     
     // Also clear the search query state
     setCurrentSearchQuery('');
     
     await handleFiltersChange(newFilters);
-  }, [currentFilters, handleFiltersChange]);
+  }, [handleFiltersChange]);
 
   // Handle load more for filtered content
   const handleFilteredLoadMore = useCallback(() => {
@@ -1252,12 +1262,12 @@ export default function Dashboard() {
           <SearchErrorBoundary>
             <SearchBar
               onSearch={(results, query) => {
-                handleSearch(query, paginationState.currentSearchFilters);
+                handleSearch(query, currentFilters);
               }}
               onFiltersChange={handleFiltersChange}
               className="w-full"
               currentQuery={currentSearchQuery}
-              initialFilters={paginationState.currentSearchFilters}
+              initialFilters={currentFilters}
               isLoadingMore={paginationState.fetchInProgress || paginationState.isLoadingMore}
             />
           </SearchErrorBoundary>

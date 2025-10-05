@@ -822,6 +822,30 @@ export default function Dashboard() {
     await loadPosts(1, false);
   }, [paginationManager, loadPosts]);
 
+  // Clear post type filter while preserving other filters
+  const clearPostTypeFilter = useCallback(async () => {
+    console.log('🧹 Dashboard: Clearing post type filter');
+    const newFilters: SearchFilters = { ...currentFilters };
+    delete newFilters.postType;
+    await handleFiltersChange(newFilters);
+  }, [currentFilters, handleFiltersChange]);
+
+  // Clear sort by filter while preserving other filters
+  const clearSortByFilter = useCallback(async () => {
+    console.log('🧹 Dashboard: Clearing sort by filter');
+    const newFilters: SearchFilters = { ...currentFilters };
+    delete newFilters.sortBy;
+    await handleFiltersChange(newFilters);
+  }, [currentFilters, handleFiltersChange]);
+
+  // Clear time range filter while preserving other filters
+  const clearTimeRangeFilter = useCallback(async () => {
+    console.log('🧹 Dashboard: Clearing time range filter');
+    const newFilters: SearchFilters = { ...currentFilters };
+    delete newFilters.timeRange;
+    await handleFiltersChange(newFilters);
+  }, [currentFilters, handleFiltersChange]);
+
   // Clear creator filter while preserving other filters
   const clearCreatorFilter = useCallback(async () => {
     console.log('🧹 Dashboard: Clearing creator filter');
@@ -1421,32 +1445,65 @@ export default function Dashboard() {
                 
                 {/* Content Type Badge */}
                 {currentFilters.postType && currentFilters.postType !== 'all' && (
-                  <span className="bg-green-900/30 text-green-400 px-3 py-1 rounded-full text-xs font-medium border border-green-700">
-                    📁 {currentFilters.postType === 'audio' ? 'Audio Posts' : currentFilters.postType === 'text' ? 'Text Posts' : 'Creators'}
+                  <span className="bg-green-900/30 text-green-400 px-3 py-1 rounded-full text-xs font-medium border border-green-700 flex items-center gap-1.5">
+                    <span>📁</span>
+                    <span>{currentFilters.postType === 'audio' ? 'Audio Posts' : currentFilters.postType === 'text' ? 'Text Posts' : 'Creators'}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearPostTypeFilter();
+                      }}
+                      className="ml-1 hover:text-green-200 transition-colors"
+                      title="Clear content type filter"
+                    >
+                      ✕
+                    </button>
                   </span>
                 )}
                 
                 {/* Sort By Badge */}
                 {currentFilters.sortBy && currentFilters.sortBy !== 'recent' && (
-                  <span className="bg-purple-900/30 text-purple-400 px-3 py-1 rounded-full text-xs font-medium border border-purple-700">
-                    ⬇️ {
+                  <span className="bg-purple-900/30 text-purple-400 px-3 py-1 rounded-full text-xs font-medium border border-purple-700 flex items-center gap-1.5">
+                    <span>⬇️</span>
+                    <span>{
                       currentFilters.sortBy === 'oldest' ? 'Oldest First' :
                       currentFilters.sortBy === 'popular' ? 'Most Popular' :
                       currentFilters.sortBy === 'likes' ? 'Most Liked' :
                       currentFilters.sortBy === 'relevance' ? 'Most Relevant' :
                       'Recent'
-                    }
+                    }</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearSortByFilter();
+                      }}
+                      className="ml-1 hover:text-purple-200 transition-colors"
+                      title="Clear sort by filter"
+                    >
+                      ✕
+                    </button>
                   </span>
                 )}
                 
                 {/* Time Range Badge */}
                 {currentFilters.timeRange && currentFilters.timeRange !== 'all' && (
-                  <span className="bg-orange-900/30 text-orange-400 px-3 py-1 rounded-full text-xs font-medium border border-orange-700">
-                    📅 {
+                  <span className="bg-orange-900/30 text-orange-400 px-3 py-1 rounded-full text-xs font-medium border border-orange-700 flex items-center gap-1.5">
+                    <span>📅</span>
+                    <span>{
                       currentFilters.timeRange === 'today' ? 'Today' :
                       currentFilters.timeRange === 'week' ? 'This Week' :
                       'This Month'
-                    }
+                    }</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearTimeRangeFilter();
+                      }}
+                      className="ml-1 hover:text-orange-200 transition-colors"
+                      title="Clear time range filter"
+                    >
+                      ✕
+                    </button>
                   </span>
                 )}
                 

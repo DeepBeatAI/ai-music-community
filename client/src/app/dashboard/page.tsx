@@ -850,9 +850,65 @@ export default function Dashboard() {
       await clearSearch();
     } else {
       console.log('🧹 Applying remaining filters:', newFilters);
-      await handleFiltersChange(newFilters);
+      // CRITICAL: Update currentFilters first to prevent re-merging
+      setCurrentFilters(newFilters);
+      setFilterPage(1);
+      
+      // Then apply the filters (this will now see the updated currentFilters without creator)
+      // We need to bypass handleFiltersChange to avoid the merge logic
+      // Instead, directly apply the remaining filters
+      
+      // Handle search for users when there's a query
+      const hasValidQuery = newFilters.query && newFilters.query.trim() && newFilters.query.trim().length > 0;
+      if (hasValidQuery) {
+        try {
+          const results = await searchContent(newFilters, 0, 200);
+          paginationManager.updateSearch(results, newFilters.query!, newFilters);
+        } catch (error) {
+          console.error('Search error:', error);
+        }
+      } else {
+        paginationManager.clearSearch();
+      }
+      
+      // Apply filters to all posts
+      const hasActiveFilters = 
+        (newFilters.query && newFilters.query.trim()) ||
+        (newFilters.postType && newFilters.postType !== 'all') ||
+        (newFilters.sortBy && newFilters.sortBy !== 'recent') ||
+        (newFilters.timeRange && newFilters.timeRange !== 'all');
+      
+      if (hasActiveFilters) {
+        let allPosts = deduplicatePosts(paginationState.allPosts);
+        
+        // Fetch more posts if needed
+        const targetPostCount = 100;
+        if (allPosts.length < targetPostCount) {
+          try {
+            const postsNeeded = targetPostCount - allPosts.length;
+            const pagesNeeded = Math.ceil(postsNeeded / POSTS_PER_PAGE);
+            
+            for (let i = 0; i < pagesNeeded; i++) {
+              const page = Math.floor(allPosts.length / POSTS_PER_PAGE) + 1;
+              const { posts: morePosts } = await fetchPosts(page, POSTS_PER_PAGE, user?.id);
+              if (morePosts.length === 0) break;
+              allPosts = deduplicatePosts([...allPosts, ...morePosts]);
+              if (allPosts.length >= targetPostCount) break;
+            }
+          } catch (error) {
+            console.error('Error fetching additional posts:', error);
+          }
+        }
+        
+        const filtered = applyFiltersDirectly(newFilters, allPosts);
+        const dedupedFiltered = deduplicatePosts(filtered);
+        setFilteredPosts(dedupedFiltered);
+      } else {
+        setFilteredPosts([]);
+        paginationManager.clearSearch();
+      }
     }
-  }, [currentFilters, handleFiltersChange, clearSearch]);
+  }, [currentFilters, clearSearch, paginationManager, paginationState.allPosts, user?.id, deduplicatePosts, applyFiltersDirectly]);
 
   // Handle creator filter
   const handleCreatorFilter = useCallback(async (creatorId: string, username: string) => {

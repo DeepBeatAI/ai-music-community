@@ -73,13 +73,13 @@ export default function UserRecommendations({
       <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>
       <div className="space-y-4">
         {recommendations.map((rec) => (
-          <div key={rec.id} className={showProfileButton ? "p-3 bg-gray-700 rounded-lg" : "flex items-center space-x-3 p-3 bg-gray-700 rounded-lg"}>
+          <div key={rec.id} className={showProfileButton ? "p-2 bg-gray-700 rounded-lg" : "flex items-center space-x-3 p-3 bg-gray-700 rounded-lg"}>
             {showProfileButton ? (
-              <>
-                <div className="flex items-center space-x-3 mb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <div
                     onClick={() => handleUserClick(rec.username)}
-                    className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                    className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
                   >
                     <span className="text-white font-semibold text-sm">
                       {rec.username[0].toUpperCase()}
@@ -108,7 +108,7 @@ export default function UserRecommendations({
                   </div>
                 </div>
 
-                <div className="flex justify-end space-x-2">
+                <div className="flex space-x-2 flex-shrink-0">
                   <button
                     onClick={() => handleUserClick(rec.username)}
                     className="bg-gray-600 hover:bg-gray-500 text-white text-xs py-1.5 px-3 rounded transition-colors whitespace-nowrap"
@@ -122,7 +122,7 @@ export default function UserRecommendations({
                     variant="primary"
                   />
                 </div>
-              </>
+              </div>
             ) : (
               <>
                 <div

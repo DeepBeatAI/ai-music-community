@@ -542,20 +542,44 @@ export default function Dashboard() {
     async (filters: SearchFilters) => {
       const filterChangeStart = performance.now();
       console.log('🎯 Filter change started:', filters);
+      console.log('🎯 Current filters before merge:', currentFilters);
       
-      // CRITICAL: Always update currentFilters state immediately
-      setCurrentFilters(filters);
+      // CRITICAL FIX: Preserve creatorId and creatorUsername from currentFilters
+      // BUT only if the incoming filters don't explicitly clear them
+      const mergedFilters: SearchFilters = {
+        ...filters
+      };
+      
+      // Only preserve creator filter if:
+      // 1. It exists in current state
+      // 2. The incoming filters don't have creatorId (meaning they're not trying to change it)
+      if (currentFilters.creatorId && currentFilters.creatorUsername && !filters.creatorId) {
+        mergedFilters.creatorId = currentFilters.creatorId;
+        mergedFilters.creatorUsername = currentFilters.creatorUsername;
+        console.log('🎯 Preserved creator filter from current state');
+      }
+      
+      // CRITICAL: Remove query if it's empty string (treat it as undefined)
+      if (mergedFilters.query === '') {
+        delete mergedFilters.query;
+        console.log('🎯 Removed empty query string');
+      }
+      
+      console.log('🎯 Merged filters (with preserved creator filter):', mergedFilters);
+      
+      // CRITICAL: Always update currentFilters state immediately with merged filters
+      setCurrentFilters(mergedFilters);
       setFilterPage(1); // Reset to first page
       
-      // Check if creator filter is active
-      if (filters.creatorId && filters.creatorId.trim()) {
+      // Check if creator filter is active (using mergedFilters)
+      if (mergedFilters.creatorId && mergedFilters.creatorId.trim()) {
         console.log('📚 Creator filter active - fetching creator posts');
-        console.log('📚 Filter object:', filters);
+        console.log('📚 Filter object:', mergedFilters);
         
         try {
           // Fetch ALL posts from the creator (increased limit)
           const { posts: creatorPosts } = await fetchPostsByCreator(
-            filters.creatorId,
+            mergedFilters.creatorId,
             1,
             200, // Increased from 100 to ensure we get all posts
             user?.id
@@ -568,34 +592,34 @@ export default function Dashboard() {
           
           // CRITICAL FIX: Only apply search query filter if it's explicitly set AND not empty
           // This prevents filtering by a stale query when switching from search to creator filter
-          const hasValidQuery = filters.query && filters.query.trim() && filters.query.trim().length > 0;
+          const hasValidQuery = mergedFilters.query && mergedFilters.query.trim() && mergedFilters.query.trim().length > 0;
           if (hasValidQuery) {
-            const queryLower = filters.query!.toLowerCase().trim();
+            const queryLower = mergedFilters.query!.toLowerCase().trim();
             const before = filtered.length;
-            console.log(`🔍 Applying search query filter: "${filters.query}"`);
+            console.log(`🔍 Applying search query filter: "${mergedFilters.query}"`);
             filtered = filtered.filter(post => {
               if (post.content && post.content.toLowerCase().includes(queryLower)) return true;
               if (post.post_type === 'audio' && post.audio_filename?.toLowerCase().includes(queryLower)) return true;
               return false;
             });
             console.log(`  ✓ Applied query filter: ${before} → ${filtered.length}`);
-          } else if (filters.query !== undefined) {
-            console.log(`⚠️ Ignoring empty/invalid query: "${filters.query}"`);
+          } else if (mergedFilters.query !== undefined) {
+            console.log(`⚠️ Ignoring empty/invalid query: "${mergedFilters.query}"`);
           }
           
           // Apply post type filter
-          if (filters.postType && filters.postType !== 'all' && filters.postType !== 'creators') {
+          if (mergedFilters.postType && mergedFilters.postType !== 'all' && mergedFilters.postType !== 'creators') {
             const before = filtered.length;
-            filtered = filtered.filter(post => post.post_type === filters.postType);
+            filtered = filtered.filter(post => post.post_type === mergedFilters.postType);
             console.log(`  ✓ Applied type filter: ${before} → ${filtered.length}`);
           }
           
           // Apply time range filter
-          if (filters.timeRange && filters.timeRange !== 'all') {
+          if (mergedFilters.timeRange && mergedFilters.timeRange !== 'all') {
             const now = Date.now();
             let cutoffMs: number;
             
-            switch (filters.timeRange) {
+            switch (mergedFilters.timeRange) {
               case 'today':
                 const todayUTC = new Date();
                 todayUTC.setUTCHours(0, 0, 0, 0);
@@ -619,7 +643,7 @@ export default function Dashboard() {
           }
           
           // Apply sorting
-          const sortBy = filters.sortBy || 'recent';
+          const sortBy = mergedFilters.sortBy || 'recent';
           switch (sortBy) {
             case 'oldest':
               filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
@@ -653,8 +677,8 @@ export default function Dashboard() {
               });
               break;
             case 'relevance':
-              if (filters.query && filters.query.trim()) {
-                const queryLower = filters.query.toLowerCase();
+              if (mergedFilters.query && mergedFilters.query.trim()) {
+                const queryLower = mergedFilters.query.toLowerCase();
                 filtered.sort((a, b) => {
                   let aScore = 0;
                   let bScore = 0;
@@ -693,10 +717,10 @@ export default function Dashboard() {
           console.log(`✅ Creator filter: Set ${filtered.length} filtered posts`);
           
           // Also handle search for users if query is present
-          if (filters.query && filters.query.trim()) {
+          if (mergedFilters.query && mergedFilters.query.trim()) {
             try {
-              const results = await searchContent(filters, 0, 200);
-              paginationManager.updateSearch(results, filters.query, filters);
+              const results = await searchContent(mergedFilters, 0, 200);
+              paginationManager.updateSearch(results, mergedFilters.query, mergedFilters);
             } catch (error) {
               console.error('Search error:', error);
             }
@@ -712,26 +736,26 @@ export default function Dashboard() {
       } else {
         // Handle non-creator filters
         const hasActiveFilters = 
-          (filters.query && filters.query.trim()) ||
-          (filters.postType && filters.postType !== 'all') ||
-          (filters.sortBy && filters.sortBy !== 'recent') ||
-          (filters.timeRange && filters.timeRange !== 'all');
+          (mergedFilters.query && mergedFilters.query.trim()) ||
+          (mergedFilters.postType && mergedFilters.postType !== 'all') ||
+          (mergedFilters.sortBy && mergedFilters.sortBy !== 'recent') ||
+          (mergedFilters.timeRange && mergedFilters.timeRange !== 'all');
         
         console.log('🔍 Non-creator filter - hasActiveFilters:', hasActiveFilters);
         
         // Handle search for users when there's a query - FIXED: Only search if query is valid
-        const hasValidQuery = filters.query && filters.query.trim() && filters.query.trim().length > 0;
+        const hasValidQuery = mergedFilters.query && mergedFilters.query.trim() && mergedFilters.query.trim().length > 0;
         if (hasValidQuery) {
-          console.log(`🔍 Non-creator path: Searching with query "${filters.query}"`);
+          console.log(`🔍 Non-creator path: Searching with query "${mergedFilters.query}"`);
           try {
-            const results = await searchContent(filters, 0, 200);
-            paginationManager.updateSearch(results, filters.query!, filters);
+            const results = await searchContent(mergedFilters, 0, 200);
+            paginationManager.updateSearch(results, mergedFilters.query!, mergedFilters);
           } catch (error) {
             console.error('Search error:', error);
           }
         } else {
-          if (filters.query !== undefined) {
-            console.log(`⚠️ Non-creator path: Ignoring empty/invalid query: "${filters.query}"`);
+          if (mergedFilters.query !== undefined) {
+            console.log(`⚠️ Non-creator path: Ignoring empty/invalid query: "${mergedFilters.query}"`);
           }
           paginationManager.clearSearch();
         }
@@ -766,7 +790,7 @@ export default function Dashboard() {
           }
           
           console.log(`🔍 Applying filters to ${allPosts.length} posts`);
-          const filtered = applyFiltersDirectly(filters, allPosts);
+          const filtered = applyFiltersDirectly(mergedFilters, allPosts);
           const dedupedFiltered = deduplicatePosts(filtered);
           console.log(`✅ Filter result: ${dedupedFiltered.length} posts`);
           setFilteredPosts(dedupedFiltered);
@@ -780,7 +804,7 @@ export default function Dashboard() {
       const filterChangeEnd = performance.now();
       console.log(`✅ Filter change completed in ${(filterChangeEnd - filterChangeStart).toFixed(2)}ms`);
     },
-    [paginationState.allPosts, user?.id, paginationManager, applyFiltersDirectly, deduplicatePosts]
+    [paginationState.allPosts, user?.id, paginationManager, applyFiltersDirectly, deduplicatePosts, currentFilters]
   );
       
 
@@ -801,33 +825,52 @@ export default function Dashboard() {
   // Clear creator filter while preserving other filters
   const clearCreatorFilter = useCallback(async () => {
     console.log('🧹 Dashboard: Clearing creator filter');
+    console.log('🧹 Current filters before clear:', currentFilters);
     
+    // Create new filters WITHOUT creatorId and creatorUsername
     const newFilters: SearchFilters = {
-      ...currentFilters,
-      creatorId: undefined,
-      creatorUsername: undefined
+      ...currentFilters
     };
     
-    await handleFiltersChange(newFilters);
-  }, [currentFilters, handleFiltersChange]);
+    // Explicitly remove creator filter properties
+    delete newFilters.creatorId;
+    delete newFilters.creatorUsername;
+    
+    console.log('🧹 New filters after removing creator:', newFilters);
+    
+    // If no filters remain, clear everything
+    const hasRemainingFilters = 
+      (newFilters.query && newFilters.query.trim()) ||
+      (newFilters.postType && newFilters.postType !== 'all') ||
+      (newFilters.sortBy && newFilters.sortBy !== 'recent') ||
+      (newFilters.timeRange && newFilters.timeRange !== 'all');
+    
+    if (!hasRemainingFilters) {
+      console.log('🧹 No remaining filters, clearing all');
+      await clearSearch();
+    } else {
+      console.log('🧹 Applying remaining filters:', newFilters);
+      await handleFiltersChange(newFilters);
+    }
+  }, [currentFilters, handleFiltersChange, clearSearch]);
 
   // Handle creator filter
   const handleCreatorFilter = useCallback(async (creatorId: string, username: string) => {
     console.log('🎯 Dashboard: Filtering by creator:', username, creatorId);
-    console.log('🧹 Dashboard: FORCE clearing search query in SearchBar');
     
-    // CRITICAL FIX: Clear search query AND force SearchBar re-render
+    // CRITICAL: Clear search query completely and force SearchBar to update
     setCurrentSearchQuery('');
     setSearchBarKey(prev => prev + 1); // Force SearchBar to re-mount with empty query
     
-    // IMPORTANT: Create a completely clean filter object with ONLY creator info
+    // Create filter with creator info but NO search query
     const newFilters: SearchFilters = {
       creatorId,
       creatorUsername: username
-      // ALL other properties intentionally omitted - no query, no filters
+      // Intentionally NOT including query - it should be empty
+      // Intentionally NOT including other filters - start fresh with just creator
     };
     
-    console.log('🎯 Applying creator-only filters:', newFilters);
+    console.log('🎯 Applying creator-only filter:', newFilters);
     
     // Apply filters immediately
     await handleFiltersChange(newFilters);
@@ -1289,11 +1332,30 @@ export default function Dashboard() {
           {/* Active Filters Display Bar */}
           {(filteredPosts.length > 0 || 
             currentFilters.query ||
+            currentFilters.creatorId ||
             (currentFilters.postType && currentFilters.postType !== 'all') ||
             (currentFilters.sortBy && currentFilters.sortBy !== 'recent') ||
             (currentFilters.timeRange && currentFilters.timeRange !== 'all')) && (
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center space-x-2 text-sm text-gray-300 flex-wrap gap-2">
+                {/* Creator Filter Badge - MOST IMPORTANT, SHOW FIRST */}
+                {currentFilters.creatorId && currentFilters.creatorUsername && (
+                  <span className="bg-pink-900/30 text-pink-400 px-3 py-1 rounded-full text-xs font-medium border border-pink-700 flex items-center gap-1.5">
+                    <span>👤</span>
+                    <span>Creator: {currentFilters.creatorUsername}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearCreatorFilter();
+                      }}
+                      className="ml-1 hover:text-pink-200 transition-colors"
+                      title="Clear creator filter"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
+                
                 {/* Search Query Badge */}
                 {currentFilters.query && (
                   <span className="bg-blue-900/30 text-blue-400 px-3 py-1 rounded-full text-xs font-medium border border-blue-700">

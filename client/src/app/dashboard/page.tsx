@@ -197,11 +197,12 @@ export default function Dashboard() {
     const startTime = performance.now();
     console.log('🔧 Applying filters:', filters, 'to', allPosts.length, 'posts');
     
-    // Early return if no filters to apply
+    // Early return if no filters to apply - FIXED: Include sortBy in check
     const hasFilters = 
       (filters.query && filters.query.trim()) ||
       (filters.creatorId && filters.creatorId.trim()) ||
       (filters.postType && filters.postType !== 'all' && filters.postType !== 'creators') ||
+      (filters.sortBy && filters.sortBy !== 'recent') ||
       (filters.timeRange && filters.timeRange !== 'all');
     
     if (!hasFilters) {

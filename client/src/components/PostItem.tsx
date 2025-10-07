@@ -1,11 +1,14 @@
 'use client'
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import { formatTimeAgo, truncateText } from '@/utils/format';
 import { Post } from '@/types';
 import WavesurferPlayer from './WavesurferPlayer';
 import LikeButton from './LikeButton';
 import FollowButton from './FollowButton';
 import UserStatsCard from './UserStatsCard';
+import CommentList from './CommentList';
+import { supabase } from '@/lib/supabase';
+import { queryCache } from '@/utils/queryCache';
 
 interface PostItemProps {
   post: Post;
@@ -114,10 +117,85 @@ AudioPlayerSection.displayName = 'AudioPlayerSection';
 const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: PostItemProps) => {
   const isOwner = currentUserId === post.user_id;
   const username = post.user_profiles?.username || 'Anonymous';
+  const [commentCount, setCommentCount] = useState<number>(0);
+  const [showComments, setShowComments] = useState<boolean>(false);
+
+  // Fetch comment count on mount and when comments visibility changes
+  useEffect(() => {
+    const fetchCommentCount = async () => {
+      const { count, error } = await supabase
+        .from('comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id);
+
+      if (!error && count !== null) {
+        setCommentCount(count);
+      }
+    };
+
+    fetchCommentCount();
+  }, [post.id, showComments]); // Re-fetch when comments section is toggled
+
+  // Real-time subscription for comment count (ONLY when comments are hidden)
+  useEffect(() => {
+    // Only subscribe when comments section is closed
+    if (showComments) {
+      return; // CommentList will handle updates when open
+    }
+
+    const channel = supabase
+      .channel(`post-comments-${post.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'comments',
+          filter: `post_id=eq.${post.id}`
+        },
+        () => {
+          // Increment counter when new comment is added
+          setCommentCount((prev) => prev + 1);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'comments',
+          filter: `post_id=eq.${post.id}`
+        },
+        () => {
+          // Decrement counter when comment is deleted
+          setCommentCount((prev) => Math.max(0, prev - 1));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [post.id, showComments]); // Re-subscribe when showComments changes
+
+  // Callback to update comment count from CommentList (for optimistic updates)
+  const handleCommentCountChange = useCallback((delta: number) => {
+    setCommentCount((prev) => Math.max(0, prev + delta));
+  }, []);
 
   const handleDelete = async () => {
     if (window.confirm('Are you sure you want to delete this post?')) {
       onDelete?.(post.id);
+    }
+  };
+
+  const handleToggleComments = () => {
+    const newShowComments = !showComments;
+    setShowComments(newShowComments);
+    
+    // When opening comments, invalidate cache to ensure fresh data
+    if (newShowComments) {
+      queryCache.invalidatePattern(`comments-${post.id}`);
     }
   };
 
@@ -220,10 +298,22 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: P
               size="sm"
             />
             
-            {/* Future: Comment Button */}
-            <button className="flex items-center space-x-2 text-gray-400 hover:text-blue-400 transition-colors text-sm px-2 py-1 rounded hover:bg-blue-900/10">
+            {/* Comment Button with Count and Toggle */}
+            <button 
+              onClick={handleToggleComments}
+              className={`flex items-center space-x-2 transition-colors text-sm px-2 py-1 rounded ${
+                showComments 
+                  ? 'text-blue-400 bg-blue-900/20' 
+                  : 'text-gray-400 hover:text-blue-400 hover:bg-blue-900/10'
+              }`}
+            >
               <span>💬</span>
-              <span>Comment</span>
+              <span>{showComments ? 'Hide Comments' : 'Comments'}</span>
+              {commentCount > 0 && (
+                <span className="bg-blue-600 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                  {commentCount}
+                </span>
+              )}
             </button>
             
             {/* Future: Share Button */}
@@ -241,6 +331,17 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: P
           )}
         </div>
       </div>
+
+      {/* Comments Section */}
+      {showComments && (
+        <div className="border-t border-gray-700">
+          <CommentList 
+            postId={post.id}
+            currentUserId={currentUserId}
+            onCommentCountChange={handleCommentCountChange}
+          />
+        </div>
+      )}
     </div>
   );
 });

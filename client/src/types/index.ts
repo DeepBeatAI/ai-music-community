@@ -47,6 +47,22 @@ export interface UserFollow {
   following_id: string;
 }
 
+export interface Comment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  parent_comment_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommentWithProfile extends Comment {
+  user_profiles: UserProfile;
+  replies?: CommentWithProfile[];
+  reply_count?: number;
+}
+
 export interface Notification {
   id: string;
   created_at: string;

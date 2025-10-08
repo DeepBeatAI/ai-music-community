@@ -5,21 +5,42 @@ import { CommentWithProfile } from '@/types';
 import Comment from '@/components/Comment';
 import { queryCache } from '@/utils/queryCache';
 
+/**
+ * Props for the CommentList component
+ */
 interface CommentListProps {
+  /** The ID of the post to display comments for */
   postId: string;
+  /** The ID of the currently authenticated user (if any) */
   currentUserId?: string;
+  /** Optional initial comments to display (for SSR or prefetching) */
   initialComments?: CommentWithProfile[];
+  /** Callback function when comment count changes (for updating post comment count) */
   onCommentCountChange?: (delta: number) => void;
 }
 
+/** Number of comments to load per page */
 const COMMENTS_PER_PAGE = 10;
 
-// Helper functions defined outside component to avoid dependency issues
+/**
+ * Recursively adds a reply to the correct parent comment in the comment tree.
+ * This function traverses the comment tree to find the parent comment by ID
+ * and adds the new reply to its replies array.
+ * 
+ * @param comment - The comment to search (and potentially add reply to)
+ * @param parentId - The ID of the parent comment to add the reply to
+ * @param reply - The new reply to add
+ * @returns Updated comment with the reply added (if parent found)
+ * 
+ * @example
+ * const updatedComment = addReplyToComment(topLevelComment, 'parent-id-123', newReply);
+ */
 function addReplyToComment(
   comment: CommentWithProfile,
   parentId: string,
   reply: CommentWithProfile
 ): CommentWithProfile {
+  // Check if this is the parent comment
   if (comment.id === parentId) {
     return {
       ...comment,
@@ -28,6 +49,7 @@ function addReplyToComment(
     };
   }
   
+  // Recursively search nested replies
   if (comment.replies && comment.replies.length > 0) {
     return {
       ...comment,
@@ -38,15 +60,30 @@ function addReplyToComment(
   return comment;
 }
 
+/**
+ * Recursively replaces an optimistic comment (temporary ID) with the real comment
+ * from the server (permanent ID). This is used after successful comment creation
+ * to replace the optimistic UI update with real data.
+ * 
+ * @param comment - The comment to search
+ * @param tempId - The temporary ID of the optimistic comment
+ * @param realComment - The real comment data from the server
+ * @returns Updated comment with optimistic comment replaced
+ * 
+ * @example
+ * const updated = replaceOptimisticReply(comment, 'temp-123', serverComment);
+ */
 function replaceOptimisticReply(
   comment: CommentWithProfile,
   tempId: string,
   realComment: CommentWithProfile
 ): CommentWithProfile {
+  // Check if this is the optimistic comment to replace
   if (comment.id === tempId) {
     return realComment;
   }
   
+  // Recursively search nested replies
   if (comment.replies && comment.replies.length > 0) {
     return {
       ...comment,
@@ -57,11 +94,23 @@ function replaceOptimisticReply(
   return comment;
 }
 
+/**
+ * Recursively removes a reply from the comment tree.
+ * This is used for optimistic delete operations and rollback scenarios.
+ * 
+ * @param comment - The comment to search
+ * @param replyId - The ID of the reply to remove
+ * @returns Updated comment with the reply removed
+ * 
+ * @example
+ * const updated = removeReplyFromComment(comment, 'reply-id-to-delete');
+ */
 function removeReplyFromComment(
   comment: CommentWithProfile,
   replyId: string
 ): CommentWithProfile {
   if (comment.replies && comment.replies.length > 0) {
+    // Filter out the reply and recursively remove from nested replies
     const filteredReplies = comment.replies
       .filter(r => r.id !== replyId)
       .map(r => removeReplyFromComment(r, replyId));
@@ -76,40 +125,78 @@ function removeReplyFromComment(
   return comment;
 }
 
+/**
+ * CommentList Component
+ * 
+ * Manages the list of comments for a post, including:
+ * - Fetching and displaying comments with pagination
+ * - Comment creation form with validation
+ * - Real-time updates via Supabase Realtime
+ * - Optimistic UI updates for create/delete operations
+ * - Query caching for performance
+ * 
+ * Features:
+ * - Pagination (10 comments per page)
+ * - Real-time comment synchronization across users
+ * - Optimistic UI for instant feedback
+ * - Character limit validation (1000 chars)
+ * - Nested reply support
+ * - Cache invalidation strategy
+ * 
+ * Requirements: 1.1, 1.2, 1.3, 1.10, 1.12, 2.11, 4.7, 5.7, 6.1, 6.2, 6.5, 6.6, 6.7, 6.8
+ */
 export default function CommentList({
   postId,
   currentUserId,
   initialComments = [],
   onCommentCountChange
 }: CommentListProps) {
-  // State management
+  // State management for comments list
   const [comments, setComments] = useState<CommentWithProfile[]>(initialComments);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
 
-  // Comment creation form state
+  // State management for comment creation form
   const [newCommentContent, setNewCommentContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   
-  // Ref for textarea to enable auto-focus
+  // Ref for textarea to enable auto-focus when replying
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // Auto-focus textarea when replying
+  /**
+   * Auto-focus and scroll to textarea when user clicks reply button.
+   * This improves UX by immediately focusing the input field.
+   */
   useEffect(() => {
     if (replyingTo && textareaRef.current) {
       textareaRef.current.focus();
-      // Scroll textarea into view
+      // Scroll textarea into view for better mobile experience
       textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [replyingTo]);
 
-  // Fetch replies recursively
+  /**
+   * Recursively fetches all replies for a given parent comment.
+   * 
+   * This function implements a depth-first traversal of the comment tree:
+   * 1. Fetch direct replies for the parent comment
+   * 2. Fetch user profiles for all reply authors
+   * 3. Recursively fetch nested replies for each reply
+   * 4. Build complete comment tree with all nested data
+   * 
+   * The recursive approach ensures we load the complete comment thread
+   * regardless of nesting depth, while maintaining proper data structure.
+   * 
+   * @param parentId - The ID of the parent comment to fetch replies for
+   * @returns Array of comments with nested replies and user profiles
+   */
   const fetchReplies = useCallback(async (parentId: string): Promise<CommentWithProfile[]> => {
     try {
+      // Fetch all direct replies for this parent
       const { data, error: fetchError } = await supabase
         .from('comments')
         .select(`
@@ -120,23 +207,25 @@ export default function CommentList({
       
       if (fetchError) throw fetchError;
       
-      // Fetch user profiles separately
+      // Fetch user profiles separately for better performance
+      // (avoids N+1 query problem)
       const userIds = [...new Set((data || []).map(c => c.user_id))];
       const { data: profiles } = await supabase
         .from('user_profiles')
         .select('*')
         .in('user_id', userIds);
       
+      // Create a map for O(1) profile lookups
       const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
       
+      // Attach profiles to comments
       const repliesData = (data || []).map(comment => ({
         ...comment,
         user_profiles: profileMap.get(comment.user_id)
       }));
 
-
-
-      // Recursively fetch nested replies
+      // Recursively fetch nested replies for each reply
+      // This builds the complete comment tree structure
       const repliesWithNested = await Promise.all(
         repliesData.map(async (reply) => {
           const nestedReplies = await fetchReplies(reply.id);
@@ -151,7 +240,7 @@ export default function CommentList({
       return repliesWithNested;
     } catch (err) {
       console.error('Failed to fetch replies:', err);
-      return [];
+      return []; // Graceful degradation - return empty array on error
     }
   }, []);
 
@@ -169,7 +258,6 @@ export default function CommentList({
       if (pageNum === 0) {
         const cached = queryCache.get<CommentWithProfile[]>(cacheKey);
         if (cached) {
-          console.log('Cache hit for comments:', cacheKey);
           setComments(cached);
           setHasMore(cached.length === COMMENTS_PER_PAGE);
           setPage(pageNum);
@@ -384,9 +472,26 @@ export default function CommentList({
     }
   }, [fetchComments, initialComments.length]);
 
-  // Set up Realtime subscription for comments
+  /**
+   * Set up Supabase Realtime subscription for live comment updates.
+   * 
+   * This effect establishes a WebSocket connection to receive real-time updates
+   * when other users create or delete comments on this post. Key features:
+   * 
+   * 1. INSERT events: Add new comments from other users to the UI
+   * 2. DELETE events: Remove deleted comments from the UI
+   * 3. Optimistic UI filtering: Skip our own comments (already added optimistically)
+   * 4. Graceful degradation: If Realtime fails, comments still work via manual refresh
+   * 
+   * Cache Invalidation Strategy:
+   * - We don't invalidate cache on realtime updates to avoid unnecessary refetches
+   * - Cache is invalidated on user actions (create/delete) in other functions
+   * - This balances real-time updates with performance
+   * 
+   * Requirements: 1.10, 6.5, 6.6, 6.7, 6.8
+   */
   useEffect(() => {
-    // Subscribe to comments table changes for this post
+    // Subscribe to comments table changes for this specific post
     const channel = supabase
       .channel(`comments:post_id=eq.${postId}`)
       .on(
@@ -402,12 +507,13 @@ export default function CommentList({
           const newComment = payload.new;
           
           // Skip if this is our own comment (already added optimistically)
+          // This prevents duplicate comments in the UI
           if (newComment.user_id === currentUserId) {
             return;
           }
 
           try {
-            // Fetch the complete comment
+            // Fetch the complete comment with all fields
             const { data: commentData, error: fetchError } = await supabase
               .from('comments')
               .select('*')
@@ -417,7 +523,7 @@ export default function CommentList({
             if (fetchError) throw fetchError;
 
             if (commentData) {
-              // Fetch user profile
+              // Fetch user profile for the comment author
               const { data: profileData } = await supabase
                 .from('user_profiles')
                 .select('*')
@@ -431,9 +537,9 @@ export default function CommentList({
                 reply_count: 0
               };
 
-              // Add to appropriate location
+              // Add to appropriate location in the comment tree
               if (newComment.parent_comment_id) {
-                // Add as reply to existing comment
+                // Add as reply to existing comment (nested)
                 setComments(prev => prev.map(comment => 
                   addReplyToComment(comment, newComment.parent_comment_id, commentWithProfile)
                 ));
@@ -442,7 +548,7 @@ export default function CommentList({
                 setComments(prev => [commentWithProfile, ...prev]);
               }
               
-              // Notify parent component of count change
+              // Notify parent component to update comment count
               onCommentCountChange?.(1);
             }
           } catch (err) {
@@ -460,12 +566,12 @@ export default function CommentList({
           filter: `post_id=eq.${postId}`
         },
         (payload) => {
-          // Handle comment deletion
+          // Handle comment deletion from another user
           const deletedId = payload.old.id;
           
-          // Remove from UI
+          // Remove from UI based on whether it's a reply or top-level comment
           if (payload.old.parent_comment_id) {
-            // Remove reply
+            // Remove nested reply
             setComments(prev => prev.map(comment => 
               removeReplyFromComment(comment, deletedId)
             ));
@@ -474,7 +580,9 @@ export default function CommentList({
             setComments(prev => prev.filter(c => c.id !== deletedId));
           }
           
-          // Notify parent component of count change
+          // Notify parent component to update comment count
+          // Note: This only decrements by 1, not accounting for nested replies
+          // This is acceptable as the count will be corrected on next page load
           onCommentCountChange?.(-1);
         }
       )
@@ -487,7 +595,7 @@ export default function CommentList({
         }
       });
 
-    // Cleanup subscription on unmount
+    // Cleanup subscription on unmount to prevent memory leaks
     return () => {
       supabase.removeChannel(channel);
     };

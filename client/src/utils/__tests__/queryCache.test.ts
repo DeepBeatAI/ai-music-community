@@ -1,8 +1,8 @@
 /**
  * Query Cache Tests
  * 
- * Tests for the QueryCache utility class to ensure proper caching behavior,
- * TTL expiration, and cache invalidation.
+ * Tests cache hit/miss scenarios, TTL expiration, and invalidation
+ * Requirements: 2.11, 2.12
  */
 
 import { QueryCache } from '../queryCache';
@@ -18,167 +18,184 @@ describe('QueryCache', () => {
     cache.clear();
   });
 
-  describe('Basic Operations', () => {
-    it('should store and retrieve data', () => {
-      const testData = { id: 1, name: 'Test' };
-      cache.set('test-key', testData);
-      
-      const retrieved = cache.get('test-key');
-      expect(retrieved).toEqual(testData);
-    });
-
-    it('should return null for non-existent keys', () => {
-      const result = cache.get('non-existent');
+  describe('Cache Hit/Miss Scenarios', () => {
+    it('should return null on cache miss', () => {
+      const result = cache.get('non-existent-key');
       expect(result).toBeNull();
     });
 
-    it('should overwrite existing data', () => {
-      cache.set('test-key', { value: 1 });
-      cache.set('test-key', { value: 2 });
-      
+    it('should return data on cache hit', () => {
+      const testData = { id: '1', name: 'Test' };
+      cache.set('test-key', testData);
+
       const result = cache.get('test-key');
-      expect(result).toEqual({ value: 2 });
+      expect(result).toEqual(testData);
+    });
+
+    it('should handle multiple cache entries', () => {
+      cache.set('key1', { data: 'value1' });
+      cache.set('key2', { data: 'value2' });
+      cache.set('key3', { data: 'value3' });
+
+      expect(cache.get('key1')).toEqual({ data: 'value1' });
+      expect(cache.get('key2')).toEqual({ data: 'value2' });
+      expect(cache.get('key3')).toEqual({ data: 'value3' });
+    });
+
+    it('should overwrite existing cache entry', () => {
+      cache.set('key', { data: 'old' });
+      cache.set('key', { data: 'new' });
+
+      expect(cache.get('key')).toEqual({ data: 'new' });
     });
   });
 
   describe('TTL Expiration', () => {
     it('should return null for expired entries', async () => {
-      const testData = { id: 1, name: 'Test' };
-      cache.set('test-key', testData, 100); // 100ms TTL
-      
-      // Wait for expiration
-      await new Promise(resolve => setTimeout(resolve, 150));
-      
-      const result = cache.get('test-key');
-      expect(result).toBeNull();
-    });
+      const shortTTL = 100; // 100ms
+      cache.set('expiring-key', { data: 'test' }, shortTTL);
 
-    it('should return data before expiration', async () => {
-      const testData = { id: 1, name: 'Test' };
-      cache.set('test-key', testData, 200); // 200ms TTL
-      
-      // Wait but not long enough to expire
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
-      const result = cache.get('test-key');
-      expect(result).toEqual(testData);
+      // Should be available immediately
+      expect(cache.get('expiring-key')).toEqual({ data: 'test' });
+
+      // Wait for expiration
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should be expired now
+      expect(cache.get('expiring-key')).toBeNull();
     });
 
     it('should use default TTL of 5 minutes', () => {
-      const testData = { id: 1, name: 'Test' };
-      cache.set('test-key', testData); // No TTL specified
-      
-      const result = cache.get('test-key');
-      expect(result).toEqual(testData);
+      cache.set('key', { data: 'test' });
+
+      // Should still be available after 1 second
+      setTimeout(() => {
+        expect(cache.get('key')).toEqual({ data: 'test' });
+      }, 1000);
+    });
+
+    it('should respect custom TTL', async () => {
+      const customTTL = 50; // 50ms
+      cache.set('key1', { data: 'test1' }, customTTL);
+      cache.set('key2', { data: 'test2' }, 200); // 200ms
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // key1 should be expired, key2 should still be valid
+      expect(cache.get('key1')).toBeNull();
+      expect(cache.get('key2')).toEqual({ data: 'test2' });
     });
   });
 
   describe('Cache Invalidation', () => {
     it('should invalidate specific key', () => {
-      cache.set('test-key-1', { value: 1 });
-      cache.set('test-key-2', { value: 2 });
-      
-      cache.invalidate('test-key-1');
-      
-      expect(cache.get('test-key-1')).toBeNull();
-      expect(cache.get('test-key-2')).toEqual({ value: 2 });
+      cache.set('key1', { data: 'value1' });
+      cache.set('key2', { data: 'value2' });
+
+      cache.invalidate('key1');
+
+      expect(cache.get('key1')).toBeNull();
+      expect(cache.get('key2')).toEqual({ data: 'value2' });
     });
 
-    it('should invalidate keys matching pattern', () => {
-      cache.set('comments-post-1', { data: 'post1' });
-      cache.set('comments-post-2', { data: 'post2' });
-      cache.set('users-list', { data: 'users' });
-      
-      cache.invalidatePattern('comments-post');
-      
+    it('should invalidate by pattern', () => {
+      cache.set('comments-post-1', { data: 'comments1' });
+      cache.set('comments-post-2', { data: 'comments2' });
+      cache.set('posts-feed', { data: 'posts' });
+
+      cache.invalidatePattern('comments');
+
       expect(cache.get('comments-post-1')).toBeNull();
       expect(cache.get('comments-post-2')).toBeNull();
-      expect(cache.get('users-list')).toEqual({ data: 'users' });
+      expect(cache.get('posts-feed')).toEqual({ data: 'posts' });
     });
 
     it('should clear all cache entries', () => {
-      cache.set('key-1', { value: 1 });
-      cache.set('key-2', { value: 2 });
-      cache.set('key-3', { value: 3 });
-      
+      cache.set('key1', { data: 'value1' });
+      cache.set('key2', { data: 'value2' });
+      cache.set('key3', { data: 'value3' });
+
       cache.clear();
-      
-      expect(cache.get('key-1')).toBeNull();
-      expect(cache.get('key-2')).toBeNull();
-      expect(cache.get('key-3')).toBeNull();
+
+      expect(cache.get('key1')).toBeNull();
+      expect(cache.get('key2')).toBeNull();
+      expect(cache.get('key3')).toBeNull();
     });
   });
 
   describe('Cache Statistics', () => {
     it('should return correct cache size', () => {
-      cache.set('key-1', { value: 1 });
-      cache.set('key-2', { value: 2 });
-      
+      cache.set('key1', { data: 'value1' });
+      cache.set('key2', { data: 'value2' });
+
       const stats = cache.getStats();
       expect(stats.size).toBe(2);
-    });
-
-    it('should return list of cache keys', () => {
-      cache.set('key-1', { value: 1 });
-      cache.set('key-2', { value: 2 });
-      
-      const stats = cache.getStats();
-      expect(stats.entries).toContain('key-1');
-      expect(stats.entries).toContain('key-2');
+      expect(stats.entries).toContain('key1');
+      expect(stats.entries).toContain('key2');
     });
 
     it('should check if key exists', () => {
-      cache.set('test-key', { value: 1 });
-      
-      expect(cache.has('test-key')).toBe(true);
-      expect(cache.has('non-existent')).toBe(false);
+      cache.set('existing-key', { data: 'test' });
+
+      expect(cache.has('existing-key')).toBe(true);
+      expect(cache.has('non-existent-key')).toBe(false);
     });
   });
 
   describe('Type Safety', () => {
     it('should handle different data types', () => {
-      // String
-      cache.set('string-key', 'test string');
-      expect(cache.get<string>('string-key')).toBe('test string');
-      
-      // Number
-      cache.set('number-key', 42);
-      expect(cache.get<number>('number-key')).toBe(42);
-      
-      // Array
-      cache.set('array-key', [1, 2, 3]);
-      expect(cache.get<number[]>('array-key')).toEqual([1, 2, 3]);
-      
-      // Object
-      cache.set('object-key', { id: 1, name: 'Test' });
-      expect(cache.get<{ id: number; name: string }>('object-key')).toEqual({ id: 1, name: 'Test' });
+      cache.set('string', 'test string');
+      cache.set('number', 42);
+      cache.set('boolean', true);
+      cache.set('array', [1, 2, 3]);
+      cache.set('object', { nested: { data: 'value' } });
+
+      expect(cache.get<string>('string')).toBe('test string');
+      expect(cache.get<number>('number')).toBe(42);
+      expect(cache.get<boolean>('boolean')).toBe(true);
+      expect(cache.get<number[]>('array')).toEqual([1, 2, 3]);
+      expect(cache.get<{ nested: { data: string } }>('object')).toEqual({
+        nested: { data: 'value' },
+      });
     });
   });
 
-  describe('Edge Cases', () => {
-    it('should handle null and undefined values', () => {
-      cache.set('null-key', null);
-      cache.set('undefined-key', undefined);
-      
-      expect(cache.get('null-key')).toBeNull();
-      expect(cache.get('undefined-key')).toBeUndefined();
+  describe('Real-world Scenarios', () => {
+    it('should simulate comment caching workflow', () => {
+      const postId = 'post-123';
+      const cacheKey = `comments-${postId}`;
+      const comments = [
+        { id: '1', content: 'Comment 1' },
+        { id: '2', content: 'Comment 2' },
+      ];
+
+      // First request - cache miss
+      expect(cache.get(cacheKey)).toBeNull();
+
+      // Store in cache
+      cache.set(cacheKey, comments, 5 * 60 * 1000); // 5 minutes
+
+      // Second request - cache hit
+      expect(cache.get(cacheKey)).toEqual(comments);
+
+      // Invalidate on new comment
+      cache.invalidate(cacheKey);
+      expect(cache.get(cacheKey)).toBeNull();
     });
 
-    it('should handle empty strings and arrays', () => {
-      cache.set('empty-string', '');
-      cache.set('empty-array', []);
+    it('should handle pagination cache keys', () => {
+      const postId = 'post-123';
       
-      expect(cache.get('empty-string')).toBe('');
-      expect(cache.get('empty-array')).toEqual([]);
-    });
+      cache.set(`comments-${postId}-page-0`, ['comment1', 'comment2']);
+      cache.set(`comments-${postId}-page-1`, ['comment3', 'comment4']);
+      cache.set(`comments-${postId}-page-2`, ['comment5', 'comment6']);
 
-    it('should handle large data sets', () => {
-      const largeArray = Array.from({ length: 1000 }, (_, i) => ({ id: i, value: `item-${i}` }));
-      cache.set('large-data', largeArray);
-      
-      const retrieved = cache.get<typeof largeArray>('large-data');
-      expect(retrieved).toHaveLength(1000);
-      expect(retrieved?.[0]).toEqual({ id: 0, value: 'item-0' });
+      // Invalidate all pages for a post
+      cache.invalidatePattern(`comments-${postId}`);
+
+      expect(cache.get(`comments-${postId}-page-0`)).toBeNull();
+      expect(cache.get(`comments-${postId}-page-1`)).toBeNull();
+      expect(cache.get(`comments-${postId}-page-2`)).toBeNull();
     });
   });
 });

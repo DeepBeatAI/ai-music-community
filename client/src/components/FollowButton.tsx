@@ -26,11 +26,6 @@ export default function FollowButton({
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Don't show follow button for own profile
-  if (user && user.id === userId) {
-    return null;
-  }
-
   // Memoize follow status to prevent unnecessary re-renders
   const followStatus = useMemo(() => getFollowStatus(userId), [getFollowStatus, userId]);
   const { following, followerCount } = followStatus;
@@ -42,6 +37,11 @@ export default function FollowButton({
       refreshFollowStatus(userId);
     }
   }, [userId, user, refreshFollowStatus, hasInitialized]);
+
+  // Don't show follow button for own profile
+  if (user && user.id === userId) {
+    return null;
+  }
 
   const handleToggleFollow = async () => {
     if (!user) {

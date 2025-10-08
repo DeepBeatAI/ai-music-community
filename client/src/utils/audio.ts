@@ -172,7 +172,7 @@ export const uploadAudioFile = async (
       };
     }
 
-    let finalFile = file;
+    const finalFile = file;
     let compressionData: CompressionResult | undefined = compressionInfo;
 
     // If compression info wasn't provided, try to compress now

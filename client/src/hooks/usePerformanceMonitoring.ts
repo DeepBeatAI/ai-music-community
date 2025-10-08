@@ -34,7 +34,7 @@ interface UsePerformanceMonitoringReturn {
 
 // Simple performance tracking without the complex monitor that was causing loops
 let globalRenderCount = 0;
-let globalEffectExecutions = new Map<string, number>();
+const globalEffectExecutions = new Map<string, number>();
 
 /**
  * Simplified hook for performance monitoring that doesn't cause infinite loops

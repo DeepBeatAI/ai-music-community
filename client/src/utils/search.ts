@@ -215,7 +215,7 @@ export async function searchContent(
     );
 
     // Apply proper sorting after we have like counts
-    let sortedPosts = [...transformedPosts];
+    const sortedPosts = [...transformedPosts];
     switch (filters.sortBy) {
       case 'recent':
         sortedPosts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

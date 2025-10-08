@@ -67,7 +67,7 @@ export async function getActivityFeed(
     // Apply activity type filters - handle audio mapping at query level
     if (filters.activityTypes && filters.activityTypes.length > 0) {
       // Create expanded filter list that includes related activities for audio filtering
-      let expandedFilters = [...filters.activityTypes];
+      const expandedFilters = [...filters.activityTypes];
       if (filters.activityTypes.includes('audio_uploaded')) {
         // When filtering for audio, only include post_created to get audio post creations
         if (!expandedFilters.includes('post_created')) {

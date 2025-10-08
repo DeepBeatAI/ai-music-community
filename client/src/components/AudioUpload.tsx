@@ -53,7 +53,7 @@ export default function AudioUpload({
       }
 
       // Step 2: Apply aggressive compression for egress reduction
-      let finalFile = validationResult.file;
+      const finalFile = validationResult.file;
       let compressionInfo: CompressionResult | null = null;
 
       if (enableCompression) {

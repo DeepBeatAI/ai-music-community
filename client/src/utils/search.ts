@@ -462,10 +462,21 @@ export async function getFeaturedCreators(limit: number = 6) {
             .select('id', { count: 'exact', head: true })
             .eq('following_id', creator.user_id);
             
-          const { count: likesReceived } = await supabase
-            .from('post_likes')
-            .select('post_likes.id', { count: 'exact', head: true })
-            .eq('posts.user_id', creator.user_id);
+          // Get likes received by joining posts with post_likes
+          const { data: userPosts } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('user_id', creator.user_id);
+          
+          let likesReceived = 0;
+          if (userPosts && userPosts.length > 0) {
+            const postIds = userPosts.map(p => p.id);
+            const { count } = await supabase
+              .from('post_likes')
+              .select('id', { count: 'exact', head: true })
+              .in('post_id', postIds);
+            likesReceived = count || 0;
+          }
 
           return {
             ...creator,
@@ -473,7 +484,7 @@ export async function getFeaturedCreators(limit: number = 6) {
               posts_count: postsCount || 0,
               audio_posts_count: audioPostsCount || 0,
               followers_count: followersCount || 0,
-              likes_received: likesReceived || 0
+              likes_received: likesReceived
             }
           };
         } catch (error) {

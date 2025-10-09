@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { creatorCache } from './creatorCache';
+import { logger } from './logger';
 import type { Post, UserProfile } from '@/types';
 
 export interface PostWithProfile extends Post {
@@ -16,7 +17,7 @@ export async function fetchPosts(
   try {
     const offset = (page - 1) * limit;
     
-    console.log(`🔍 Fetching posts: page ${page}, limit ${limit}, offset ${offset}`);
+    logger.debug(`Fetching posts: page ${page}, limit ${limit}, offset ${offset}`);
     
     // Fetch posts with user profiles
     const { data: posts, error } = await supabase
@@ -34,12 +35,12 @@ export async function fetchPosts(
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('Error fetching posts:', error);
+      logger.error('Error fetching posts:', error);
       throw error;
     }
 
     if (!posts || posts.length === 0) {
-      console.log('No posts found');
+      logger.debug('No posts found');
       return { posts: [], hasMore: false };
     }
 
@@ -56,14 +57,14 @@ export async function fetchPosts(
           // Check if current user liked this post
           let likedByUser = false;
           if (userId) {
-            const { data: userLike } = await supabase
+            const { data: userLike, error: likeError } = await supabase
               .from('post_likes')
               .select('id')
               .eq('post_id', post.id)
               .eq('user_id', userId)
-              .single();
+              .maybeSingle();
             
-            likedByUser = !!userLike;
+            likedByUser = !likeError && !!userLike;
           }
 
           return {
@@ -72,7 +73,7 @@ export async function fetchPosts(
             liked_by_user: likedByUser
           };
         } catch (error) {
-          console.error(`Error fetching interactions for post ${post.id}:`, error);
+          logger.error(`Error fetching interactions for post ${post.id}:`, error);
           return {
             ...post,
             likes_count: 0,
@@ -89,14 +90,14 @@ export async function fetchPosts(
 
     const hasMore = (totalCount || 0) > offset + posts.length;
 
-    console.log(`✅ Successfully fetched ${postsWithInteractions.length} posts, hasMore: ${hasMore}`);
+    logger.debug(`Successfully fetched ${postsWithInteractions.length} posts, hasMore: ${hasMore}`);
     
     return {
       posts: postsWithInteractions,
       hasMore
     };
   } catch (error) {
-    console.error('Error in fetchPosts:', error);
+    logger.error('Error in fetchPosts:', error);
     throw error;
   }
 }
@@ -120,7 +121,7 @@ export async function createTextPost(
     
     return data;
   } catch (error) {
-    console.error('Error creating text post:', error);
+    logger.error('Error creating text post:', error);
     throw error;
   }
 }
@@ -159,13 +160,13 @@ export async function createAudioPost(
       .single();
 
     if (error) {
-      console.error('Database error creating audio post:', error);
+      logger.error('Database error creating audio post:', error);
       throw error;
     }
     
     return data;
   } catch (error) {
-    console.error('Error creating audio post:', error);
+    logger.error('Error creating audio post:', error);
     throw error;
   }
 }
@@ -192,7 +193,7 @@ export async function fetchPostsByCreator(
     
     const offset = (page - 1) * limit;
     
-    console.log(`🔍 Fetching posts by creator: ${creatorId}, page ${page}, limit ${limit}`);
+    logger.debug(`Fetching posts by creator: ${creatorId}, page ${page}, limit ${limit}`);
     
     // Query posts specifically from this creator
     const { data, error, count } = await supabase
@@ -211,12 +212,12 @@ export async function fetchPostsByCreator(
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('Error fetching creator posts:', error);
+      logger.error('Error fetching creator posts:', error);
       throw error;
     }
 
     if (!data || data.length === 0) {
-      console.log('No posts found for creator');
+      logger.debug('No posts found for creator');
       // Cache empty result for first page
       if (page === 1) {
         creatorCache.set(creatorId, []);
@@ -239,19 +240,19 @@ export async function fetchPostsByCreator(
                   .select('id')
                   .eq('post_id', post.id)
                   .eq('user_id', currentUserId)
-                  .single()
-              : Promise.resolve({ data: null })
+                  .maybeSingle()
+              : Promise.resolve({ data: null, error: null })
           ]);
 
           return {
             ...post,
             user_profiles: post.user_profiles,
             likes_count: likeData.count || 0,
-            liked_by_user: !!userLikeData.data,
+            liked_by_user: !userLikeData.error && !!userLikeData.data,
             like_count: likeData.count || 0 // Add both properties for compatibility
           };
         } catch (error) {
-          console.error(`Error fetching interactions for post ${post.id}:`, error);
+          logger.error(`Error fetching interactions for post ${post.id}:`, error);
           return {
             ...post,
             user_profiles: post.user_profiles,
@@ -266,7 +267,7 @@ export async function fetchPostsByCreator(
     const totalCount = count || 0;
     const hasMore = offset + limit < totalCount;
 
-    console.log(`✅ Fetched ${posts.length} posts from creator (total: ${totalCount}, hasMore: ${hasMore})`);
+    logger.debug(`Fetched ${posts.length} posts from creator (total: ${totalCount}, hasMore: ${hasMore})`);
 
     // Cache the results if first page
     if (page === 1 && posts.length > 0) {
@@ -275,7 +276,7 @@ export async function fetchPostsByCreator(
 
     return { posts, hasMore };
   } catch (error) {
-    console.error('Error in fetchPostsByCreator:', error);
+    logger.error('Error in fetchPostsByCreator:', error);
     return { posts: [], hasMore: false };
   }
 }
@@ -289,7 +290,7 @@ export async function deletePost(postId: string): Promise<void> {
 
     if (error) throw error;
   } catch (error) {
-    console.error('Error deleting post:', error);
+    logger.error('Error deleting post:', error);
     throw error;
   }
 }

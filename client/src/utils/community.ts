@@ -89,7 +89,7 @@ export const getPostLikeStatus = async (
         .select('id')
         .eq('post_id', postId)
         .eq('user_id', userId)
-        .single(),
+        .maybeSingle(),
       supabase
         .from('post_likes')
         .select('*', { count: 'exact', head: true })
@@ -98,7 +98,7 @@ export const getPostLikeStatus = async (
 
     return {
       data: {
-        liked: !likeStatus.error,
+        liked: !likeStatus.error && !!likeStatus.data,
         likeCount: likeCount.count || 0
       },
       error: null
@@ -181,7 +181,7 @@ export const getUserFollowStatus = async (
         .select('id')
         .eq('following_id', followingId)
         .eq('follower_id', followerId)
-        .single(),
+        .maybeSingle(),
       supabase
         .from('user_follows')
         .select('*', { count: 'exact', head: true })
@@ -194,7 +194,7 @@ export const getUserFollowStatus = async (
 
     return {
       data: {
-        following: !followStatus.error,
+        following: !followStatus.error && !!followStatus.data,
         followerCount: followerCount.count || 0,
         followingCount: followingCount.count || 0
       },

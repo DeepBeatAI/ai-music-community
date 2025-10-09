@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 // Smart URL caching system for audio files
 interface CachedUrl {
   url: string;
@@ -28,12 +30,12 @@ class AudioUrlCache {
     // Return cached URL if valid and not near expiry
     if (cached && this.isUrlValid(cached)) {
       cached.accessCount++;
-      console.log('✅ Using cached URL, access count:', cached.accessCount);
+      logger.debug('Using cached URL, access count:', cached.accessCount);
       return cached.url;
     }
 
     // Generate new signed URL
-    console.log('🔄 Generating fresh signed URL for cache');
+    logger.debug('Generating fresh signed URL for cache');
     const freshUrl = await this.generateSignedUrl(originalUrl);
     
     if (freshUrl) {
@@ -77,7 +79,7 @@ class AudioUrlCache {
 
     // Check if URL will expire within buffer time
     if (Date.now() >= (cached.expires - this.BUFFER_TIME)) {
-      console.log('⚡ Proactively refreshing URL before expiry');
+      logger.debug('Proactively refreshing URL before expiry');
       return this.getCachedUrl(originalUrl);
     }
 
@@ -96,13 +98,61 @@ class AudioUrlCache {
 
   private async generateSignedUrl(originalUrl: string): Promise<string | null> {
     try {
-      // Import here to avoid circular dependency
-      const { getAudioSignedUrl } = await import('./audio');
-      return await getAudioSignedUrl(originalUrl);
+      // Extract file path from URL
+      const filePath = this.extractFilePathFromUrl(originalUrl);
+      
+      if (!filePath) {
+        logger.error('Could not extract file path from URL:', originalUrl);
+        return originalUrl;
+      }
+
+      // Import supabase here to avoid circular dependency
+      const { supabase } = await import('@/lib/supabase');
+      
+      // Create signed URL
+      const { data, error } = await supabase.storage
+        .from('audio-files')
+        .createSignedUrl(filePath, 7200); // 2 hours
+
+      if (error) {
+        logger.error('Error creating signed URL:', error.message);
+        return originalUrl;
+      }
+
+      return data.signedUrl;
     } catch (error) {
-      console.error('Failed to generate signed URL:', error);
+      logger.error('Failed to generate signed URL:', error);
       return null;
     }
+  }
+
+  private extractFilePathFromUrl(audioUrl: string): string {
+    let filePath = '';
+    
+    if (audioUrl.includes('/object/sign/audio-files/')) {
+      const pathStart = audioUrl.indexOf('/object/sign/audio-files/') + '/object/sign/audio-files/'.length;
+      const pathEnd = audioUrl.indexOf('?') !== -1 ? audioUrl.indexOf('?') : audioUrl.length;
+      filePath = audioUrl.substring(pathStart, pathEnd);
+    } else if (audioUrl.includes('/object/public/audio-files/')) {
+      const pathStart = audioUrl.indexOf('/object/public/audio-files/') + '/object/public/audio-files/'.length;
+      filePath = audioUrl.substring(pathStart);
+    } else if (audioUrl.includes('storage/v1/object/')) {
+      const urlParts = audioUrl.split('/');
+      const audioFilesIndex = urlParts.findIndex(part => part === 'audio-files');
+      
+      if (audioFilesIndex !== -1) {
+        filePath = urlParts.slice(audioFilesIndex + 1).join('/').split('?')[0];
+      }
+    } else {
+      const urlParts = audioUrl.split('/');
+      const audioFilesIndex = urlParts.findIndex(part => part === 'audio-files');
+      
+      if (audioFilesIndex !== -1) {
+        filePath = urlParts.slice(audioFilesIndex + 1).join('/').split('?')[0];
+      }
+    }
+    
+    return filePath;
   }
 
   private setCachedUrl(originalUrl: string, signedUrl: string): void {
@@ -133,7 +183,7 @@ class AudioUrlCache {
       accessCount: 1
     });
 
-    console.log('💾 Cached new URL, expires at:', new Date(expires));
+    logger.debug('Cached new URL, expires at:', new Date(expires));
   }
 
   private evictOldest(): void {
@@ -149,7 +199,7 @@ class AudioUrlCache {
 
     if (oldestKey) {
       this.cache.delete(oldestKey);
-      console.log('🗑️ Evicted oldest cached URL:', oldestKey);
+      logger.debug('Evicted oldest cached URL:', oldestKey);
     }
   }
 
@@ -165,7 +215,7 @@ class AudioUrlCache {
     }
 
     if (cleaned > 0) {
-      console.log('🧹 Cleaned up', cleaned, 'expired URLs from cache');
+      logger.debug('Cleaned up', cleaned, 'expired URLs from cache');
     }
   }
 
@@ -183,7 +233,7 @@ class AudioUrlCache {
 
   clearCache(): void {
     this.cache.clear();
-    console.log('🗑️ Cache cleared');
+    logger.debug('Cache cleared');
   }
 }
 

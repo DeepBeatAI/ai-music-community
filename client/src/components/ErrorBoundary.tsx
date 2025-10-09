@@ -12,6 +12,7 @@ interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  resetKeys?: unknown[];
 }
 
 interface State {
@@ -46,6 +47,23 @@ export class ErrorBoundary extends Component<Props, State> {
     // Call optional error handler
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
+    }
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    // Reset error state if resetKeys change
+    if (this.state.hasError && this.props.resetKeys) {
+      const hasChanged = this.props.resetKeys.some(
+        (key, index) => key !== prevProps.resetKeys?.[index]
+      );
+      
+      if (hasChanged) {
+        this.setState({ 
+          hasError: false, 
+          error: undefined, 
+          errorInfo: undefined 
+        });
+      }
     }
   }
 

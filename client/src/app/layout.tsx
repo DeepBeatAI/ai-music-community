@@ -6,7 +6,8 @@ import { FollowProvider } from '@/contexts/FollowContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import CacheTestDashboard from '@/components/CacheTestDashboard';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { suppressExtensionErrors } from '@/utils/extensionErrorHandler';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const [showDashboard, setShowDashboard] = useState(false);
+
+  // Initialize extension error suppression on mount
+  useEffect(() => {
+    suppressExtensionErrors();
+  }, []);
 
   return (
     <html lang="en">

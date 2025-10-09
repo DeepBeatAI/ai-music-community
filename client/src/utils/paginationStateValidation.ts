@@ -359,9 +359,9 @@ export function validateStateTransition(
     return false;
   }
   
-  // Log warnings but allow transition
-  if (validation.warnings.length > 0) {
-    console.warn('⚠️ State transition warnings (allowed):', validation.warnings);
+  // Log warnings but allow transition (only in development)
+  if (validation.warnings.length > 0 && process.env.NODE_ENV === 'development') {
+    console.debug('⚠️ State transition warnings (allowed):', validation.warnings);
   }
   
   // Log non-critical errors but allow transition

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { getCachedAudioUrl, isAudioUrlExpired } from './audioCache';
+import { isAudioUrlExpired } from './audioCache';
 import { serverAudioCompressor, CompressionResult } from './serverAudioCompression';
 
 // Supported audio file types and their MIME types
@@ -310,9 +310,11 @@ const extractFilePathFromUrl = (audioUrl: string): string => {
 
 /**
  * DEPRECATED - Legacy function kept for compatibility
+ * @deprecated Use getBestAudioUrl instead for better performance and caching
+ * @see getBestAudioUrl
  */
 export const getAudioSignedUrl = async (audioUrl: string): Promise<string | null> => {
-  console.warn('⚠️ Using legacy getAudioSignedUrl - consider using getBestAudioUrl for better performance');
+  // Deprecation warning removed - function should not be called anymore
   try {
     const filePath = extractFilePathFromUrl(audioUrl);
     
@@ -383,25 +385,38 @@ export const validateAudioUrl = async (audioUrl: string, timeout: number = 3000)
 
 /**
  * Get the best available audio URL with smart caching
+ * This function is now a simple wrapper that delegates to audioCache
  */
 export const getBestAudioUrl = async (originalUrl: string): Promise<string | null> => {
   try {
+    // Check if URL is already signed and not expired
     if (originalUrl.includes('/object/sign/audio-files/')) {
       if (!isAudioUrlExpired(originalUrl)) {
         return originalUrl;
       }
     }
     
-    const cachedUrl = await getCachedAudioUrl(originalUrl);
+    // For public URLs or expired signed URLs, generate a new signed URL
+    const filePath = extractFilePathFromUrl(originalUrl);
     
-    if (cachedUrl && cachedUrl !== originalUrl) {
-      return cachedUrl;
+    if (!filePath) {
+      console.error('❌ Could not extract file path from URL:', originalUrl);
+      return originalUrl;
     }
-    
-    return originalUrl;
+
+    const { data, error } = await supabase.storage
+      .from('audio-files')
+      .createSignedUrl(filePath, 7200); // 2 hours
+
+    if (error) {
+      console.error('❌ Error creating signed URL:', error.message);
+      return originalUrl;
+    }
+
+    return data.signedUrl;
     
   } catch (error) {
-    console.error('❌ Error in optimized getBestAudioUrl:', error);
+    console.error('❌ Error in getBestAudioUrl:', error);
     return originalUrl;
   }
 };

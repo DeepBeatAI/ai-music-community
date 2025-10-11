@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ESLint and test reports
+eslint*.json
+*-report.json
+*.report.html
+final-*.json

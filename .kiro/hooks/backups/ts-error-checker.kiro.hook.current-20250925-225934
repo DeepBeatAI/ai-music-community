@@ -1,0 +1,152 @@
+{
+  "enabled": true,
+  "name": "Enhanced TypeScript Error Checker",
+  "description": "Comprehensive TypeScript error detection with multi-phase validation loop, iterative fixing, advanced error tracking, and robust safety mechanisms to ensure complete error resolution before completion reporting",
+  "version": "6",
+  "when": {
+    "type": "userTriggered",
+    "conditions": [
+      {
+        "type": "fileEdited",
+        "patterns": [
+          "**/*.ts",
+          "**/*.tsx"
+        ]
+      },
+      {
+        "type": "taskCompleted",
+        "patterns": [
+          "**/*.md"
+        ]
+      },
+      {
+        "type": "taskStatusChanged",
+        "patterns": [
+          "**/*"
+        ]
+      },
+      {
+        "type": "manual",
+        "buttonText": "Check TypeScript Errors"
+      }
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "ENHANCED TYPESCRIPT VALIDATION REQUIRED: Execute a comprehensive multi-phase TypeScript error detection and resolution process with advanced error parsing, categorization, detailed reporting, and robust safety mechanisms.\n\n=== PHASE 1: INITIAL ERROR DETECTION AND PARSING ===\n1. Run `npx tsc --noEmit` in the client directory\n2. Parse TypeScript compiler output using detailed error analysis:\n   - Extract error code (e.g., TS2304, TS2322, TS2345)\n   - Extract file path and line/column numbers\n   - Extract error message text\n   - Generate unique error signature: \"[ERROR_CODE]:[FILE_PATH]:[LINE]:[COLUMN]:[MESSAGE_HASH]\"\n3. Count total errors and report: \"🔍 Initial Scan: Found [X] TypeScript errors\"\n4. Categorize errors using comprehensive classification:\n\n   **SYNTAX ERRORS (TS1xxx series):**\n   - TS1005: Expected token errors\n   - TS1109: Expression expected\n   - TS1128: Declaration or statement expected\n   - TS1161: Unterminated string literal\n   \n   **TYPE ERRORS (TS2xxx series):**\n   - TS2304: Cannot find name/identifier\n   - TS2322: Type assignment errors\n   - TS2345: Argument type mismatch\n   - TS2339: Property does not exist\n   - TS2571: Object is of type 'unknown'\n   - TS2740: Type missing required properties\n   \n   **IMPORT/MODULE ERRORS:**\n   - TS2307: Cannot find module\n   - TS2305: Module has no exported member\n   - TS2306: Not a module\n   - TS2503: Cannot find namespace\n   \n   **CONFIGURATION ERRORS:**\n   - TS5023: Unknown compiler option\n   - TS6053: File not under 'rootDir'\n   - TS6059: File is not in project\n\n5. Generate initial error report with categorization:\n   ```\n   📊 ERROR BREAKDOWN:\n   - Syntax Errors: [count] ([percentage]%)\n   - Type Errors: [count] ([percentage]%)\n   - Import/Module Errors: [count] ([percentage]%)\n   - Configuration Errors: [count] ([percentage]%)\n   - Other/Unclassified: [count] ([percentage]%)\n   ```\n\n6. If NO errors found: Report \"✁ETypeScript Check Complete: No errors detected\" and STOP\n7. If errors found: Create ERROR_TRACKING_LOG and proceed to Phase 2\n\n=== PHASE 2: ITERATIVE ERROR RESOLUTION WITH DETAILED TRACKING ===\nInitialize comprehensive tracking:\n- ITERATION_COUNT = 1\n- MAX_ITERATIONS = 5\n- PREVIOUS_ERROR_SIGNATURES = []\n- FIXES_APPLIED = []\n- ERROR_TRACKING_LOG = {\n    initial_count: [number],\n    initial_breakdown: [category_counts],\n    iterations: []\n  }\n\nFor each iteration:\n1. **Error Analysis Phase:**\n   - Parse current TypeScript output\n   - Generate error signatures for comparison\n   - Categorize errors by type and priority\n   - Identify fixable vs complex errors\n\n2. **Targeted Fix Application:**\n   Apply fixes based on error category with detailed logging:\n   \n   **For SYNTAX ERRORS:**\n   - Fix missing semicolons, brackets, parentheses\n   - Correct malformed expressions\n   - Fix unterminated strings\n   - Log: \"🔧 SYNTAX FIX: [file]:[line] - [description]\"\n   \n   **For TYPE ERRORS:**\n   - Add explicit type annotations\n   - Fix type mismatches with proper casting\n   - Add missing properties to objects\n   - Handle 'unknown' type assignments\n   - Log: \"🏷�E�ETYPE FIX: [file]:[line] - [description]\"\n   \n   **For IMPORT/MODULE ERRORS:**\n   - Add missing import statements\n   - Fix incorrect import paths\n   - Update import syntax (default vs named)\n   - Log: \"📦 IMPORT FIX: [file]:[line] - [description]\"\n   \n   **For CONFIGURATION ERRORS:**\n   - Update tsconfig.json settings\n   - Fix path mappings\n   - Adjust compiler options\n   - Log: \"⚙︁ECONFIG FIX: [file]:[line] - [description]\"\n\n3. **Fix Documentation:**\n   For each fix applied, record:\n   ```\n   {\n     iteration: [number],\n     timestamp: [ISO_string],\n     file_path: \"[relative_path]\",\n     line_number: [number],\n     error_code: \"[TS_code]\",\n     error_category: \"[SYNTAX|TYPE|IMPORT|CONFIG]\",\n     original_error: \"[error_message]\",\n     fix_description: \"[what_was_changed]\",\n     fix_type: \"[specific_fix_category]\"\n   }\n   ```\n\n4. Proceed to Phase 3 for validation\n\n=== PHASE 3: ITERATIVE VALIDATION LOOP WITH ENHANCED SAFETY MECHANISMS ===\n1. **Re-run TypeScript Compilation Check:**\n   - Execute `npx tsc --noEmit` in client directory\n   - Capture both stdout and stderr for comprehensive error detection\n   - Check for compilation infrastructure failures (command not found, permission errors, etc.)\n   - If TypeScript compiler fails to run: Report \"🚨 INFRASTRUCTURE ERROR: TypeScript compiler failed to execute\" and STOP\n\n2. **Error Signature Generation and Comparison:**\n   - Parse TypeScript output with enhanced error signature creation\n   - Generate current error signatures using format: \"[ERROR_CODE]:[FILE_PATH]:[LINE]:[COLUMN]:[ERROR_MESSAGE_HASH]\"\n   - Create CURRENT_ERROR_SIGNATURES array\n   - Compare with PREVIOUS_ERROR_SIGNATURES using exact signature matching\n\n3. **Safety Mechanism Evaluation (CRITICAL - Execute Before Any Further Processing):**\n   \n   **A. Zero Errors Check:**\n   - If CURRENT_ERRORS = 0: Proceed immediately to Phase 4 (Success Reporting)\n   \n   **B. Maximum Iteration Safety Limit:**\n   - If ITERATION_COUNT >= MAX_ITERATIONS (5):\n     ```\n     ⚠�E�ESAFETY LIMIT REACHED: Maximum 5 iterations completed\n     \n     📊 FINAL STATUS:\n     - Initial Errors: [initial_count]\n     - Remaining Errors: [current_count]\n     - Iterations Completed: 5\n     - Total Fixes Applied: [total_fixes]\n     \n     🔄 PERSISTENT ERRORS REQUIRING MANUAL INTERVENTION:\n     [List each persistent error with:]\n     - File: [path]\n     - Line: [number]\n     - Error Code: [TS_code]\n     - Message: [error_text]\n     - Category: [SYNTAX|TYPE|IMPORT|CONFIG]\n     - Persistence: Appeared in [X] consecutive iterations\n     \n     💡 RECOMMENDED ACTIONS:\n     - Review complex architectural issues\n     - Check for missing dependencies\n     - Validate TypeScript configuration\n     - Consider manual code refactoring\n     ```\n     STOP execution immediately\n   \n   **C. Error Persistence Detection (Stuck Error Prevention):**\n   - Compare CURRENT_ERROR_SIGNATURES with PREVIOUS_ERROR_SIGNATURES\n   - Calculate signature overlap percentage: (matching_signatures / total_current_signatures) * 100\n   - If overlap >= 90% AND ITERATION_COUNT >= 2:\n     ```\n     🔄 STUCK ERRORS DETECTED: [X]% of errors persist unchanged\n     \n     📋 ANALYSIS:\n     - Iteration: [current] of [max]\n     - Persistent Errors: [count]\n     - New Errors: [count]\n     - Resolved Errors: [count]\n     \n     🚫 UNFIXABLE ERRORS (Require Manual Intervention):\n     [For each persistent error:]\n     - [file_path]:[line] - [TS_code]: [message]\n       └─ Persistence: [X] iterations\n       └─ Category: [error_category]\n       └─ Likely Cause: [automated_analysis]\n     \n     💡 MANUAL INTERVENTION REQUIRED:\n     These errors cannot be automatically resolved and need developer attention:\n     - Complex type system issues\n     - Missing external dependencies\n     - Architectural design problems\n     - Configuration conflicts\n     ```\n     STOP execution immediately\n   \n   **D. Error Regression Detection:**\n   - Identify new error signatures not in PREVIOUS_ERROR_SIGNATURES\n   - If new errors introduced > errors resolved:\n     ```\n     ⚠�E�EERROR REGRESSION DETECTED\n     - New Errors Introduced: [count]\n     - Errors Resolved: [count]\n     - Net Progress: -[negative_number]\n     \n     🔍 REGRESSION ANALYSIS:\n     [List new errors with suspected causes]\n     \n     🛠�E�EROLLBACK CONSIDERATION:\n     Recent fixes may have introduced new issues. Manual review recommended.\n     ```\n     Continue with caution flag set\n\n4. **Progress Tracking and Reporting:**\n   - Calculate error reduction: current_errors vs previous_iteration\n   - Generate progress report: \"📉 Iteration [N] Progress: [X] ↁE[Y] errors ([Z]% reduction)\"\n   - Track error category changes (syntax ↁEtype errors, etc.)\n   - Monitor fix effectiveness by category\n\n5. **Iteration State Management:**\n   - Update PREVIOUS_ERROR_SIGNATURES = CURRENT_ERROR_SIGNATURES\n   - Increment ITERATION_COUNT\n   - Record detailed iteration results:\n   ```\n   ERROR_TRACKING_LOG.iterations.push({\n     iteration: ITERATION_COUNT,\n     timestamp: [ISO_string],\n     errors_found: [current_count],\n     errors_resolved: [previous_count - current_count],\n     new_errors: [regression_count],\n     error_signatures: CURRENT_ERROR_SIGNATURES,\n     error_breakdown: [category_analysis],\n     fixes_applied: [iteration_fixes],\n     persistence_analysis: {\n       stuck_errors: [persistent_signature_list],\n       persistence_percentage: [overlap_percentage],\n       regression_detected: [boolean]\n     },\n     safety_status: {\n       max_iterations_reached: [boolean],\n       stuck_errors_detected: [boolean],\n       infrastructure_failure: [boolean]\n     }\n   })\n   ```\n\n6. **Loop Continuation Decision:**\n   - If all safety checks passed AND errors remain: Return to Phase 2 for next iteration\n   - If any safety mechanism triggered: STOP with appropriate reporting\n   - If zero errors achieved: Proceed to Phase 4\n\n7. **Enhanced Error Classification for Safety:**\n   Classify errors by fixability for better safety decisions:\n   \n   **AUTO-FIXABLE (High Success Rate):**\n   - Missing semicolons, brackets\n   - Simple type annotations\n   - Basic import statements\n   - Common syntax errors\n   \n   **MODERATELY FIXABLE (Medium Success Rate):**\n   - Type mismatches requiring casting\n   - Complex import path resolution\n   - Property access errors\n   - Generic type issues\n   \n   **COMPLEX/MANUAL (Low Success Rate - Safety Risk):**\n   - Architectural type conflicts\n   - Missing external dependencies\n   - Complex generic constraints\n   - Configuration incompatibilities\n   - Third-party library type issues\n\n=== PHASE 4: FINAL VALIDATION AND COMPREHENSIVE SUCCESS REPORTING ===\r\n\r\n**CRITICAL: This phase MUST be executed only when all previous phases indicate zero errors remain**\r\n\r\n1. **Comprehensive Final TypeScript Compilation Check (MANDATORY):**\r\n   \r\n   **A. Pre-Validation Infrastructure Check:**\r\n   - Verify TypeScript compiler availability: \npx tsc --version\r\n   - Confirm client directory exists and is accessible\r\n   - Check for tsconfig.json presence and validity\r\n   - If any infrastructure issues: Report \"🚨 INFRASTRUCTURE ERROR: [specific_issue]\" and STOP\r\n   \r\n   **B. Final Compilation Execution:**\r\n   - Execute \npx tsc --noEmit in client directory with full error capture\r\n   - Capture both stdout and stderr streams\r\n   - Record compilation execution time and resource usage\r\n   - Parse output with comprehensive error detection (including warnings)\r\n   \r\n   **C. Zero-Error Confirmation Protocol (EXPLICIT VERIFICATION REQUIRED):**\r\n   - Count total errors in final compilation output\r\n   - Count total warnings in final compilation output  \r\n   - Verify error count = 0 AND warning count = 0\r\n   - If ANY errors or warnings found:\r\n     `\r\n     ❁EFINAL VALIDATION FAILED\r\n     \r\n     🚨 REMAINING ISSUES DETECTED:\r\n     - Errors: [count]\r\n     - Warnings: [count]\r\n     \r\n     📋 UNRESOLVED ISSUES:\r\n     [List each remaining error/warning with:]\r\n     - File: [path]\r\n     - Line: [number] \r\n     - Code: [TS_code]\r\n     - Message: [full_message]\r\n     - Severity: [ERROR|WARNING]\r\n     \r\n     🔄 RETURNING TO ITERATIVE RESOLUTION\r\n     This indicates the validation loop did not complete successfully.\r\n     Manual intervention may be required for complex issues.\r\n     `\r\n     Return to Phase 2 if iterations remain, otherwise report failure and STOP\r\n   \r\n   **D. Explicit Zero-Error Declaration:**\r\n   - ONLY proceed if error_count = 0 AND warning_count = 0\r\n   - Generate explicit confirmation: \"✁EZERO ERRORS CONFIRMED: TypeScript compilation successful with 0 errors and 0 warnings\"\r\n   - Record final validation timestamp and compilation metrics\r\n\r\n2. **Compact Success Report Generation with Word Count Validation and Fallback Mechanisms:**
+
+   **A. Data Collection for Compact Reporting:**
+   - Extract essential metrics from ERROR_TRACKING_LOG:
+     * initial_error_count = ERROR_TRACKING_LOG.initial_count
+     * final_error_count = 0 (confirmed in step 1)
+     * iterations_used = ITERATION_COUNT
+     * total_fixes_applied = sum of all fixes across iterations
+     * processing_start_time = recorded at Phase 1 start
+     * processing_end_time = current timestamp
+     * success = true (since we reached this point)
+
+   **B. Generate Compact Report Using Enhanced Template System with Validation:**
+   
+   1. **Create Hook Execution Data Object:**
+   ```javascript
+   const hookData = {
+     initialErrorCount: ERROR_TRACKING_LOG.initial_count,
+     finalErrorCount: 0,
+     iterationsUsed: ITERATION_COUNT,
+     totalFixesApplied: total_fixes_applied,
+     processingStartTime: processing_start_time,
+     processingEndTime: processing_end_time,
+     success: true
+   };
+   ```
+   
+   2. **Apply Word Count Validation and Fallback System:**
+   - Use validateAndGenerateReport() to ensure compliance with 50-word limit
+   - Implement automatic fallback cascade if standard templates exceed limit
+   - Apply emergency fallback for extreme edge cases
+   - Handle template generation errors gracefully
+   
+   3. **Report Generation Process:**
+   ```javascript
+   // Import the compact reporting utilities
+   const { validateAndGenerateReport, extractReportData } = require('./client/src/utils/reportTemplates');
+   const { extractReportData: extractHookData } = require('./client/src/utils/hookDataExtraction');
+   
+   try {
+     // Extract and format data for reporting
+     const reportData = extractHookData(hookData);
+     
+     // Generate report with comprehensive validation and fallback mechanisms
+     const compactReport = validateAndGenerateReport(reportData, {
+       maxWords: 50,
+       includeProcessingTime: true,
+       includeFixCount: true,
+       format: 'compact',
+       successEmoji: '✅',
+       failureEmoji: '⚠️'
+     });
+     
+     // Display the validated compact report
+     console.log(compactReport.message);
+     
+     // Log validation details for debugging
+     console.log(`📊 Report Metrics: ${compactReport.wordCount} words | Template: ${compactReport.templateUsed}`);
+     
+   } catch (error) {
+     // Fallback to emergency reporting if all else fails
+     console.log(`✅ TypeScript: ${ERROR_TRACKING_LOG.initial_count} → 0 errors (${ITERATION_COUNT} iterations)`);
+     console.log(`⚠️ Report generation error: ${error.message}`);
+   }
+   ```
+   
+   **C. Expected Compact Output Examples:**
+   
+   **Standard Success (within 50 words):**
+   ```
+   ✅ TypeScript: 15 → 0 errors resolved in 3 iterations (18 fixes applied)
+   ```
+   
+   **Multi-line Compact (for complex cases):**
+   ```
+   ✅ TypeScript Check Complete
+   15 → 0 errors | 3 iterations | 2.3s
+   ```
+   
+   **Fallback Template (restrictive word limits):**
+   ```
+   ✅ TypeScript: 15 errors fixed in 3 iterations
+   ```
+   
+   **Emergency Fallback (extreme cases):**
+   ```
+   ✅ 15→0
+   ```
+   
+   **D. Word Count Validation Process:**
+   - Pre-generation validation of input data
+   - Template selection based on data complexity and word limits
+   - Progressive fallback through shorter templates if needed
+   - Emergency fallback generation for extreme edge cases
+   - Error handling for template generation failures
+   - Final validation that output meets 50-word requirement
+
+   **C. Quality Assurance Validation (Maintained from Original):**
+   ```
+   🛡️ QUALITY ASSURANCE REPORT:
+   ✅ Zero TypeScript Errors Confirmed
+   ✅ Zero TypeScript Warnings Confirmed  
+   ✅ All Modified Files Syntactically Valid
+   ✅ Import Dependencies Resolved
+   ✅ Type System Consistency Verified
+   ✅ Configuration Compatibility Confirmed
+   
+   🔍 FINAL VALIDATION DETAILS:
+   - Compilation Command: npx tsc --noEmit
+   - Execution Directory: ./client
+   - Compiler Version: [version]
+   - Config File: tsconfig.json
+   - Exit Code: 0 (Success)
+   - Output: "No errors found"
+   ```\r\n\r\n3. **Enhanced Reporting Requirements Implementation:**\r\n\r\n   **A. Progression Tracking Standards:**\r\n   - MUST show initial ↁEfinal error count with exact numbers\r\n   - MUST display iteration-by-iteration progression  \r\n   - MUST calculate and show percentage reduction\r\n   - MUST highlight most effective iterations\r\n   - MUST identify error categories that required multiple iterations\r\n   \r\n   **B. Fix Documentation Standards:**\r\n   - MUST document every fix with file path, line number, error code\r\n   - MUST categorize fixes by type (SYNTAX, TYPE, IMPORT, CONFIG)\r\n   - MUST show before/after context for complex fixes\r\n   - MUST calculate fix efficiency metrics\r\n   - MUST identify patterns in error types and resolutions\r\n   \r\n   **C. Success Confirmation Requirements:**\r\n   - MUST explicitly state \"ZERO ERRORS CONFIRMED\"\r\n   - MUST show final compilation command and output\r\n   - MUST confirm both errors and warnings are eliminated\r\n   - MUST provide timestamp and processing duration\r\n   - MUST include quality assurance checklist confirmation\n\n=== ENHANCED ERROR REPORTING REQUIREMENTS ===\n1. **Initial Error Count Reporting:**\n   - Total count with percentage breakdown by category\n   - Error density per file (errors per 100 lines)\n   - Severity assessment (critical vs warning level)\n\n2. **Error Signature Tracking:**\n   - Unique signature format: \"[ERROR_CODE]:[FILE_PATH]:[LINE]:[COLUMN]:[MESSAGE_HASH]\"\n   - Signature persistence tracking across iterations\n   - New error detection (signatures not in previous iterations)\n\n3. **Fix Documentation Standards:**\n   - Every fix must include: file path, line number, error type, fix description\n   - Fix categorization: SYNTAX, TYPE, IMPORT, CONFIG, OTHER\n   - Fix complexity rating: SIMPLE, MODERATE, COMPLEX\n   - Before/after code snippets for complex fixes\n\n4. **Progress Reporting:**\n   - Error count progression: \"[Initial] ↁE[Current] ([Percentage] reduction)\"\n   - Category-specific progress tracking\n   - Iteration efficiency metrics\n   - Time-to-resolution estimates\n\n=== SAFETY MECHANISMS AND ERROR HANDLING ===\n- **Loop Prevention:** Maximum 5 iterations with early termination\n- **Stuck Error Detection:** Enhanced signature comparison across iterations with 90% persistence threshold\n- **Regression Detection:** New errors introduced by fixes with rollback warnings\n- **Infrastructure Failure Detection:** TypeScript compiler execution monitoring\n- **Graceful Failure:** Clear reporting for manual intervention cases with specific recommendations\n- **Resource Monitoring:** Track compilation time and memory usage\n\n=== EXECUTION NOTES ===\n- Always execute TypeScript compiler in client directory\n- Maintain structured ERROR_TRACKING_LOG throughout process\n- Provide real-time status updates with progress indicators\n- Use consistent error signature format for tracking\n- Include file modification timestamps in fix logs\n- Ensure all error categories are properly classified\n- Generate machine-readable output for potential automation\n- Implement safety checks before each iteration to prevent infinite loops\n- Report stuck errors with detailed analysis and manual intervention guidance"
+  }
+}

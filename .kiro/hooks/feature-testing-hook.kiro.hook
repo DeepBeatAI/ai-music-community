@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Feature Testing Validator",
+  "description": "Monitors for feature completion markers and ensures comprehensive testing tasks are present or added automatically",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "*_COMPLETE.md",
+      "*_IMPLEMENTATION_COMPLETE.md",
+      "*IMPLEMENTATION_SUMMARY.md",
+      "*_FIX_COMPLETE.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A feature implementation has been marked as complete. Review the completion document and related files to ensure comprehensive testing tasks are present. If testing tasks are missing or incomplete, create detailed testing procedures that include:\n\n1. Unit testing requirements for new components/functions\n2. Integration testing for API endpoints and database operations  \n3. End-to-end testing for user workflows\n4. Performance testing for audio processing features\n5. Security testing for authentication and data protection\n6. Mobile responsiveness testing\n7. Cross-browser compatibility validation\n\nFollow the project's testing standards from the methodology guidelines and create specific, actionable testing tasks with clear success criteria. Ensure all testing aligns with the 4-hour weekly development constraint and includes proper Git workflow integration."
+  }
+}

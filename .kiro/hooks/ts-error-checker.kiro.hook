@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "TypeScript Error Checker with Compact Reporting",
+  "description": "Comprehensive TypeScript error detection with 50-word compact reporting",
+  "version": "2",
+  "when": {
+    "type": "userTriggered",
+    "patterns": [
+      "client/src/**/*.tsx",
+      "client/src/**/*.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Execute TypeScript validation with compact reporting:\n\n1. Run 'npx tsc --noEmit' in client directory\n2. If no errors: Display 'TypeScript: No errors detected'\n3. If errors found: Fix them and generate compact report using our utilities:\n\nconst { validateAndGenerateReport } = require('./client/src/utils/reportTemplates');\nconst { extractReportData } = require('./client/src/utils/hookDataExtraction');\n\ntry {\n  const hookData = {\n    initialErrorCount: [initial_count],\n    finalErrorCount: 0,\n    iterationsUsed: [iterations],\n    totalFixesApplied: [fixes],\n    success: true\n  };\n  const reportData = extractReportData(hookData);\n  const compactReport = validateAndGenerateReport(reportData, { maxWords: 50 });\n  console.log(compactReport.message);\n} catch (error) {\n  console.log('TypeScript: Errors fixed successfully');\n}"
+  }
+}

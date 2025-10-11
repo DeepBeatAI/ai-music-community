@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "Git Commit Reminder",
+  "description": "Sends reminders to commit code after successful feature implementation and testing, without executing any git commands automatically",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "client/src/**/*.tsx",
+      "client/src/**/*.ts",
+      "*.md",
+      "client/package.json",
+      "supabase/migrations/*.sql"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The user has been working on code changes. Based on the modified files, remind them to commit their progress with git if they have successfully tested their new feature implementation. Provide a suggested commit message based on the changes, but emphasize that they should run the git commands themselves. Do not execute any git commands automatically."
+  }
+}

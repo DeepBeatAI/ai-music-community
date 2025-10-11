@@ -1,0 +1,17 @@
+{
+  "name": "ai-music-community",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client"
+  ],
+  "scripts": {
+    "prepare": "husky",
+    "organize": "bash scripts/utilities/organize-files.sh",
+    "organize:win": "powershell -ExecutionPolicy Bypass -File scripts/utilities/organize-files.ps1",
+    "organize:check": "bash scripts/utilities/organize-files.sh --dry-run"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

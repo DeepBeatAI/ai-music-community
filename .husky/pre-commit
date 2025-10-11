@@ -1,0 +1,12 @@
+# Run file organization check
+echo "🔍 Checking file organization..."
+
+# Detect OS and run appropriate script
+if [ -f "scripts/utilities/organize-files.sh" ]; then
+    bash scripts/utilities/organize-files.sh
+    
+    # If files were moved, add them to the commit
+    if [ $? -eq 0 ]; then
+        git add .
+    fi
+fi

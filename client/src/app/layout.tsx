@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { FollowProvider } from '@/contexts/FollowContext';
+import { ToastProvider } from '@/contexts/ToastContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import CacheTestDashboard from '@/components/CacheTestDashboard';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
@@ -38,17 +39,19 @@ export default function RootLayout({
         <ErrorBoundary>
           <AuthProvider>
             <FollowProvider>
-              {children}
-              {/* Only show in development */}
-              {process.env.NODE_ENV === 'development' && (
-                <>
-                  <CacheTestDashboard />
-                  <PerformanceDashboard
-                    isVisible={showDashboard}
-                    onToggle={() => setShowDashboard(!showDashboard)}
-                  />
-                </>
-              )}
+              <ToastProvider>
+                {children}
+                {/* Only show in development */}
+                {process.env.NODE_ENV === 'development' && (
+                  <>
+                    <CacheTestDashboard />
+                    <PerformanceDashboard
+                      isVisible={showDashboard}
+                      onToggle={() => setShowDashboard(!showDashboard)}
+                    />
+                  </>
+                )}
+              </ToastProvider>
             </FollowProvider>
           </AuthProvider>
         </ErrorBoundary>

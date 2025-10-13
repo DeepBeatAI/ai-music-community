@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import MainLayout from "@/components/layout/MainLayout";
-import PostItem from "@/components/PostItem";
+import EditablePost from "@/components/EditablePost";
 import AudioUpload from "@/components/AudioUpload";
 import SearchBar from "@/components/SearchBar";
 import FollowButton from "@/components/FollowButton";
@@ -1682,11 +1682,15 @@ export default function Dashboard() {
               <PaginationErrorBoundary>
                 {displayPosts.map((post) => (
                   <PostErrorBoundary key={post.id} postId={post.id}>
-                    <PostItem
+                    <EditablePost
                       post={post}
                       currentUserId={user?.id}
                       onDelete={handleDeletePost}
                       showWaveform={true}
+                      onUpdate={(postId, newContent) => {
+                        // Optimistic update
+                        // Post content updated via onUpdate callback
+                      }}
                     />
                   </PostErrorBoundary>
                 ))}

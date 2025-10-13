@@ -8,6 +8,9 @@ global.console = {
   error: jest.fn(),
 }
 
+// Mock window.confirm for tests
+global.confirm = jest.fn(() => true);
+
 // Mock PerformanceObserver for test environment
 global.PerformanceObserver = jest.fn().mockImplementation(() => ({
   observe: jest.fn(),

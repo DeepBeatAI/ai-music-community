@@ -180,6 +180,7 @@ function createMockPost(overrides: Partial<Post> = {}): Post {
   const defaultPost: Post = {
     id: `post-${Math.random().toString(36).substr(2, 9)}`,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     content: 'Test post content',
     user_id: 'user-123',
     post_type: 'text',

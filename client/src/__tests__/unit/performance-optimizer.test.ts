@@ -22,6 +22,7 @@ const createMockPost = (id: string, index: number): Post => ({
   content: `Performance test post ${index}`,
   post_type: 'text',
   created_at: new Date(Date.now() - index * 1000 * 60).toISOString(),
+  updated_at: new Date(Date.now() - index * 1000 * 60).toISOString(),
   user_id: 'test-user-id',
   like_count: Math.floor(Math.random() * 10),
   liked_by_user: false,

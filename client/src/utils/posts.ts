@@ -294,3 +294,77 @@ export async function deletePost(postId: string): Promise<void> {
     throw error;
   }
 }
+
+export interface UpdatePostResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Updates a post's content with validation
+ * @param postId - The ID of the post to update
+ * @param content - The new content for the post
+ * @param userId - The ID of the user making the update (for authorization)
+ * @param postType - Optional post type ('text' | 'audio') to determine validation rules
+ * @returns Result object with success status and optional error message
+ */
+export async function updatePost(
+  postId: string,
+  content: string,
+  userId: string,
+  postType?: 'text' | 'audio'
+): Promise<UpdatePostResult> {
+  try {
+    // Validate content is not empty for text posts
+    // Audio posts can have empty captions (captions are optional)
+    if (postType !== 'audio' && !content.trim()) {
+      return { 
+        success: false, 
+        error: 'Content cannot be empty' 
+      };
+    }
+
+    // Update post in database
+    // RLS policies will enforce that user can only update their own posts
+    const { error } = await supabase
+      .from('posts')
+      .update({ content: content.trim() })
+      .eq('id', postId)
+      .eq('user_id', userId);
+
+    if (error) {
+      logger.error('Error updating post:', error);
+      
+      // Check for authorization errors
+      if (error.code === 'PGRST301' || error.message.includes('permission')) {
+        return { 
+          success: false, 
+          error: 'You do not have permission to edit this content' 
+        };
+      }
+      
+      return { 
+        success: false, 
+        error: error.message || 'Failed to update post' 
+      };
+    }
+
+    logger.debug(`Successfully updated post ${postId}`);
+    return { success: true };
+  } catch (error) {
+    logger.error('Error in updatePost:', error);
+    
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return { 
+        success: false, 
+        error: 'Failed to save changes. Please check your connection.' 
+      };
+    }
+    
+    return { 
+      success: false, 
+      error: 'An unexpected error occurred. Please try again.' 
+    };
+  }
+}

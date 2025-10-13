@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
-import PostItem from '@/components/PostItem';
+import EditablePost from '@/components/EditablePost';
 import { useAuth } from '@/contexts/AuthContext';
 import { getTrendingContent, getFeaturedCreators } from '@/utils/search';
 import UserRecommendations from '@/components/UserRecommendations';
@@ -70,11 +70,19 @@ export default function DiscoverPage() {
               <h2 className="text-xl font-semibold text-white mb-4">🔥 Trending This Week</h2>
               <div className="space-y-4">
                 {trendingPosts.map((post) => (
-                  <PostItem
+                  <EditablePost
                     key={post.id}
                     post={post}
                     currentUserId={user?.id || ''}
                     onDelete={() => {}}
+                    onUpdate={(postId, newContent) => {
+                      // Optimistic update
+                      setTrendingPosts(prev => prev.map(p => 
+                        p.id === postId 
+                          ? { ...p, content: newContent, updated_at: new Date().toISOString() }
+                          : p
+                      ));
+                    }}
                   />
                 ))}
               </div>

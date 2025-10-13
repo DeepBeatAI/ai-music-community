@@ -13,6 +13,7 @@ export interface UserProfile {
 export interface Post {
   id: string;
   created_at: string;
+  updated_at: string;
   content: string;
   user_id: string;
   post_type: 'text' | 'audio';

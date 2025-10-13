@@ -234,7 +234,6 @@
 
 - [x] 15. Documentation and deployment
 
-
   - Document the new analytics system in README or docs/
   - Add instructions for running backfill
   - Document how to add new metrics in the future

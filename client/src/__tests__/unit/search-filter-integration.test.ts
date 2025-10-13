@@ -69,6 +69,7 @@ describe('Search and Filter Integration Unit Tests', () => {
             post_type: 'audio',
             user_id: 'user-1',
             created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
             user_profile: { id: 'profile-1', username: 'testuser', user_id: 'user-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
             likes_count: 5
           }
@@ -208,7 +209,8 @@ describe('Search and Filter Integration Unit Tests', () => {
           content: `Post ${i}`,
           post_type: 'text',
           user_id: 'user-1',
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })),
         resetPagination: false
       });
@@ -341,6 +343,7 @@ describe('Search and Filter Integration Unit Tests', () => {
           post_type: 'text',
           user_id: 'user-1',
           created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
           user_profile: { id: 'profile-1', username: 'testuser', user_id: 'user-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           likes_count: i
         })),
@@ -384,6 +387,7 @@ describe('SearchContent Function Integration', () => {
               post_type: 'audio',
               user_id: 'user-1',
               created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
               user_profiles: { id: 'profile-1', username: 'testuser', user_id: 'user-1' }
             }
           ],

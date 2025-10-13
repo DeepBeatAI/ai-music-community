@@ -27,6 +27,7 @@ const createMockPost = (
   content: `Test post ${id}`,
   post_type: postType,
   created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
   user_id: "user-1",
   like_count: 0,
   liked_by_user: false,

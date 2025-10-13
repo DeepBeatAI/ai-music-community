@@ -245,7 +245,7 @@ RETURNS TABLE(
   metrics_collected INTEGER,
   execution_time_ms INTEGER,
   status TEXT
-) AS $
+) AS $$
 DECLARE
   start_time TIMESTAMPTZ;
   log_id UUID;
@@ -356,7 +356,7 @@ EXCEPTION WHEN OTHERS THEN
   -- Re-raise the exception
   RAISE;
 END;
-$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Add function comment for documentation
 COMMENT ON FUNCTION collect_daily_metrics IS 
@@ -378,7 +378,7 @@ RETURNS TABLE(
   total_metrics INTEGER,
   execution_time_ms INTEGER,
   status TEXT
-) AS $
+) AS $$
 DECLARE
   processing_date DATE;
   dates_count INTEGER := 0;
@@ -442,7 +442,7 @@ BEGIN
       ELSE 'failed'::TEXT
     END;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Add function comment for documentation
 COMMENT ON FUNCTION backfill_daily_metrics IS 

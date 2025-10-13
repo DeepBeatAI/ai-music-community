@@ -14,6 +14,7 @@ import { Post } from '../types';
 const createMockPost = (id: string, postType: 'text' | 'audio' = 'text'): Post => ({
   id,
   created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
   content: `Test post ${id}`,
   user_id: 'user1',
   post_type: postType,

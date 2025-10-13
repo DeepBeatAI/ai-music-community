@@ -1,0 +1,134 @@
+-- Migration: Create Analytics Metrics Tables
+-- Description: Creates tables for storing daily metrics snapshots, metric definitions, and collection logs
+-- Requirements: 1.1, 1.3, 2.1, 2.3, 4.1
+
+-- =====================================================
+-- Table: daily_metrics
+-- Purpose: Store immutable daily snapshots of platform metrics
+-- =====================================================
+CREATE TABLE IF NOT EXISTS daily_metrics (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  metric_date DATE NOT NULL,
+  metric_type TEXT NOT NULL,
+  metric_category TEXT NOT NULL,
+  value NUMERIC NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  collection_timestamp TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  
+  -- Ensure one record per date/type/category combination (immutability)
+  CONSTRAINT unique_daily_metric UNIQUE (metric_date, metric_type, metric_category)
+);
+
+-- Add comment for documentation
+COMMENT ON TABLE daily_metrics IS 'Stores immutable daily snapshots of platform metrics for historical accuracy';
+COMMENT ON COLUMN daily_metrics.metric_date IS 'The date this metric represents';
+COMMENT ON COLUMN daily_metrics.metric_type IS 'Type of metric: count, average, percentage, aggregate';
+COMMENT ON COLUMN daily_metrics.metric_category IS 'Specific metric category: users_total, posts_created, etc.';
+COMMENT ON COLUMN daily_metrics.value IS 'Numeric value of the metric';
+COMMENT ON COLUMN daily_metrics.metadata IS 'Additional metadata in JSON format';
+COMMENT ON COLUMN daily_metrics.collection_timestamp IS 'When this metric was collected';
+
+-- =====================================================
+-- Table: metric_definitions
+-- Purpose: Store metadata about available metrics
+-- =====================================================
+CREATE TABLE IF NOT EXISTS metric_definitions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  metric_type TEXT NOT NULL,
+  metric_category TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  description TEXT,
+  unit TEXT, -- 'count', 'percentage', 'seconds', etc.
+  format_pattern TEXT, -- e.g., '0,0' for thousands separator
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  
+  CONSTRAINT unique_metric_definition UNIQUE (metric_type, metric_category)
+);
+
+-- Add comment for documentation
+COMMENT ON TABLE metric_definitions IS 'Metadata definitions for all available metrics';
+COMMENT ON COLUMN metric_definitions.display_name IS 'Human-readable name for display in UI';
+COMMENT ON COLUMN metric_definitions.unit IS 'Unit of measurement for the metric';
+COMMENT ON COLUMN metric_definitions.format_pattern IS 'Formatting pattern for display (e.g., 0,0 for thousands)';
+COMMENT ON COLUMN metric_definitions.is_active IS 'Whether this metric is currently being collected';
+
+-- =====================================================
+-- Table: metric_collection_log
+-- Purpose: Track metric collection runs for monitoring
+-- =====================================================
+CREATE TABLE IF NOT EXISTS metric_collection_log (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  collection_date DATE NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+  metrics_collected INTEGER DEFAULT 0,
+  error_message TEXT,
+  error_details JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- Add comment for documentation
+COMMENT ON TABLE metric_collection_log IS 'Logs all metric collection runs for monitoring and debugging';
+COMMENT ON COLUMN metric_collection_log.status IS 'Status of collection: running, completed, or failed';
+COMMENT ON COLUMN metric_collection_log.metrics_collected IS 'Number of metrics successfully collected';
+COMMENT ON COLUMN metric_collection_log.error_details IS 'Detailed error information in JSON format';
+
+-- =====================================================
+-- Indexes for Performance
+-- =====================================================
+
+-- Primary query pattern: date range + metric type
+CREATE INDEX IF NOT EXISTS idx_daily_metrics_date_type 
+ON daily_metrics(metric_date DESC, metric_type, metric_category);
+
+-- Query by category
+CREATE INDEX IF NOT EXISTS idx_daily_metrics_category 
+ON daily_metrics(metric_category, metric_date DESC);
+
+-- Query by collection timestamp (monitoring)
+CREATE INDEX IF NOT EXISTS idx_daily_metrics_collection 
+ON daily_metrics(collection_timestamp DESC);
+
+-- Collection log queries
+CREATE INDEX IF NOT EXISTS idx_collection_log_date 
+ON metric_collection_log(collection_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_collection_log_status 
+ON metric_collection_log(status, started_at DESC);
+
+-- =====================================================
+-- Row Level Security (RLS) Policies
+-- =====================================================
+
+-- Enable RLS on all tables
+ALTER TABLE daily_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metric_definitions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metric_collection_log ENABLE ROW LEVEL SECURITY;
+
+-- Public read access for metrics (all users can view analytics)
+CREATE POLICY "Anyone can view metrics" ON daily_metrics
+FOR SELECT USING (true);
+
+-- Only service role can insert/update metrics
+CREATE POLICY "Service role can manage metrics" ON daily_metrics
+FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- Public read access for metric definitions
+CREATE POLICY "Anyone can view metric definitions" ON metric_definitions
+FOR SELECT USING (true);
+
+-- Service role can manage metric definitions
+CREATE POLICY "Service role can manage definitions" ON metric_definitions
+FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- Service role only access to collection logs
+-- TODO: Add admin role check when is_admin column is added to profiles table
+CREATE POLICY "Service role can view collection logs" ON metric_collection_log
+FOR SELECT USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- Service role can manage collection logs
+CREATE POLICY "Service role can manage logs" ON metric_collection_log
+FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');

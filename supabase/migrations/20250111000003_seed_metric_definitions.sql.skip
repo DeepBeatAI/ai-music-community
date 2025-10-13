@@ -1,0 +1,83 @@
+-- Migration: Seed Metric Definitions
+-- Description: Insert initial metric definitions for core platform metrics
+-- Requirements: 2.1, 2.2, 6.1, 6.2
+
+-- =====================================================
+-- Seed Metric Definitions
+-- Purpose: Provide metadata for all core metrics
+-- =====================================================
+
+-- Insert metric definitions for core metrics
+INSERT INTO metric_definitions (
+  metric_type,
+  metric_category,
+  display_name,
+  description,
+  unit,
+  format_pattern,
+  is_active
+) VALUES
+  -- Total Users Metric
+  (
+    'count',
+    'users_total',
+    'Total Users',
+    'Total number of registered users on the platform as of this date',
+    'users',
+    '0,0',
+    true
+  ),
+  
+  -- Total Posts Metric
+  (
+    'count',
+    'posts_total',
+    'Total Posts',
+    'Total number of posts created on the platform as of this date',
+    'posts',
+    '0,0',
+    true
+  ),
+  
+  -- Total Comments Metric
+  (
+    'count',
+    'comments_total',
+    'Total Comments',
+    'Total number of comments created on the platform as of this date',
+    'comments',
+    '0,0',
+    true
+  ),
+  
+  -- Posts Created (Daily) Metric
+  (
+    'count',
+    'posts_created',
+    'Posts Created',
+    'Number of new posts created on this specific date',
+    'posts',
+    '0,0',
+    true
+  ),
+  
+  -- Comments Created (Daily) Metric
+  (
+    'count',
+    'comments_created',
+    'Comments Created',
+    'Number of new comments created on this specific date',
+    'comments',
+    '0,0',
+    true
+  )
+ON CONFLICT (metric_type, metric_category) 
+DO UPDATE SET
+  display_name = EXCLUDED.display_name,
+  description = EXCLUDED.description,
+  unit = EXCLUDED.unit,
+  format_pattern = EXCLUDED.format_pattern,
+  is_active = EXCLUDED.is_active;
+
+-- Add comment for documentation
+COMMENT ON TABLE metric_definitions IS 'Metadata definitions for all available metrics - seeded with core platform metrics';

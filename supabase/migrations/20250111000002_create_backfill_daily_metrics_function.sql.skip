@@ -1,0 +1,83 @@
+-- Migration: Create backfill_daily_metrics function
+-- Description: Function to backfill historical daily metrics for a date range
+-- Requirements: 8.1, 8.2, 8.4
+
+CREATE OR REPLACE FUNCTION backfill_daily_metrics(
+  start_date DATE,
+  end_date DATE DEFAULT CURRENT_DATE
+)
+RETURNS TABLE(
+  dates_processed INTEGER,
+  total_metrics INTEGER,
+  execution_time_ms INTEGER,
+  status TEXT
+) AS $$
+DECLARE
+  processing_date DATE;
+  dates_count INTEGER := 0;
+  metrics_total INTEGER := 0;
+  start_time TIMESTAMPTZ;
+  result RECORD;
+  error_count INTEGER := 0;
+BEGIN
+  start_time := clock_timestamp();
+  processing_date := start_date;
+  
+  -- Validate date range
+  IF start_date > end_date THEN
+    RAISE EXCEPTION 'start_date (%) cannot be after end_date (%)', start_date, end_date;
+  END IF;
+  
+  -- Log backfill start
+  RAISE NOTICE 'Starting backfill from % to %', start_date, end_date;
+  
+  -- Loop through each date in the range
+  WHILE processing_date <= end_date LOOP
+    BEGIN
+      -- Call collect_daily_metrics for each date
+      SELECT * INTO result FROM collect_daily_metrics(processing_date);
+      
+      dates_count := dates_count + 1;
+      metrics_total := metrics_total + result.metrics_collected;
+      
+      -- Progress logging every 10 dates
+      IF dates_count % 10 = 0 THEN
+        RAISE NOTICE 'Progress: Processed % dates, % total metrics collected', dates_count, metrics_total;
+      END IF;
+      
+      -- Detailed logging for each date (can be commented out for large backfills)
+      RAISE NOTICE 'Processed date: %, Metrics: %, Status: %', 
+        processing_date, result.metrics_collected, result.status;
+      
+    EXCEPTION WHEN OTHERS THEN
+      -- Log error but continue processing
+      error_count := error_count + 1;
+      RAISE WARNING 'Error processing date %: % (SQLSTATE: %)', 
+        processing_date, SQLERRM, SQLSTATE;
+    END;
+    
+    -- Move to next date
+    processing_date := processing_date + INTERVAL '1 day';
+  END LOOP;
+  
+  -- Final summary
+  RAISE NOTICE 'Backfill completed: % dates processed, % total metrics, % errors', 
+    dates_count, metrics_total, error_count;
+  
+  -- Return summary statistics
+  RETURN QUERY SELECT 
+    dates_count,
+    metrics_total,
+    EXTRACT(MILLISECONDS FROM (clock_timestamp() - start_time))::INTEGER,
+    CASE 
+      WHEN error_count = 0 THEN 'completed'::TEXT
+      WHEN error_count < dates_count THEN 'completed_with_errors'::TEXT
+      ELSE 'failed'::TEXT
+    END;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Add comment for documentation
+COMMENT ON FUNCTION backfill_daily_metrics IS 
+'Backfills daily metrics for a date range by calling collect_daily_metrics for each date. 
+Includes progress logging and error handling. Returns summary statistics.';

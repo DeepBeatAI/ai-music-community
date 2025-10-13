@@ -9,7 +9,8 @@
     "prepare": "husky",
     "organize": "bash scripts/utilities/organize-files.sh",
     "organize:win": "powershell -ExecutionPolicy Bypass -File scripts/utilities/organize-files.ps1",
-    "organize:check": "bash scripts/utilities/organize-files.sh --dry-run"
+    "organize:check": "bash scripts/utilities/organize-files.sh --dry-run",
+    "test:performance": "cd client && npx ts-node ../scripts/performance/validate-analytics-performance.ts"
   },
   "devDependencies": {
     "husky": "^9.1.7"

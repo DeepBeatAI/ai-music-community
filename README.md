@@ -99,16 +99,16 @@ npm test -- --coverage
 
 ## Deployment
 
-See [Analytics Deployment Checklist](docs/features/analytics/DEPLOYMENT_CHECKLIST.md) for analytics-specific deployment steps.
+See [Analytics Deployment Checklist](docs/features/analytics/guides/guide-deployment-checklist.md) for analytics-specific deployment steps.
 
 ## Documentation
 
 - **Analytics System**: [docs/features/analytics/](docs/features/analytics/)
   - [System Overview](docs/features/analytics/README.md)
-  - [Backfill Guide](docs/features/analytics/BACKFILL_GUIDE.md)
-  - [Adding New Metrics](docs/features/analytics/ADDING_METRICS.md)
-  - [Deployment Checklist](docs/features/analytics/DEPLOYMENT_CHECKLIST.md)
-  - [Testing Guide](docs/features/analytics/TESTING_GUIDE.md)
+  - [Backfill Guide](docs/features/analytics/guides/guide-backfill.md)
+  - [Adding New Metrics](docs/features/analytics/guides/guide-adding-metrics.md)
+  - [Deployment Checklist](docs/features/analytics/guides/guide-deployment-checklist.md)
+  - [Testing Guide](docs/features/analytics/guides/guide-testing.md)
 - **Migrations**: [supabase/migrations/](supabase/migrations/)
 - **Testing**: [docs/testing/](docs/testing/)
 

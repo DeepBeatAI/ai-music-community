@@ -1,5 +1,5 @@
 # Run file organization check
-echo "🔍 Checking file organization..."
+echo ">> Checking file organization..."
 
 # Detect OS and run appropriate script
 if [ -f "scripts/utilities/organize-files.sh" ]; then

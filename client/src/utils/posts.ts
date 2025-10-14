@@ -326,6 +326,7 @@ export async function updatePost(
 
     // Update post in database
     // RLS policies will enforce that user can only update their own posts
+    // The trigger will automatically update the updated_at timestamp
     const { error } = await supabase
       .from('posts')
       .update({ content: content.trim() })

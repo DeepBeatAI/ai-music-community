@@ -15,6 +15,8 @@ interface PostItemProps {
   currentUserId?: string;
   onDelete?: (postId: string) => void;
   showWaveform?: boolean;
+  editButton?: React.ReactNode;
+  editedBadge?: React.ReactNode;
 }
 
 // EGRESS OPTIMIZED Audio Player Section Component
@@ -114,7 +116,7 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
 
 AudioPlayerSection.displayName = 'AudioPlayerSection';
 
-const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: PostItemProps) => {
+const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, editButton, editedBadge }: PostItemProps) => {
   const isOwner = currentUserId === post.user_id;
   const username = post.user_profiles?.username || 'Anonymous';
   const [commentCount, setCommentCount] = useState<number>(0);
@@ -252,6 +254,9 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: P
               />
             )}
             
+            {/* Edit Button (passed from EditablePost) */}
+            {editButton}
+            
             {/* Delete Button */}
             {isOwner && onDelete && (
               <button
@@ -274,6 +279,13 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true }: P
         {post.content && (
           <div className="text-gray-200 leading-relaxed">
             {truncateText(post.content, 500)}
+          </div>
+        )}
+
+        {/* Edited Badge (passed from EditablePost) - Show before audio player */}
+        {editedBadge && (
+          <div className={post.content ? "pt-2" : ""}>
+            {editedBadge}
           </div>
         )}
 

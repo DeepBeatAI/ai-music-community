@@ -16,9 +16,9 @@ export default function EditedBadge({
   const updatedDate = new Date(updatedAt);
   const isEdited = updatedDate > createdDate;
 
-  // Don't render if content hasn't been edited
+  // Reserve space even when not edited to prevent layout shift
   if (!isEdited) {
-    return null;
+    return <span className="inline-flex items-center text-xs md:text-sm opacity-0 pointer-events-none" aria-hidden="true">(Edited)</span>;
   }
 
   // Format the last edit timestamp for tooltip

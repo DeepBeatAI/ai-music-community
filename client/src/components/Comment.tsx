@@ -24,6 +24,12 @@ interface CommentProps {
   onDelete?: (commentId: string, totalCount: number) => void;
   /** Current nesting depth (0 for top-level, max 3) */
   depth?: number;
+  /** The ID of the comment currently being edited (null if none) */
+  editingCommentId?: string | null;
+  /** Callback when edit mode starts */
+  onEditStart?: (commentId: string) => void;
+  /** Callback when edit mode ends */
+  onEditEnd?: () => void;
 }
 
 /**
@@ -70,7 +76,10 @@ export default function Comment({
   currentUserId,
   onReply,
   onDelete,
-  depth = 0
+  depth = 0,
+  editingCommentId,
+  onEditStart,
+  onEditEnd
 }: CommentProps) {
   // Refs for focus management
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -96,8 +105,11 @@ export default function Comment({
   /**
    * Handles entering edit mode for the comment.
    * Initializes edit state with current content.
+   * Notifies parent to close any other open edits.
    */
   const handleEdit = () => {
+    // Notify parent that this comment is being edited
+    onEditStart?.(comment.id);
     setIsEditing(true);
     setEditContent(localComment.content);
     setEditError(null);
@@ -113,14 +125,28 @@ export default function Comment({
     }
   }, [isEditing]);
 
+  // Close edit mode if another comment starts editing
+  useEffect(() => {
+    if (isEditing && editingCommentId && editingCommentId !== comment.id) {
+      // Another comment is being edited, close this one
+      setIsEditing(false);
+      setEditContent(localComment.content);
+      setEditError(null);
+    }
+  }, [editingCommentId, comment.id, isEditing, localComment.content]);
+
   /**
    * Handles canceling edit mode.
    * Resets edit state and restores original content.
+   * Notifies parent that editing has ended.
    */
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditContent(localComment.content);
     setEditError(null);
+    
+    // Notify parent that editing has ended
+    onEditEnd?.();
 
     // Return focus to edit button after canceling
     setTimeout(() => {
@@ -188,6 +214,9 @@ export default function Comment({
       showToast('Comment updated successfully', 'success', 4000);
 
       // Success - optimistic update is already applied
+      // Notify parent that editing has ended
+      onEditEnd?.();
+      
       // Return focus to edit button after saving
       setTimeout(() => {
         editButtonRef.current?.focus();
@@ -502,6 +531,9 @@ export default function Comment({
               onReply={onReply}
               onDelete={onDelete}
               depth={depth + 1} // Increment depth for nested reply
+              editingCommentId={editingCommentId}
+              onEditStart={onEditStart}
+              onEditEnd={onEditEnd}
             />
           ))}
         </div>

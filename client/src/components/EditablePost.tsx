@@ -77,10 +77,10 @@ export default function EditablePost({
     setEditState(prev => ({
       ...prev,
       isEditing: true,
-      editedContent: post.content || '',
+      editedContent: localPost.content || '',
       error: null,
     }));
-  }, [post.content]);
+  }, [localPost.content]);
 
   // Auto-focus textarea when entering edit mode
   useEffect(() => {
@@ -102,7 +102,7 @@ export default function EditablePost({
 
     setEditState({
       isEditing: false,
-      editedContent: post.content || '',
+      editedContent: localPost.content || '',
       isSaving: false,
       error: null,
     });
@@ -111,7 +111,7 @@ export default function EditablePost({
     setTimeout(() => {
       editButtonRef.current?.focus();
     }, 0);
-  }, [hasUnsavedChanges, post.content]);
+  }, [hasUnsavedChanges, localPost.content]);
 
   const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setEditState(prev => ({
@@ -206,7 +206,7 @@ export default function EditablePost({
     }
   }, [editState.isSaving, editState.editedContent, handleSave, handleCancelEdit]);
 
-  // If not in edit mode, render normal PostItem
+  // If not in edit mode, render normal PostItem with edit button and badge
   if (!editState.isEditing) {
     return (
       <div className="relative">
@@ -215,34 +215,30 @@ export default function EditablePost({
           currentUserId={currentUserId}
           onDelete={onDelete}
           showWaveform={showWaveform}
+          editButton={
+            isOwner ? (
+              <button
+                ref={editButtonRef}
+                onClick={handleEditClick}
+                className="text-gray-400 hover:text-blue-400 p-2 rounded-full hover:bg-blue-900/20 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                title="Edit post"
+                aria-label="Edit post"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            ) : undefined
+          }
+          editedBadge={
+            localPost.created_at && localPost.updated_at ? (
+              <EditedBadge
+                createdAt={localPost.created_at}
+                updatedAt={localPost.updated_at}
+              />
+            ) : undefined
+          }
         />
-        
-        {/* Edit Button - Only show for owner */}
-        {isOwner && (
-          <div className="absolute top-4 right-16">
-            <button
-              ref={editButtonRef}
-              onClick={handleEditClick}
-              className="text-gray-400 hover:text-blue-400 p-2 rounded-full hover:bg-blue-900/20 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
-              title="Edit post"
-              aria-label="Edit post"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-          </div>
-        )}
-
-        {/* Edited Badge */}
-        {localPost.created_at && localPost.updated_at && (
-          <div className="px-4 pb-2">
-            <EditedBadge
-              createdAt={localPost.created_at}
-              updatedAt={localPost.updated_at}
-            />
-          </div>
-        )}
       </div>
     );
   }

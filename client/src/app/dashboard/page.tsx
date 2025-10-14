@@ -1688,8 +1688,14 @@ export default function Dashboard() {
                       onDelete={handleDeletePost}
                       showWaveform={true}
                       onUpdate={(postId, newContent) => {
-                        // Optimistic update
-                        // Post content updated via onUpdate callback
+                        // Update the post in the pagination state
+                        const currentState = paginationManager.getState();
+                        const updatedPosts = currentState.allPosts.map(p => 
+                          p.id === postId 
+                            ? { ...p, content: newContent, updated_at: new Date().toISOString() }
+                            : p
+                        );
+                        paginationManager.updatePosts({ newPosts: updatedPosts });
                       }}
                     />
                   </PostErrorBoundary>

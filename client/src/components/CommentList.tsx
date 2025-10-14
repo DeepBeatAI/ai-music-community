@@ -164,6 +164,9 @@ export default function CommentList({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   
+  // State management for edit mode - only one comment can be edited at a time
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  
   // Ref for textarea to enable auto-focus when replying
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -747,6 +750,9 @@ export default function CommentList({
               // Notify parent component of count change (including nested replies)
               onCommentCountChange?.(-totalCount);
             }}
+            editingCommentId={editingCommentId}
+            onEditStart={(commentId) => setEditingCommentId(commentId)}
+            onEditEnd={() => setEditingCommentId(null)}
             depth={0}
           />
         ))}

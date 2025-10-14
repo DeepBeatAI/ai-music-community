@@ -115,6 +115,11 @@ export default function Comment({
     setEditError(null);
   };
 
+  // Sync localComment with comment prop when it changes (e.g., when replies are added)
+  useEffect(() => {
+    setLocalComment(comment);
+  }, [comment]);
+
   // Auto-focus textarea when entering edit mode
   useEffect(() => {
     if (isEditing && textareaRef.current) {

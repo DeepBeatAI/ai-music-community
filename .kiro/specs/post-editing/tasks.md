@@ -193,7 +193,6 @@
 
 - [x] 11. Add inline validation error messages for posts
 
-
   - Add error state to EditablePost component
   - Display validation errors inline below textarea in red text
   - Show "Content cannot be empty" error for text posts

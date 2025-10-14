@@ -57,7 +57,7 @@ function addReplyToComment(
     };
   }
   
-  return comment;
+  return { ...comment };
 }
 
 /**
@@ -91,7 +91,7 @@ function replaceOptimisticReply(
     };
   }
   
-  return comment;
+  return { ...comment };
 }
 
 /**
@@ -122,7 +122,7 @@ function removeReplyFromComment(
     };
   }
   
-  return comment;
+  return { ...comment };
 }
 
 /**

@@ -6,8 +6,8 @@ import { FollowProvider } from '@/contexts/FollowContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import CacheTestDashboard from '@/components/CacheTestDashboard';
-import PerformanceDashboard from '@/components/PerformanceDashboard';
-import { useState, useEffect } from 'react';
+import PerformanceDashboard from '@/components/performance/PerformanceDashboard';
+import { useEffect } from 'react';
 import { suppressExtensionErrors } from '@/utils/extensionErrorHandler';
 
 const geistSans = Geist({
@@ -20,8 +20,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [showDashboard, setShowDashboard] = useState(false);
-
   // Initialize extension error suppression on mount
   useEffect(() => {
     suppressExtensionErrors();
@@ -41,15 +39,11 @@ export default function RootLayout({
             <FollowProvider>
               <ToastProvider>
                 {children}
-                {/* Only show in development */}
+                {/* Performance Dashboard - always available */}
+                <PerformanceDashboard />
+                {/* Only show cache test dashboard in development */}
                 {process.env.NODE_ENV === 'development' && (
-                  <>
-                    <CacheTestDashboard />
-                    <PerformanceDashboard
-                      isVisible={showDashboard}
-                      onToggle={() => setShowDashboard(!showDashboard)}
-                    />
-                  </>
+                  <CacheTestDashboard />
                 )}
               </ToastProvider>
             </FollowProvider>

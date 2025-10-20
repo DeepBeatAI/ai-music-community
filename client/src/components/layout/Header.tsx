@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import NotificationCenter from '@/components/NotificationCenter'
 
 export default function Header() {
   const [isMenuOpen, setlsMenuOpen] = useState(false)
   const { user, signOut } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   const handleLogout = async () => {
     await signOut()
@@ -27,19 +28,39 @@ export default function Header() {
             </Link>
           </div>
           <nav className="hidden md:flex space-x-8">
-            <Link href="/" className="text-gray-300 hover:text-white transition-colors">
+            <Link 
+              href="/" 
+              className={`transition-colors ${pathname === '/' ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
+            >
               Home
             </Link>
-            <Link href="/discover" className="text-gray-300 hover:text-white transition-colors">
+            {user && (
+                <Link 
+                  href="/playlists" 
+                  className={`transition-colors ${pathname?.startsWith('/playlists') ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
+                >
+                  Playlists
+                </Link>
+            )}
+            <Link 
+              href="/discover" 
+              className={`transition-colors ${pathname === '/discover' ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
+            >
               Discover
             </Link>
             {user && (
-                <Link href="/dashboard" className="text-gray-300 hover:text-white transition-colors">
+                <Link 
+                  href="/dashboard" 
+                  className={`transition-colors ${pathname === '/dashboard' ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
+                >
                   Community Board
                 </Link>
             )}
             {user && (
-                <Link href="/feed" className="text-gray-300 hover:text-white transition-colors">
+                <Link 
+                  href="/feed" 
+                  className={`transition-colors ${pathname === '/feed' ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
+                >
                   Activity Feed
                 </Link>
             )}
@@ -92,13 +113,41 @@ export default function Header() {
       {isMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <Link href="/" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Home</Link>
-            <Link href="/discover" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Discover</Link>
+            <Link 
+              href="/" 
+              className={`block px-3 py-2 rounded-md text-base font-medium ${pathname === '/' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+            >
+              Home
+            </Link>
             {user && (
-                <Link href="/dashboard" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Community Board</Link>
+                <Link 
+                  href="/playlists" 
+                  className={`block px-3 py-2 rounded-md text-base font-medium ${pathname?.startsWith('/playlists') ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+                >
+                  Playlists
+                </Link>
+            )}
+            <Link 
+              href="/discover" 
+              className={`block px-3 py-2 rounded-md text-base font-medium ${pathname === '/discover' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+            >
+              Discover
+            </Link>
+            {user && (
+                <Link 
+                  href="/dashboard" 
+                  className={`block px-3 py-2 rounded-md text-base font-medium ${pathname === '/dashboard' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+                >
+                  Community Board
+                </Link>
             )}
             {user && (
-                <Link href="/feed" className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Activity Feed</Link>
+                <Link 
+                  href="/feed" 
+                  className={`block px-3 py-2 rounded-md text-base font-medium ${pathname === '/feed' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+                >
+                  Activity Feed
+                </Link>
             )}
             {user ? (
               <>

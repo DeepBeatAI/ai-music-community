@@ -7,6 +7,7 @@ import LikeButton from './LikeButton';
 import FollowButton from './FollowButton';
 import UserStatsCard from './UserStatsCard';
 import CommentList from './CommentList';
+import { AddToPlaylist } from './playlists/AddToPlaylist';
 import { supabase } from '@/lib/supabase';
 import { queryCache } from '@/utils/queryCache';
 
@@ -202,7 +203,7 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-700">
+    <div className="bg-gray-800 rounded-lg shadow-md border border-gray-700">
       {/* Post Header */}
       <div className="p-4 border-b border-gray-700">
         <div className="flex justify-between items-start">
@@ -299,8 +300,8 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
       </div>
 
       {/* Post Footer */}
-      <div className="px-4 py-3 bg-gray-750 border-t border-gray-700">
-        <div className="flex items-center justify-between">
+      <div className="px-4 py-3 bg-gray-750 border-t border-gray-700 overflow-visible">
+        <div className="flex items-center justify-between overflow-visible">
           <div className="flex items-center space-x-4">
             {/* Like Button */}
             <LikeButton
@@ -327,6 +328,17 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
                 </span>
               )}
             </button>
+            
+            {/* Add to Playlist Button - Only for audio posts and authenticated users */}
+            {post.post_type === 'audio' && currentUserId && (
+              <AddToPlaylist 
+                trackId={post.id}
+                onSuccess={() => {
+                  // Optional: Show a success message or update UI
+                  console.log('Track added to playlist successfully');
+                }}
+              />
+            )}
             
             {/* Future: Share Button */}
             <button className="flex items-center space-x-2 text-gray-400 hover:text-green-400 transition-colors text-sm px-2 py-1 rounded hover:bg-green-900/10">

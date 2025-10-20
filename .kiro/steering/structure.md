@@ -41,12 +41,24 @@ supabase/
 
 ## Key Conventions
 
-### File Naming
+### Code File Naming
 
 - **Components**: PascalCase (e.g., `WavesurferPlayer.tsx`)
 - **Utilities**: camelCase (e.g., `audioCache.ts`)
 - **Pages**: lowercase with hyphens (App Router structure)
 - **Types**: PascalCase interfaces/types in `types/` directory
+
+### Documentation File Naming
+
+**IMPORTANT:** All documentation files MUST follow the hybrid feature-first structure and naming convention.
+
+See [File Organization Standards](.kiro/steering/file-organization.md) for complete rules.
+
+**Quick Rules:**
+- Format: `[type]-[descriptor].md` (all lowercase, no ALL CAPS)
+- Location: `docs/features/{feature}/{type}/` or `docs/project/{type}/`
+- Examples: `guide-deployment.md`, `task-01-setup.md`, `test-results.md`
+- ❌ NEVER: `GUIDE.md`, `Task_01.md`, `test results.md`
 
 ### Import Patterns
 

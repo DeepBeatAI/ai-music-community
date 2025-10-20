@@ -139,3 +139,6 @@ export interface ApiResponse<T> {
 
 // Re-export pagination types
 export * from './pagination';
+
+// Re-export playlist types
+export * from './playlist';

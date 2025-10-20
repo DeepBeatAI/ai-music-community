@@ -45,6 +45,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       Home
                     </Link>
                     <Link 
+                      href="/playlists" 
+                      className={`text-sm font-medium transition-colors ${
+                        pathname?.startsWith('/playlists') 
+                          ? 'text-blue-400' 
+                          : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      Playlists
+                    </Link>
+                    <Link 
                       href="/discover" 
                       className={`text-sm font-medium transition-colors ${
                         pathname === '/discover' 

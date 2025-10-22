@@ -270,6 +270,7 @@ export async function getTrendingContent(limit: number = 10) {
       .from('posts')
       .select(`
         *,
+        track:tracks(*),
         user_profiles!posts_user_id_fkey(id, username),
         post_likes(count)
       `)

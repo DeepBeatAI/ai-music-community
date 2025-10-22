@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserStats, getActivityFeed } from '@/utils/activity';
-import { getUserFollowStatus, toggleUserFollow } from '@/utils/community';
 import { formatTimeAgo } from '@/utils/format';
 import { UserProfile, UserStats, ActivityFeedItem } from '@/types';
 import FollowButton from './FollowButton';

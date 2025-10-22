@@ -9,6 +9,32 @@ export interface PostWithProfile extends Post {
   liked_by_user: boolean;
 }
 
+/**
+ * Fetch posts with pagination
+ * 
+ * Retrieves posts from the database with user profiles and track data for audio posts.
+ * Audio posts now reference tracks via track_id instead of storing audio data directly.
+ * 
+ * @param page - Page number (1-indexed)
+ * @param limit - Number of posts per page (default: 15)
+ * @param userId - Optional user ID to check like status for each post
+ * @returns Promise resolving to object with posts array and hasMore boolean
+ * 
+ * @example
+ * ```typescript
+ * const { posts, hasMore } = await fetchPosts(1, 15, currentUserId);
+ * posts.forEach(post => {
+ *   if (post.post_type === 'audio') {
+ *     console.log('Audio track:', post.track?.title);
+ *   }
+ * });
+ * ```
+ * 
+ * @remarks
+ * - Audio posts include joined track data via post.track
+ * - Each post includes likes_count and liked_by_user fields
+ * - Results are ordered by created_at descending (newest first)
+ */
 export async function fetchPosts(
   page: number = 1,
   limit: number = 15,
@@ -19,11 +45,12 @@ export async function fetchPosts(
     
     logger.debug(`Fetching posts: page ${page}, limit ${limit}, offset ${offset}`);
     
-    // Fetch posts with user profiles
+    // Fetch posts with user profiles and track data (for audio posts)
     const { data: posts, error } = await supabase
       .from('posts')
       .select(`
         *,
+        track:tracks(*),
         user_profiles!posts_user_id_fkey (
           id,
           username,
@@ -126,37 +153,83 @@ export async function createTextPost(
   }
 }
 
+/**
+ * Create an audio post that references an existing track
+ * 
+ * This function creates a social media post that references a track from the tracks table.
+ * The track must exist before creating the post. Use uploadTrack() first to create the track.
+ * 
+ * @param userId - The ID of the user creating the post
+ * @param trackId - The ID of the track to reference (must exist in tracks table)
+ * @param caption - Optional caption/description for the post
+ * @returns Promise<Post> - The created post with joined track and user profile data
+ * 
+ * @throws {Error} If track doesn't exist
+ * @throws {Error} If user doesn't have permission to use the track
+ * 
+ * @example
+ * ```typescript
+ * // First upload a track
+ * const { track } = await uploadTrack(userId, {
+ *   file: audioFile,
+ *   title: 'My New Track',
+ *   is_public: true,
+ * });
+ * 
+ * // Then create a post referencing it
+ * const post = await createAudioPost(userId, track.id, 'Check out my new track!');
+ * ```
+ * 
+ * @remarks
+ * - Replaces the old createAudioPost that accepted audio file data directly
+ * - Tracks must be created separately before creating posts
+ * - Users can reference their own tracks or public tracks from other users
+ * - The same track can be referenced by multiple posts (track reuse)
+ */
 export async function createAudioPost(
   userId: string,
-  storagePath: string,
-  description?: string,
-  fileSize?: number,
-  duration?: number,
-  mimeType?: string,
-  originalFileName?: string
+  trackId: string,
+  caption?: string
 ): Promise<Post> {
   try {
-    // Generate the public URL for the audio file
-    const { data: { publicUrl } } = supabase.storage
-      .from('audio-files')
-      .getPublicUrl(storagePath);
+    // 1. Verify track exists and get track data
+    const { data: track, error: trackError } = await supabase
+      .from('tracks')
+      .select('id, user_id, is_public')
+      .eq('id', trackId)
+      .single();
 
-    // Use original filename for display, or extract from storage path as fallback
-    const displayName = originalFileName || storagePath.split('/').pop() || 'Audio Track';
+    if (trackError || !track) {
+      logger.error('Track not found:', trackError);
+      throw new Error('Track not found');
+    }
 
+    // 2. Verify user has permission to use this track
+    // User can use their own tracks or public tracks from others
+    if (track.user_id !== userId && !track.is_public) {
+      logger.error('User does not have permission to use this track');
+      throw new Error('You do not have permission to use this track');
+    }
+
+    // 3. Create post with track reference
     const { data, error } = await supabase
       .from('posts')
       .insert({
         user_id: userId,
-        content: description?.trim() || '',  // Use empty string instead of null since content is NOT NULL
+        content: caption?.trim() || '',
         post_type: 'audio',
-        audio_url: publicUrl,
-        audio_filename: displayName,  // Store the original/display filename here
-        audio_file_size: fileSize || null,
-        audio_duration: duration || null,
-        audio_mime_type: mimeType || null
+        track_id: trackId, // NEW: Reference to track
       })
-      .select()
+      .select(`
+        *,
+        track:tracks(*),
+        user_profiles!posts_user_id_fkey (
+          id,
+          username,
+          user_id,
+          created_at
+        )
+      `)
       .single();
 
     if (error) {
@@ -164,6 +237,7 @@ export async function createAudioPost(
       throw error;
     }
     
+    logger.debug(`Successfully created audio post ${data.id} with track ${trackId}`);
     return data;
   } catch (error) {
     logger.error('Error creating audio post:', error);
@@ -171,6 +245,29 @@ export async function createAudioPost(
   }
 }
 
+/**
+ * Fetch posts by a specific creator with pagination
+ * 
+ * Retrieves all posts from a specific creator with user profiles and track data.
+ * Implements caching for the first page to improve performance.
+ * 
+ * @param creatorId - The ID of the creator whose posts to fetch
+ * @param page - Page number (1-indexed, default: 1)
+ * @param limit - Number of posts per page (default: 50)
+ * @param currentUserId - Optional current user ID to check like status
+ * @returns Promise resolving to object with posts array and hasMore boolean
+ * 
+ * @example
+ * ```typescript
+ * const { posts, hasMore } = await fetchPostsByCreator(creatorId, 1, 50, currentUserId);
+ * ```
+ * 
+ * @remarks
+ * - First page results are cached using creatorCache
+ * - Audio posts include joined track data via post.track
+ * - Results are ordered by created_at descending (newest first)
+ * - Returns empty array if creator has no posts
+ */
 export async function fetchPostsByCreator(
   creatorId: string,
   page: number = 1,
@@ -195,11 +292,12 @@ export async function fetchPostsByCreator(
     
     logger.debug(`Fetching posts by creator: ${creatorId}, page ${page}, limit ${limit}`);
     
-    // Query posts specifically from this creator
+    // Query posts specifically from this creator with track data
     const { data, error, count } = await supabase
       .from('posts')
       .select(`
         *,
+        track:tracks(*),
         user_profiles!posts_user_id_fkey (
           id,
           username,
@@ -302,11 +400,31 @@ export interface UpdatePostResult {
 
 /**
  * Updates a post's content with validation
+ * 
+ * Updates the text content/caption of a post. For audio posts, this updates the caption only.
+ * The track reference cannot be changed after post creation.
+ * 
  * @param postId - The ID of the post to update
  * @param content - The new content for the post
  * @param userId - The ID of the user making the update (for authorization)
  * @param postType - Optional post type ('text' | 'audio') to determine validation rules
- * @returns Result object with success status and optional error message
+ * @returns Promise<UpdatePostResult> - Result object with success status and optional error message
+ * 
+ * @example
+ * ```typescript
+ * const result = await updatePost(postId, 'Updated caption', userId, 'audio');
+ * if (result.success) {
+ *   console.log('Post updated successfully');
+ * } else {
+ *   console.error('Update failed:', result.error);
+ * }
+ * ```
+ * 
+ * @remarks
+ * - Text posts require non-empty content
+ * - Audio posts can have empty captions (captions are optional)
+ * - RLS policies enforce that users can only update their own posts
+ * - The updated_at timestamp is automatically updated by database trigger
  */
 export async function updatePost(
   postId: string,

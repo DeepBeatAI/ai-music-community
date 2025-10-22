@@ -17,6 +17,14 @@ export interface ActivityFeedItem {
   target_post?: {
     content: string;
     post_type: string;
+    track_id?: string;
+    track?: {
+      id: string;
+      title: string;
+      file_url: string;
+      duration?: number;
+    };
+    // DEPRECATED: Keep for backward compatibility during transition
     audio_filename?: string;
   };
 }
@@ -118,13 +126,40 @@ export async function getActivityFeed(
       .filter(a => a.target_post_id)
       .map(a => a.target_post_id);
 
-    let posts: any[] = [];
+    let posts: Array<{
+      id: string;
+      content: string;
+      post_type: string;
+      track_id?: string;
+      track?: {
+        id: string;
+        title: string;
+        file_url: string;
+        duration?: number;
+      };
+    }> = [];
     if (postIds.length > 0) {
       const { data: postsData } = await supabase
         .from('posts')
-        .select('id, content, post_type, audio_filename')
+        .select(`
+          id,
+          content,
+          post_type,
+          track_id,
+          track:tracks!posts_track_id_fkey(
+            id,
+            title,
+            file_url,
+            duration
+          )
+        `)
         .in('id', postIds);
-      posts = postsData || [];
+      
+      // Transform track from array to single object (Supabase returns foreign keys as arrays)
+      posts = (postsData || []).map(post => ({
+        ...post,
+        track: Array.isArray(post.track) && post.track.length > 0 ? post.track[0] : undefined
+      }));
     }
 
     // Create lookup maps
@@ -211,7 +246,6 @@ export async function getActivityFeed(
 }
 
 export function formatActivityMessage(activity: ActivityFeedItem): string {
-  const username = activity.user_profile?.username || 'Someone';
   const targetUsername = activity.target_user_profile?.username || 'someone';
 
   switch (activity.activity_type) {

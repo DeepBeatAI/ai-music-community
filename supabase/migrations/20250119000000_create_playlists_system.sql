@@ -63,12 +63,12 @@ COMMENT ON COLUMN public.playlist_tracks.position IS 'Zero-based position of tra
 
 -- Create or replace the trigger function for playlists
 CREATE OR REPLACE FUNCTION public.update_playlist_updated_at()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = timezone('utc'::text, now());
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- 4. Add trigger to playlists table
@@ -88,11 +88,11 @@ CREATE TRIGGER update_playlists_updated_at
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION public.get_playlist_track_count(playlist_uuid UUID)
-RETURNS INTEGER AS $
+RETURNS INTEGER AS $$
     SELECT COUNT(*)::INTEGER
     FROM public.playlist_tracks
     WHERE playlist_id = playlist_uuid;
-$ LANGUAGE sql STABLE;
+$$ LANGUAGE sql STABLE;
 
 COMMENT ON FUNCTION public.get_playlist_track_count(UUID) IS 'Returns the number of tracks in a given playlist';
 
@@ -172,7 +172,7 @@ CREATE POLICY "Users can remove tracks from own playlists" ON public.playlist_tr
 -- ============================================================================
 
 -- Enable realtime for playlists table (if not already added)
-DO $
+DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_publication_tables 
@@ -186,10 +186,10 @@ EXCEPTION
     WHEN undefined_object THEN
         -- Publication doesn't exist, skip
         NULL;
-END $;
+END $$;
 
 -- Enable realtime for playlist_tracks table (if not already added)
-DO $
+DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_publication_tables 
@@ -203,7 +203,7 @@ EXCEPTION
     WHEN undefined_object THEN
         -- Publication doesn't exist, skip
         NULL;
-END $;
+END $$;
 
 -- ============================================================================
 -- Migration Complete

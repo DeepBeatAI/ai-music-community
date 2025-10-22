@@ -154,7 +154,7 @@ export default function AuthenticatedHome() {
                         {post.post_type === 'audio' && (
                           <div className="flex items-center space-x-2 text-blue-400">
                             <span>♪</span>
-                            <span className="text-sm">{post.audio_filename || 'Audio Track'}</span>
+                            <span className="text-sm">{post.track?.title || post.audio_filename || 'Audio Track'}</span>
                           </div>
                         )}
                       </div>

@@ -240,25 +240,15 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: Pla
 
                     {/* Track Cover */}
                     <div className="flex-shrink-0">
-                      {track.cover_image_url ? (
-                        <Image
-                          src={track.cover_image_url}
-                          alt={track.title}
-                          width={48}
-                          height={48}
-                          className="w-12 h-12 rounded object-cover"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
-                          <svg
-                            className="w-6 h-6 text-white"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
-                          </svg>
-                        </div>
-                      )}
+                      <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+                        <svg
+                          className="w-6 h-6 text-white"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
+                        </svg>
+                      </div>
                     </div>
 
                     {/* Track Info */}
@@ -267,13 +257,13 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: Pla
                         {track.title}
                       </h3>
                       <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                        {track.artist_name}
+                        {track.description || 'No description'}
                       </p>
                     </div>
 
                     {/* Duration */}
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatDuration(track.duration)}
+                      {formatDuration(track.duration ?? undefined)}
                     </div>
 
                     {/* Remove Button (Owner Only) */}

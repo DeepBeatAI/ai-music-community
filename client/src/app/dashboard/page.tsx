@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 import MainLayout from "@/components/layout/MainLayout";
 import EditablePost from "@/components/EditablePost";
 import AudioUpload from "@/components/AudioUpload";
@@ -22,6 +21,7 @@ import {
   createAudioPost,
   deletePost,
 } from "@/utils/posts";
+import { uploadTrack } from "@/lib/tracks";
 import { searchContent } from "@/utils/search";
 import { createUnifiedPaginationState } from "@/utils/unifiedPaginationState";
 import { 
@@ -140,7 +140,7 @@ const LoadMoreErrorBoundary = ({ children }: { children: React.ReactNode }) => (
 const POSTS_PER_PAGE = 15;
 
 export default function Dashboard() {
-  const { user, profile, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   // Component state
   const [activeTab, setActiveTab] = useState<"text" | "audio">("text");
@@ -164,17 +164,17 @@ export default function Dashboard() {
 
   // SIMPLE FILTER STATE - Direct approach
   const [currentFilters, setCurrentFilters] = useState<SearchFilters>({});
-  const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
+  const [filteredPosts, setFilteredPosts] = useState<Post[]>([]);
   const [filterPage, setFilterPage] = useState(1);
 
   // Refs for tracking state
   const hasInitiallyLoaded = useRef(false);
 
   // Optimized deduplication with performance tracking
-  const deduplicatePosts = useCallback((posts: any[]) => {
+  const deduplicatePosts = useCallback((posts: Post[]) => {
     const startTime = performance.now();
     const seen = new Set();
-    const deduplicated = posts.filter((post: any) => {
+    const deduplicated = posts.filter((post: Post) => {
       if (seen.has(post.id)) {
         return false;
       }
@@ -331,7 +331,9 @@ export default function Dashboard() {
         // Simple sort by like count only - FIXED: Handle both like_count and likes_count
         filtered.sort((a, b) => {
           // Check both possible property names
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const aLikes = (a.like_count ?? (a as any).likes_count ?? 0);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const bLikes = (b.like_count ?? (b as any).likes_count ?? 0);
           
           console.log(`  👍 Comparing likes: "${a.content.substring(0, 20)}" (${aLikes}) vs "${b.content.substring(0, 20)}" (${bLikes})`);
@@ -352,7 +354,9 @@ export default function Dashboard() {
           const dayMs = 24 * 60 * 60 * 1000;
           
           // Check both possible property names
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const aLikes = (a.like_count ?? (a as any).likes_count ?? 0);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const bLikes = (b.like_count ?? (b as any).likes_count ?? 0);
           
           // Calculate recency score (0-7 based on days old, max 7 days)
@@ -396,7 +400,9 @@ export default function Dashboard() {
             if (b.user_profiles?.username?.toLowerCase().includes(queryLower)) bScore += 5;
             
             // Add like bonus for equal relevance (max 5 points) - check both property names
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const aLikes = (a.like_count ?? (a as any).likes_count ?? 0);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const bLikes = (b.like_count ?? (b as any).likes_count ?? 0);
             aScore += Math.min(aLikes, 5);
             bScore += Math.min(bLikes, 5);
@@ -1029,37 +1035,36 @@ export default function Dashboard() {
       setIsSubmitting(true);
       setError(null);
 
-      // Upload audio file
-      const fileExt = selectedAudioFile.name.split(".").pop();
-      const storagePath = `${user.id}/${Date.now()}.${fileExt}`;
-      const originalFileName = selectedAudioFile.name; // Keep original filename
-
-      console.log('Uploading audio file:', storagePath, 'Original name:', originalFileName, 'Size:', selectedAudioFile.size);
+      const originalFileName = selectedAudioFile.name;
+      console.log('Creating audio post with file:', originalFileName, 'Size:', selectedAudioFile.size);
       
-      const { error: uploadError } = await supabase.storage
-        .from("audio-files")
-        .upload(storagePath, selectedAudioFile);
+      // Upload track (handles file upload AND compression internally)
+      const uploadResult = await uploadTrack(user.id, {
+        file: selectedAudioFile,
+        title: originalFileName.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, ''),
+        description: audioDescription || undefined,
+        is_public: true,
+      });
 
-      if (uploadError) {
-        console.error('Storage upload error:', uploadError);
-        throw uploadError;
+      if (!uploadResult.success || !uploadResult.track) {
+        console.error('Track upload error:', uploadResult.error);
+        throw new Error(uploadResult.error || 'Failed to upload track');
       }
 
-      console.log('File uploaded successfully, creating post...');
-      
-      // Create post with additional metadata
-      // Pass the storage path and original filename separately
+      const track = uploadResult.track;
+      console.log('✅ Track uploaded successfully:', track.id);
+      if (uploadResult.compressionInfo) {
+        console.log('✅ Compression applied:', uploadResult.compressionInfo);
+      }
+
+      // Create post with track reference
       await createAudioPost(
-        user.id, 
-        storagePath, 
-        audioDescription || originalFileName, // Use filename as fallback description
-        selectedAudioFile.size,
-        undefined, // duration will be calculated client-side if needed
-        selectedAudioFile.type,
-        originalFileName // Pass original filename
+        user.id,
+        track.id,
+        audioDescription || undefined
       );
 
-      console.log('Audio post created successfully');
+      console.log('✅ Audio post created successfully');
       
       setAudioDescription("");
       setSelectedAudioFile(null);
@@ -1440,7 +1445,7 @@ export default function Dashboard() {
                 {/* Search Query Badge */}
                 {currentFilters.query && (
                   <span className="bg-blue-900/30 text-blue-400 px-3 py-1 rounded-full text-xs font-medium border border-blue-700">
-                    🔍 Search: "{currentFilters.query}"
+                    🔍 Search: &quot;{currentFilters.query}&quot;
                   </span>
                 )}
                 

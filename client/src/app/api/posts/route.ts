@@ -123,8 +123,8 @@ export async function GET(request: NextRequest) {
             if (!likeCountError) {
               likeCount = count || 0;
             }
-          } catch (likeError) {
-            console.warn('⚠️ API: Could not fetch like count for post:', post.id);
+          } catch (likeCountFetchError) {
+            console.warn('⚠️ API: Could not fetch like count for post:', post.id, likeCountFetchError);
             // Use default value of 0
           }
 
@@ -142,8 +142,8 @@ export async function GET(request: NextRequest) {
               if (!userLikeError && likeData) {
                 userLiked = true;
               }
-            } catch (userLikeError) {
-              console.warn('⚠️ API: Could not fetch user like status for post:', post.id);
+            } catch (userLikeFetchError) {
+              console.warn('⚠️ API: Could not fetch user like status for post:', post.id, userLikeFetchError);
               // Use default value of false
             }
           }

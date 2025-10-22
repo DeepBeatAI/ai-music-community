@@ -1,7 +1,10 @@
+import { supabase } from '@/lib/supabase';
+
 // Compression Analytics and Performance Monitoring
 interface CompressionMetrics {
   sessionId: string;
   userId: string;
+  trackId?: string; // NEW: Link to tracks table
   fileName: string;
   originalSize: number;
   compressedSize: number;
@@ -40,11 +43,12 @@ class CompressionAnalytics {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fullMetrics)
         });
-      } catch (apiError) {
+      } catch {
         console.warn('📊 Analytics API not available, storing locally only');
       }
 
       console.log('📊 Compression metrics tracked:', {
+        trackId: data.trackId || 'N/A',
         file: data.fileName,
         savings: `${(bandwidthSaved / 1024 / 1024).toFixed(2)}MB`,
         ratio: `${data.compressionRatio.toFixed(2)}x`,
@@ -79,6 +83,67 @@ class CompressionAnalytics {
 
   getBandwidthSavings(originalSize: number, compressedSize: number): number {
     return Math.max(0, originalSize - compressedSize);
+  }
+
+  /**
+   * Calculate total compression savings from tracks table
+   * This queries the database to get aggregate compression statistics
+   * 
+   * @returns Promise with total savings and statistics
+   */
+  async getTotalCompressionSavings(): Promise<{
+    totalSavings: number;
+    totalTracks: number;
+    averageCompressionRatio: number;
+    totalOriginalSize: number;
+    totalCompressedSize: number;
+  } | null> {
+    try {
+      console.log('📊 Fetching total compression savings from tracks table...');
+      
+      // Query all tracks with compression applied
+      const { data, error } = await supabase
+        .from('tracks')
+        .select('original_file_size, file_size, compression_ratio')
+        .eq('compression_applied', true);
+
+      if (error) {
+        console.error('❌ Database query error:', error);
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        console.log('📊 No compressed tracks found in database');
+        return {
+          totalSavings: 0,
+          totalTracks: 0,
+          averageCompressionRatio: 0,
+          totalOriginalSize: 0,
+          totalCompressedSize: 0
+        };
+      }
+
+      // Calculate aggregate statistics
+      const totalOriginalSize = data.reduce((sum, t) => sum + (t.original_file_size || 0), 0);
+      const totalCompressedSize = data.reduce((sum, t) => sum + (t.file_size || 0), 0);
+      const totalSavings = totalOriginalSize - totalCompressedSize;
+      const averageCompressionRatio = data.reduce((sum, t) => sum + (t.compression_ratio || 1), 0) / data.length;
+
+      console.log(`✅ Fetched compression stats for ${data.length} tracks`);
+      console.log(`   Total savings: ${(totalSavings / 1024 / 1024).toFixed(2)}MB`);
+      console.log(`   Average compression: ${averageCompressionRatio.toFixed(2)}x`);
+
+      return {
+        totalSavings,
+        totalTracks: data.length,
+        averageCompressionRatio,
+        totalOriginalSize,
+        totalCompressedSize
+      };
+    } catch (error) {
+      console.error('❌ Failed to fetch compression savings:', error);
+      return null;
+    }
   }
 
   // Performance validation
@@ -141,6 +206,7 @@ class MemoryMonitor {
   
   startMonitoring() {
     if ('memory' in performance) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.startMemory = (performance as any).memory.usedJSHeapSize;
       console.log('🧠 Memory monitoring started:', this.formatBytes(this.startMemory));
     }
@@ -148,6 +214,7 @@ class MemoryMonitor {
 
   checkMemoryUsage() {
     if ('memory' in performance) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const currentMemory = (performance as any).memory.usedJSHeapSize;
       const memoryIncrease = currentMemory - this.startMemory;
       
@@ -209,6 +276,43 @@ export const validateProductionCompression = () => {
   console.log('3. Check compression success message shows bandwidth saved');
   console.log('4. Confirm file uploads successfully');
   console.log('=====================================');
+};
+
+/**
+ * Generate compression dashboard data
+ * Combines session stats with database totals for comprehensive view
+ */
+export const generateCompressionDashboard = async () => {
+  console.log('📊 COMPRESSION DASHBOARD');
+  console.log('========================');
+  
+  // Session statistics
+  const sessionStats = compressionAnalytics.getSessionStats();
+  if (sessionStats) {
+    console.log('\n📈 Current Session:');
+    console.log(`  Files processed: ${sessionStats.filesProcessed}`);
+    console.log(`  Bandwidth saved: ${(sessionStats.totalBandwidthSaved / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`  Avg compression: ${sessionStats.avgCompressionRatio.toFixed(2)}x`);
+    console.log(`  Success rate: ${(sessionStats.compressionSuccessRate * 100).toFixed(1)}%`);
+  }
+  
+  // Database totals
+  const dbStats = await compressionAnalytics.getTotalCompressionSavings();
+  if (dbStats) {
+    console.log('\n💾 Database Totals:');
+    console.log(`  Total tracks: ${dbStats.totalTracks}`);
+    console.log(`  Total savings: ${(dbStats.totalSavings / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`  Avg compression: ${dbStats.averageCompressionRatio.toFixed(2)}x`);
+    console.log(`  Original size: ${(dbStats.totalOriginalSize / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`  Compressed size: ${(dbStats.totalCompressedSize / 1024 / 1024).toFixed(2)}MB`);
+  }
+  
+  console.log('========================');
+  
+  return {
+    session: sessionStats,
+    database: dbStats
+  };
 };
 
 // Auto-run validation in development

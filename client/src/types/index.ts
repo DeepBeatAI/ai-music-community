@@ -1,3 +1,5 @@
+import { Track } from './track';
+
 export interface UserProfile {
   id: string;
   user_id: string;
@@ -17,11 +19,25 @@ export interface Post {
   content: string;
   user_id: string;
   post_type: 'text' | 'audio';
+  
+  // NEW: Track reference for audio posts
+  track_id?: string;
+  track?: Track; // Joined track data
+  
+  // DEPRECATED: Keep temporarily for backward compatibility during migration
+  // These fields will be removed after data migration is complete
+  // Use post.track instead for audio posts
+  /** @deprecated Use post.track.file_url instead */
   audio_url?: string;
+  /** @deprecated Use post.track.title instead */
   audio_filename?: string;
+  /** @deprecated Use post.track.file_size instead */
   audio_file_size?: number;
+  /** @deprecated Use post.track.duration instead */
   audio_duration?: number;
+  /** @deprecated Use post.track.mime_type instead */
   audio_mime_type?: string;
+  
   // Joined user profile data
   user_profiles?: {
     username: string;

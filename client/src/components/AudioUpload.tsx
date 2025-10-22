@@ -3,24 +3,42 @@ import { useState, useRef, useCallback } from 'react';
 import { validateAudioFile, formatFileSize, formatDuration, AudioValidationResult } from '@/utils/audio';
 import { serverAudioCompressor, CompressionResult, CompressionOptions } from '@/utils/serverAudioCompression';
 import { compressionAnalytics, memoryMonitor } from '@/utils/compressionAnalytics';
+import { uploadTrack } from '@/lib/tracks';
+import { useAuth } from '@/contexts/AuthContext';
+import type { TrackUploadData } from '@/types/track';
+
+interface UploadedTrack {
+  id: string;
+  title: string;
+  description?: string | null;
+  file_url: string;
+  duration?: number | null;
+}
 
 interface AudioUploadProps {
   onFileSelect: (file: File, duration?: number, compressionInfo?: CompressionResult) => void;
   onFileRemove: () => void;
+  onTrackUploaded?: (trackId: string, track: UploadedTrack) => void; // NEW: Callback when track is uploaded
   disabled?: boolean;
   maxFileSize?: number;
   enableCompression?: boolean; // New prop to control compression
   compressionQuality?: 'high' | 'medium' | 'low'; // New prop for quality
+  uploadMode?: 'legacy' | 'track'; // NEW: Control upload behavior
+  showLibraryOption?: boolean; // NEW: Show option to upload to library only
 }
 
 export default function AudioUpload({ 
   onFileSelect, 
-  onFileRemove, 
+  onFileRemove,
+  onTrackUploaded,
   disabled = false,
   maxFileSize = 50 * 1024 * 1024,
   enableCompression = true, // Enable by default for production
-  compressionQuality = 'medium' // Default to medium quality
+  compressionQuality = 'medium', // Default to medium quality
+  uploadMode = 'legacy', // Default to legacy mode for backward compatibility
+  showLibraryOption = false // Default to false for backward compatibility
 }: AudioUploadProps) {
+  const { user } = useAuth();
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [validation, setValidation] = useState<AudioValidationResult | null>(null);
@@ -30,6 +48,15 @@ export default function AudioUpload({
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressionResult, setCompressionResult] = useState<CompressionResult | null>(null);
   const [compressionError, setCompressionError] = useState<string | null>(null);
+  
+  // NEW: Track upload state
+  const [isUploadingTrack, setIsUploadingTrack] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedTrack, setUploadedTrack] = useState<UploadedTrack | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [trackTitle, setTrackTitle] = useState('');
+  const [trackDescription, setTrackDescription] = useState('');
+  const [showTrackForm, setShowTrackForm] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,8 +142,17 @@ export default function AudioUpload({
         }
       }
 
-      // Step 3: Notify parent component
-      onFileSelect(finalFile, validationResult.duration, compressionInfo || undefined);
+      // Step 3: Handle based on upload mode
+      if (uploadMode === 'track') {
+        // NEW: Show track form for metadata input
+        setShowTrackForm(true);
+        // Auto-populate title from filename
+        const defaultTitle = finalFile.name.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, '');
+        setTrackTitle(defaultTitle);
+      } else {
+        // LEGACY: Notify parent component directly
+        onFileSelect(finalFile, validationResult.duration, compressionInfo || undefined);
+      }
 
     } catch (error) {
       console.error('File processing error:', error);
@@ -128,7 +164,60 @@ export default function AudioUpload({
       setIsValidating(false);
       setIsCompressing(false);
     }
-  }, [onFileSelect, enableCompression, compressionQuality]);
+  }, [onFileSelect, enableCompression, compressionQuality, uploadMode]);
+
+  // NEW: Handle track upload
+  const handleTrackUpload = useCallback(async () => {
+    if (!user || !selectedFile || !validation?.file) {
+      return;
+    }
+
+    setIsUploadingTrack(true);
+    setUploadProgress(0);
+    setUploadError(null);
+
+    try {
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90));
+      }, 200);
+
+      // CRITICAL FIX: Use compressed file if compression was successful
+      // The compression result contains the Supabase URL of the already-uploaded compressed file
+      const uploadData: TrackUploadData = {
+        file: validation.file, // Original file (uploadTrack will handle compression internally)
+        title: trackTitle || selectedFile.name.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, ''),
+        description: trackDescription || undefined,
+        is_public: true, // Default to public
+        // Pass compression result so uploadTrack knows compression already happened
+        compressionResult: compressionResult || undefined,
+      };
+
+      const result = await uploadTrack(user.id, uploadData);
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (result.success && result.track) {
+        setUploadedTrack(result.track);
+        
+        // Notify parent component
+        if (onTrackUploaded) {
+          onTrackUploaded(result.track.id, result.track);
+        }
+        
+        // Also call legacy callback for backward compatibility
+        onFileSelect(validation.file, validation.duration, compressionResult || undefined);
+      } else {
+        setUploadError(result.error || 'Failed to upload track');
+      }
+    } catch (error) {
+      console.error('Track upload error:', error);
+      setUploadError(error instanceof Error ? error.message : 'Failed to upload track');
+    } finally {
+      setIsUploadingTrack(false);
+    }
+  }, [user, selectedFile, validation, trackTitle, trackDescription, compressionResult, onTrackUploaded, onFileSelect]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -171,6 +260,12 @@ export default function AudioUpload({
     setValidation(null);
     setCompressionResult(null);
     setCompressionError(null);
+    setUploadedTrack(null);
+    setUploadError(null);
+    setTrackTitle('');
+    setTrackDescription('');
+    setShowTrackForm(false);
+    setUploadProgress(0);
     onFileRemove();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -319,7 +414,119 @@ export default function AudioUpload({
         <div className="bg-orange-900/20 border border-orange-700 rounded p-3">
           <p className="text-orange-400 text-sm font-medium mb-1">⚠️ Compression Warning:</p>
           <p className="text-orange-400 text-sm">{compressionError}</p>
-          <p className="text-orange-300 text-xs mt-1">Don't worry - your original file will be used.</p>
+          <p className="text-orange-300 text-xs mt-1">Don&apos;t worry - your original file will be used.</p>
+        </div>
+      )}
+
+      {/* NEW: Track Metadata Form (only in track mode) */}
+      {uploadMode === 'track' && showTrackForm && selectedFile && !uploadedTrack && (
+        <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 space-y-4">
+          <h3 className="text-lg font-medium text-gray-200">Track Details</h3>
+          
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="track-title" className="block text-sm font-medium text-gray-300 mb-1">
+                Title *
+              </label>
+              <input
+                id="track-title"
+                type="text"
+                value={trackTitle}
+                onChange={(e) => setTrackTitle(e.target.value)}
+                placeholder="Enter track title"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={isUploadingTrack}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="track-description" className="block text-sm font-medium text-gray-300 mb-1">
+                Description (optional)
+              </label>
+              <textarea
+                id="track-description"
+                value={trackDescription}
+                onChange={(e) => setTrackDescription(e.target.value)}
+                placeholder="Add a description for your track"
+                rows={3}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                disabled={isUploadingTrack}
+              />
+            </div>
+          </div>
+
+          {/* Upload Progress */}
+          {isUploadingTrack && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm text-gray-400">
+                <span>Uploading track...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Upload Error */}
+          {uploadError && (
+            <div className="bg-red-900/20 border border-red-700 rounded p-3">
+              <p className="text-red-400 text-sm font-medium mb-1">Upload failed:</p>
+              <p className="text-red-400 text-sm">{uploadError}</p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={handleTrackUpload}
+              disabled={isUploadingTrack || !trackTitle.trim()}
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+            >
+              {isUploadingTrack ? 'Uploading...' : 'Upload Track'}
+            </button>
+            
+            {showLibraryOption && (
+              <button
+                onClick={handleTrackUpload}
+                disabled={isUploadingTrack || !trackTitle.trim()}
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+              >
+                {isUploadingTrack ? 'Uploading...' : 'Save to Library'}
+              </button>
+            )}
+            
+            <button
+              onClick={() => setShowTrackForm(false)}
+              disabled={isUploadingTrack}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Track Upload Success */}
+      {uploadedTrack && (
+        <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <span className="text-2xl">✅</span>
+            <div className="flex-1">
+              <p className="text-green-400 font-medium mb-1">Track uploaded successfully!</p>
+              <p className="text-green-300 text-sm">
+                {uploadedTrack.title}
+              </p>
+              {uploadedTrack.description && (
+                <p className="text-green-300 text-xs mt-1">
+                  {uploadedTrack.description}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

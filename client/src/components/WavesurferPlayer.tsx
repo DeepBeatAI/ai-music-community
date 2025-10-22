@@ -1,12 +1,11 @@
 'use client'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import { formatDuration, getBestAudioUrl } from '@/utils/audio';
+import { formatDuration } from '@/utils/audio';
 import { getCachedAudioUrl } from '@/utils/audioCache';
 import { performanceAnalytics } from '@/utils/performanceAnalytics';
 import { 
   createWavesurferInstance, 
-  formatWaveformError, 
   WAVESURFER_THEMES, 
   handleWavesurferError,
   createVolumeManager,
@@ -53,7 +52,6 @@ export default function WavesurferPlayer({
   // STEP 1: Process audio URL with smart caching and analytics tracking
   useEffect(() => {
     const initializeAudioUrl = async () => {
-      const startTime = Date.now();
       console.log('🎵 Initializing audio URL with smart caching');
       setIsLoading(true);
       setError(null);
@@ -141,11 +139,15 @@ export default function WavesurferPlayer({
         if (wavesurferRef.current) {
           try {
             // Clean up custom event listeners and intervals
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             if ((wavesurferRef.current as any)._customCleanup) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (wavesurferRef.current as any)._customCleanup();
             }
             
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             if ((wavesurferRef.current as any)._timeSyncInterval) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               clearInterval((wavesurferRef.current as any)._timeSyncInterval);
             }
             
@@ -241,6 +243,7 @@ export default function WavesurferPlayer({
           };
           
           // Add to wavesurfer for cleanup later
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (wavesurfer as any)._customCleanup = cleanup;
         }
 
@@ -305,6 +308,7 @@ export default function WavesurferPlayer({
         }, 200);
         
         // Store interval for cleanup
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (wavesurfer as any)._timeSyncInterval = timeSyncInterval;
 
       } catch (err) {
@@ -336,11 +340,15 @@ export default function WavesurferPlayer({
       if (wavesurferRef.current) {
         try {
           // Clean up custom event listeners and intervals
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           if ((wavesurferRef.current as any)._customCleanup) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (wavesurferRef.current as any)._customCleanup();
           }
           
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           if ((wavesurferRef.current as any)._timeSyncInterval) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             clearInterval((wavesurferRef.current as any)._timeSyncInterval);
           }
           
@@ -354,13 +362,15 @@ export default function WavesurferPlayer({
       setIsWaveformReady(false);
       setIsPlaying(false);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actualAudioUrl, urlProcessingComplete, showWaveform, theme]); // CRITICAL: NO volume dependency
 
   // STEP 3: Separate volume effect that doesn't reinitialize
   useEffect(() => {
     console.log('🔊 Updating volume to:', volume);
     volumeManager.updateVolume(volume);
-  }, [volume, volumeManager]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volume]);
 
   // ENHANCED: Play/pause with better error handling
   const togglePlayPause = useCallback(() => {

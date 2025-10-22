@@ -1,4 +1,5 @@
 import { Database } from './supabase';
+import { Track } from './track';
 
 // Base types from database
 export type Playlist = Database['public']['Tables']['playlists']['Row'];
@@ -14,14 +15,7 @@ export interface PlaylistWithTracks extends Playlist {
     track_id: string;
     position: number;
     added_at: string;
-    track: {
-      id: string;
-      title: string;
-      artist_name: string;
-      audio_url: string;
-      duration?: number;
-      cover_image_url?: string;
-    };
+    track: Track; // Now correctly references Track type from tracks table
   }>;
   track_count: number;
 }

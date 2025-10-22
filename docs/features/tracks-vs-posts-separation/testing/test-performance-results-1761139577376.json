@@ -1,0 +1,96 @@
+{
+  "timestamp": "2025-10-22T13:26:17.033Z",
+  "environment": "local",
+  "queryPerformance": {
+    "postFetch": {
+      "duration": "132.88",
+      "target": 100,
+      "status": "FAIL",
+      "error": {
+        "code": "PGRST200",
+        "details": "Searched for a foreign key relationship between 'posts' and 'user_profiles' in the schema 'public', but no matches were found.",
+        "hint": null,
+        "message": "Could not find a relationship between 'posts' and 'user_profiles' in the schema cache"
+      },
+      "count": 0
+    },
+    "playlistFetch": {
+      "duration": "85.84",
+      "target": 100,
+      "status": "PASS",
+      "error": "No playlists found",
+      "count": 0
+    },
+    "userTracks": {
+      "duration": "13.21",
+      "target": 50,
+      "status": "PASS",
+      "error": "No users found",
+      "count": 0
+    },
+    "search": {
+      "duration": "17.08",
+      "target": 150,
+      "status": "PASS",
+      "error": {
+        "code": "PGRST100",
+        "details": "unexpected \"t\" expecting \"not\" or operator (eq, gt, ...)",
+        "hint": null,
+        "message": "\"failed to parse logic tree ((tracks.title.ilike.%test%,tracks.tags.ilike.%test%))\" (line 1, column 11)"
+      },
+      "count": 0
+    }
+  },
+  "largeDataset": {
+    "manyTracks": {
+      "duration": "17.07",
+      "target": 2000,
+      "status": "PASS",
+      "error": "No tracks found",
+      "count": 0
+    },
+    "largePlaylist": {
+      "duration": "8.96",
+      "target": 2000,
+      "status": "PASS",
+      "error": "No playlists found",
+      "count": 0
+    },
+    "largeFeed": {
+      "duration": "5.92",
+      "target": 3000,
+      "status": "PASS",
+      "error": {
+        "code": "PGRST200",
+        "details": "Searched for a foreign key relationship between 'posts' and 'user_profiles' in the schema 'public', but no matches were found.",
+        "hint": null,
+        "message": "Could not find a relationship between 'posts' and 'user_profiles' in the schema cache"
+      },
+      "count": 0
+    },
+    "userPosts": {
+      "duration": "11.11",
+      "target": 3000,
+      "status": "PASS",
+      "error": "No posts found",
+      "count": 0
+    }
+  },
+  "caching": {},
+  "nPlusOne": {
+    "postFetch": {
+      "duration": "7.45",
+      "expectedQueries": 1,
+      "status": "ERROR",
+      "note": "Should use single JOIN query, not N+1"
+    }
+  },
+  "optimizations": [
+    {
+      "type": "index_check",
+      "status": "MANUAL_CHECK_REQUIRED",
+      "note": "Could not automatically verify indexes"
+    }
+  ],
+  "issues": []
+}

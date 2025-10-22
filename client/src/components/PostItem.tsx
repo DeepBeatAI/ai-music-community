@@ -26,35 +26,41 @@ interface AudioPlayerSectionProps {
   showWaveform?: boolean;
 }
 
+
+
 const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSectionProps) => {
   const [audioLoaded, setAudioLoaded] = useState(false);
-  const [audioLoadError, setAudioLoadError] = useState(false);
+
+  // Get audio data from track (new structure) with fallback to deprecated fields
+  const audioUrl = post.track?.file_url || post.audio_url;
+  const audioTitle = post.track?.title || post.audio_filename;
+  const audioDuration = post.track?.duration || post.audio_duration;
 
   // Lazy load audio only when user intends to play
   const handlePlayIntention = useCallback(() => {
-    if (!audioLoaded && post.audio_url) {
+    if (!audioLoaded && audioUrl) {
       console.log(`🎵 Loading audio on demand for post ${post.id}`);
       setAudioLoaded(true);
     }
-  }, [audioLoaded, post.audio_url, post.id]);
+  }, [audioLoaded, audioUrl, post.id]);
 
   return (
     <div className="mt-4 bg-gray-800 p-4 rounded-lg border border-gray-600">
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-1">
           <span className="text-blue-400">🎵</span>
-          <div className="flex flex-col">
+          <div className="flex flex-col flex-1">
             <span className="text-sm text-gray-200 font-medium">
               {(() => {
-                if (!post.audio_filename || post.audio_filename === '') return 'Audio Track';
+                if (!audioTitle || audioTitle === '') return 'Audio Track';
                 
                 // Check if it's a storage path (contains UUID pattern)
-                const isStoragePath = post.audio_filename.includes('/') && 
-                  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(post.audio_filename);
+                const isStoragePath = audioTitle.includes('/') && 
+                  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(audioTitle);
                 
                 if (isStoragePath) {
                   // For storage paths, just show a generic title with the timestamp if available
-                  const timestamp = post.audio_filename.match(/\d{13,}/)?.[0];
+                  const timestamp = audioTitle.match(/\d{13,}/)?.[0];
                   if (timestamp) {
                     const date = new Date(parseInt(timestamp));
                     return `Audio Track - ${date.toLocaleDateString()}`;
@@ -62,7 +68,7 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
                   return 'Audio Track';
                 } else {
                   // For proper filenames, remove the extension
-                  return post.audio_filename.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, '');
+                  return audioTitle.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, '');
                 }
               })()}
             </span>
@@ -82,31 +88,25 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
               <span>▶️</span>
               <span>Load & Play Audio</span>
             </button>
-            {post.audio_duration && (
+            {audioDuration && (
               <p className="text-xs text-gray-500 mt-2">
-                Duration: {Math.floor(post.audio_duration / 60)}:{String(Math.floor(post.audio_duration % 60)).padStart(2, '0')}
+                Duration: {Math.floor(audioDuration / 60)}:{String(Math.floor(audioDuration % 60)).padStart(2, '0')}
               </p>
             )}
           </div>
         ) : (
           // Load full WaveSurfer when user wants to play
           <div>
-            {post.audio_url && (
+            {audioUrl && (
               <WavesurferPlayer
-                key={`wavesurfer-${post.id}-${post.audio_url}`}
-                audioUrl={post.audio_url}
+                key={`wavesurfer-${post.id}-${audioUrl}`}
+                audioUrl={audioUrl}
                 fileName={undefined}  // Don't pass fileName to avoid duplicate display
-                duration={post.audio_duration}
+                duration={audioDuration}
                 showWaveform={showWaveform}
                 theme="ai_music"
                 className="audio-player-unique"
               />
-            )}
-            
-            {audioLoadError && (
-              <div className="text-red-400 text-sm text-center mt-2">
-                Failed to load audio. Please try again.
-              </div>
             )}
           </div>
         )}
@@ -291,7 +291,7 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
         )}
 
         {/* Audio Player - EGRESS OPTIMIZED with Lazy Loading */}
-        {post.post_type === 'audio' && post.audio_url && (
+        {post.post_type === 'audio' && (post.track?.file_url || post.audio_url) && (
           <AudioPlayerSection 
             post={post} 
             showWaveform={showWaveform}
@@ -330,14 +330,20 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
             </button>
             
             {/* Add to Playlist Button - Only for audio posts and authenticated users */}
-            {post.post_type === 'audio' && currentUserId && (
+            {post.post_type === 'audio' && currentUserId && post.track_id && (
               <AddToPlaylist 
-                trackId={post.id}
+                trackId={post.track_id}
                 onSuccess={() => {
-                  // Optional: Show a success message or update UI
-                  console.log('Track added to playlist successfully');
+                  console.log('✅ Track added to playlist successfully');
                 }}
               />
+            )}
+            
+            {/* Debug: Show if button should appear but doesn't */}
+            {post.post_type === 'audio' && currentUserId && !post.track_id && (
+              <div className="text-xs text-red-400">
+                ⚠️ No track_id
+              </div>
             )}
             
             {/* Future: Share Button */}
@@ -348,9 +354,12 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
           </div>
           
           {/* Duration for Audio Posts (removed file size) */}
-          {post.post_type === 'audio' && post.audio_duration && (
+          {post.post_type === 'audio' && (post.track?.duration || post.audio_duration) && (
             <div className="text-xs text-gray-500">
-              {Math.floor(post.audio_duration / 60)}:{String(Math.floor(post.audio_duration % 60)).padStart(2, '0')}
+              {(() => {
+                const duration = post.track?.duration || post.audio_duration || 0;
+                return `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`;
+              })()}
             </div>
           )}
         </div>

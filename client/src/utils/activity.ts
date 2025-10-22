@@ -8,7 +8,7 @@ export interface Activity {
   activity_type: 'post_created' | 'post_liked' | 'user_followed' | 'comment_created' | 'audio_uploaded';
   target_user_id?: string;
   target_post_id?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   is_public: boolean;
   // Joined data
   user_profiles?: {
@@ -26,6 +26,14 @@ export interface Activity {
   posts?: {
     content: string;
     post_type: string;
+    track_id?: string;
+    track?: {
+      id: string;
+      title: string;
+      file_url: string;
+      duration?: number;
+    };
+    // DEPRECATED: Keep for backward compatibility during transition
     audio_filename?: string;
   };
 }

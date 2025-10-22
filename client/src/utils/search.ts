@@ -30,6 +30,7 @@ export async function getPostsForFiltering(
       .from('posts')
       .select(`
         *,
+        track:tracks(*),
         user_profiles!posts_user_id_fkey (
           username
         )
@@ -62,7 +63,7 @@ export async function getPostsForFiltering(
             like_count: likeCount || 0,
             liked_by_user: false // Will be set properly in dashboard
           };
-        } catch (error) {
+        } catch {
           return {
             ...post,
             like_count: 0,
@@ -96,7 +97,9 @@ export async function searchContent(
     const offset = page * limit;
     
     // Initialize empty results
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let posts: any[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let users: any[] = [];
 
     // Handle "creators" filter - only search users, skip posts
@@ -127,6 +130,7 @@ export async function searchContent(
         .from('posts')
         .select(`
           *,
+          track:tracks(*),
           user_profiles!posts_user_id_fkey (
             id,
             username,
@@ -138,8 +142,9 @@ export async function searchContent(
       // Apply search filters
       if (filters.query && filters.query.trim()) {
         const query = filters.query.trim();
+        // Search in post content, audio filename (legacy), and track title/description
         postsQuery = postsQuery.or(
-          `content.ilike.%${query}%,audio_filename.ilike.%${query}%`
+          `content.ilike.%${query}%,audio_filename.ilike.%${query}%,track.title.ilike.%${query}%,track.description.ilike.%${query}%`
         );
       }
 
@@ -193,7 +198,7 @@ export async function searchContent(
       posts.map(async (post) => {
         try {
           // Get real like count for proper sorting
-          const { count: likeCount, error: likeError } = await supabase
+          const { count: likeCount } = await supabase
             .from('post_likes')
             .select('id', { count: 'exact', head: true })
             .eq('post_id', post.id);
@@ -263,7 +268,15 @@ export async function searchContent(
             if (a.content.toLowerCase().includes(queryLower)) aScore += 10;
             if (b.content.toLowerCase().includes(queryLower)) bScore += 10;
             
-            // Audio filename matches
+            // Track title matches (high priority for audio posts)
+            if (a.track?.title && a.track.title.toLowerCase().includes(queryLower)) aScore += 9;
+            if (b.track?.title && b.track.title.toLowerCase().includes(queryLower)) bScore += 9;
+            
+            // Track description matches
+            if (a.track?.description && a.track.description.toLowerCase().includes(queryLower)) aScore += 7;
+            if (b.track?.description && b.track.description.toLowerCase().includes(queryLower)) bScore += 7;
+            
+            // Audio filename matches (legacy support)
             if (a.audio_filename && a.audio_filename.toLowerCase().includes(queryLower)) aScore += 8;
             if (b.audio_filename && b.audio_filename.toLowerCase().includes(queryLower)) bScore += 8;
             
@@ -367,6 +380,7 @@ export async function getTrendingContent(limit: number = 10) {
       .from('posts')
       .select(`
         *,
+        track:tracks(*),
         user_profiles!posts_user_id_fkey (
           id,
           username,
@@ -396,7 +410,7 @@ export async function getTrendingContent(limit: number = 10) {
             user_profile: post.user_profiles,
             likes_count: likeCount || 0
           };
-        } catch (error) {
+        } catch {
           return {
             ...post,
             user_profile: post.user_profiles,

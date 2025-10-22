@@ -90,8 +90,28 @@ export async function getUserPlaylists(userId: string): Promise<Playlist[] | nul
 
 /**
  * Get a playlist with all its tracks, sorted by position
- * @param playlistId - The ID of the playlist
- * @returns PlaylistWithTracks or null on error
+ * 
+ * Fetches a playlist with all associated tracks joined from the tracks table.
+ * Playlists now correctly reference tracks (not posts) via playlist_tracks.track_id.
+ * 
+ * @param playlistId - The ID of the playlist to fetch
+ * @returns Promise<PlaylistWithTracks | null> - Playlist with tracks array or null on error
+ * 
+ * @example
+ * ```typescript
+ * const playlist = await getPlaylistWithTracks(playlistId);
+ * if (playlist) {
+ *   console.log(`Playlist: ${playlist.name}`);
+ *   playlist.tracks.forEach(pt => {
+ *     console.log(`Track: ${pt.track.title}`);
+ *   });
+ * }
+ * ```
+ * 
+ * @remarks
+ * - Tracks are sorted by position (ascending)
+ * - Each track includes full track metadata from tracks table
+ * - Returns null if playlist doesn't exist or user doesn't have access
  */
 export async function getPlaylistWithTracks(
   playlistId: string
@@ -106,14 +126,7 @@ export async function getPlaylistWithTracks(
           track_id,
           position,
           added_at,
-          track:tracks(
-            id,
-            title,
-            artist_name,
-            audio_url,
-            duration,
-            cover_image_url
-          )
+          track:tracks(*)
         )
       `)
       .eq('id', playlistId)
@@ -219,14 +232,80 @@ export async function deletePlaylist(
 
 /**
  * Add a track to a playlist with automatic position calculation
+ * 
+ * Adds a track to a playlist by creating a playlist_tracks record.
+ * Validates that the track exists and the user has permission to add it.
+ * Automatically calculates the next position if not provided.
+ * 
  * @param params - AddTrackToPlaylistParams with playlist_id, track_id, and optional position
- * @returns PlaylistOperationResponse with success status
+ * @returns Promise<PlaylistOperationResponse> - Result with success status and optional error
+ * 
+ * @example
+ * ```typescript
+ * // Add track to end of playlist
+ * const result = await addTrackToPlaylist({
+ *   playlist_id: playlistId,
+ *   track_id: trackId,
+ * });
+ * 
+ * // Add track at specific position
+ * const result = await addTrackToPlaylist({
+ *   playlist_id: playlistId,
+ *   track_id: trackId,
+ *   position: 0, // Add at beginning
+ * });
+ * ```
+ * 
+ * @remarks
+ * - Validates track exists before adding
+ * - Checks user has access to track (owns it or it's public)
+ * - Prevents duplicate tracks in same playlist
+ * - Position is auto-calculated if not provided (appends to end)
+ * - Track can be from a post or added directly from track library
  */
 export async function addTrackToPlaylist(
   params: AddTrackToPlaylistParams
 ): Promise<PlaylistOperationResponse> {
   try {
     const { playlist_id, track_id, position } = params;
+
+    console.log('🎵 addTrackToPlaylist called with:', { playlist_id, track_id, position });
+
+    // Verify track exists and check access permissions
+    const { data: track, error: trackError } = await supabase
+      .from('tracks')
+      .select('id, user_id, is_public')
+      .eq('id', track_id)
+      .single();
+
+    if (trackError || !track) {
+      console.error('❌ Error fetching track:', trackError);
+      console.error('❌ Track ID that failed:', track_id);
+      return {
+        success: false,
+        error: 'Track not found',
+      };
+    }
+
+    console.log('✅ Track found:', track);
+
+    // Get current user to check permissions
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return {
+        success: false,
+        error: 'Authentication required',
+      };
+    }
+
+    // Verify user has access to the track (either owns it or it's public)
+    if (track.user_id !== user.id && !track.is_public) {
+      return {
+        success: false,
+        error: 'You do not have permission to add this track',
+      };
+    }
 
     // If position is not provided, calculate the next position
     let finalPosition = position;
@@ -253,6 +332,8 @@ export async function addTrackToPlaylist(
     }
 
     // Insert the track into the playlist
+    console.log('🎵 Attempting to insert into playlist_tracks:', { playlist_id, track_id, position: finalPosition });
+    
     const { error } = await supabase
       .from('playlist_tracks')
       .insert({
@@ -262,11 +343,25 @@ export async function addTrackToPlaylist(
       });
 
     if (error) {
+      console.error('❌ Insert error:', error);
+      console.error('❌ Error code:', error.code);
+      console.error('❌ Error details:', error.details);
+      console.error('❌ Error hint:', error.hint);
+      
       // Check for unique constraint violation (duplicate track)
       if (error.code === '23505') {
         return {
           success: false,
-          error: 'Track already in playlist',
+          error: 'Track is already in this playlist',
+        };
+      }
+
+      // Check for foreign key constraint violation
+      if (error.code === '23503') {
+        console.error('❌ Foreign key violation - playlist_id:', playlist_id, 'track_id:', track_id);
+        return {
+          success: false,
+          error: 'Invalid playlist or track reference',
         };
       }
 
@@ -277,6 +372,7 @@ export async function addTrackToPlaylist(
       };
     }
 
+    console.log('✅ Track added to playlist successfully');
     return {
       success: true,
     };
@@ -299,6 +395,21 @@ export async function removeTrackFromPlaylist(
 ): Promise<PlaylistOperationResponse> {
   try {
     const { playlist_id, track_id } = params;
+
+    // Verify the track exists in the playlist before attempting to remove
+    const { data: existingTrack } = await supabase
+      .from('playlist_tracks')
+      .select('id')
+      .eq('playlist_id', playlist_id)
+      .eq('track_id', track_id)
+      .maybeSingle();
+
+    if (!existingTrack) {
+      return {
+        success: false,
+        error: 'Track not found in playlist',
+      };
+    }
 
     const { error } = await supabase
       .from('playlist_tracks')
@@ -328,9 +439,25 @@ export async function removeTrackFromPlaylist(
 
 /**
  * Check if a track is already in a playlist
- * @param playlistId - The ID of the playlist
- * @param trackId - The ID of the track
- * @returns boolean indicating if track is in playlist, or null on error
+ * 
+ * Queries the playlist_tracks table to determine if a specific track
+ * is already present in a playlist. Useful for preventing duplicates.
+ * 
+ * @param playlistId - The ID of the playlist to check
+ * @param trackId - The ID of the track to look for
+ * @returns Promise<boolean | null> - True if track is in playlist, false if not, null on error
+ * 
+ * @example
+ * ```typescript
+ * const isInPlaylist = await isTrackInPlaylist(playlistId, trackId);
+ * if (isInPlaylist) {
+ *   console.log('Track is already in this playlist');
+ * }
+ * ```
+ * 
+ * @remarks
+ * - Returns null on database errors
+ * - Useful for UI state management (showing "Added" vs "Add" buttons)
  */
 export async function isTrackInPlaylist(
   playlistId: string,

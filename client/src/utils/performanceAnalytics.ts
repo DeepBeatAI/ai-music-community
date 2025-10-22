@@ -57,7 +57,7 @@ class PerformanceAnalyticsManager {
     };
 
     this.events.push(fullEvent);
-    this.updateRealTimeMetrics(fullEvent);
+    this.updateRealTimeMetrics();
 
     // Clean up old events
     if (this.events.length > this.config.maxEvents) {
@@ -90,6 +90,7 @@ class PerformanceAnalyticsManager {
     // First Input Delay
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.metrics.fid = (entry as any).processingStart - entry.startTime;
       }
     }).observe({ entryTypes: ['first-input'] });
@@ -98,7 +99,9 @@ class PerformanceAnalyticsManager {
     let clsValue = 0;
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!(entry as any).hadRecentInput) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           clsValue += (entry as any).value;
           this.metrics.cls = clsValue;
         }
@@ -117,11 +120,20 @@ class PerformanceAnalyticsManager {
     this.performanceObserver.observe({ entryTypes: ['resource'] });
   }
 
+  /**
+   * Track resource loading performance
+   * 
+   * This method is URL-agnostic and works with both:
+   * - Legacy audio URLs from posts table (audio_url)
+   * - New track URLs from tracks table (track.file_url)
+   * 
+   * Detection is based on URL patterns, not source table.
+   */
   private trackResourceLoad(entry: PerformanceResourceTiming): void {
     const isAudio = entry.name.includes('audio') || entry.name.includes('.mp3') ||
-      entry.name.includes('.wav');
+      entry.name.includes('.wav') || entry.name.includes('.flac');
     const isImage = entry.name.includes('image') || entry.name.includes('.jpg') ||
-      entry.name.includes('.png');
+      entry.name.includes('.png') || entry.name.includes('.webp');
 
     if (isAudio) {
       this.trackEvent({
@@ -131,6 +143,7 @@ class PerformanceAnalyticsManager {
         url: entry.name,
         metadata: {
           fromCache: entry.transferSize === 0,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           redirectCount: (entry as any).redirectCount || 0
         }
       });
@@ -147,7 +160,7 @@ class PerformanceAnalyticsManager {
     }
   }
 
-  private updateRealTimeMetrics(event: PerformanceEvent): void {
+  private updateRealTimeMetrics(): void {
     if (!this.config.enableRealTimeTracking) return;
 
     const recentEvents = this.events.filter(e =>
@@ -302,23 +315,20 @@ export const performanceAnalytics = new PerformanceAnalyticsManager();
 
 // Global error tracking
 if (typeof window !== 'undefined') {
-  window.addEventListener('error', (event) => {
+  window.addEventListener('error', () => {
     performanceAnalytics.trackEvent({
       type: 'error',
-      url: event.filename,
       metadata: {
-        message: event.message,
-        line: event.lineno,
-        column: event.colno
+        source: 'global-error-handler'
       }
     });
   });
 
-  window.addEventListener('unhandledrejection', (event) => {
+  window.addEventListener('unhandledrejection', () => {
     performanceAnalytics.trackEvent({
       type: 'error',
       metadata: {
-        reason: event.reason?.toString()
+        source: 'unhandled-rejection'
       }
     });
   });

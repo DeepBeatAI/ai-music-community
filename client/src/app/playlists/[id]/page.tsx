@@ -59,45 +59,50 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
     console.error('Error fetching playlist tracks:', tracksError);
   }
 
-  // Fetch the actual post data for each track
+  // Fetch the actual track data
   const tracks = [];
   if (playlistTracks && playlistTracks.length > 0) {
     const trackIds = playlistTracks.map((pt) => pt.track_id);
     
-    // Fetch posts without join first
-    console.log('Fetching posts for track IDs:', trackIds);
-    const { data: posts, error: postsError } = await supabase
-      .from('posts')
-      .select('id, content, audio_url, audio_duration, audio_filename, user_id')
+    // Fetch tracks from tracks table
+    console.log('Fetching tracks for track IDs:', trackIds);
+    const { data: tracksData, error: tracksDataError } = await supabase
+      .from('tracks')
+      .select('id, title, description, file_url, duration, user_id')
       .in('id', trackIds);
 
-    if (postsError) {
-      console.error('Error fetching posts:', postsError);
-      console.error('Error details:', JSON.stringify(postsError, null, 2));
+    if (tracksDataError) {
+      console.error('Error fetching tracks:', tracksDataError);
+      console.error('Error details:', JSON.stringify(tracksDataError, null, 2));
     } else {
-      console.log('Successfully fetched posts:', posts?.length || 0);
+      console.log('Successfully fetched tracks:', tracksData?.length || 0);
     }
 
     // Fetch user profiles separately
-    let profiles: any[] = [];
-    if (posts && posts.length > 0) {
-      const userIds = [...new Set(posts.map((p) => p.user_id))];
+    let profiles: Array<{ user_id: string; username: string }> = [];
+    if (tracksData && tracksData.length > 0) {
+      const userIds = [...new Set(tracksData.map((t) => t.user_id))];
       const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, username')
-        .in('id', userIds);
+        .from('user_profiles')
+        .select('user_id, username')
+        .in('user_id', userIds);
       
-      profiles = profilesData || [];
+      profiles = (profilesData as Array<{ user_id: string; username: string }>) || [];
     }
 
     // Combine the data
-    if (posts) {
+    if (tracksData) {
       for (const pt of playlistTracks) {
-        const post = posts.find((p) => p.id === pt.track_id);
-        if (post) {
-          const profile = profiles.find((prof) => prof.id === post.user_id);
-          // Use audio_filename or content as title, fallback to "Untitled Track"
-          const title = post.audio_filename || post.content?.substring(0, 50) || 'Untitled Track';
+        const track = tracksData.find((t) => t.id === pt.track_id);
+        if (track) {
+          const profile = profiles.find((prof) => prof.user_id === track.user_id);
+          
+          console.log('Track data:', {
+            id: track.id,
+            title: track.title,
+            duration: track.duration,
+            file_url: track.file_url
+          });
           
           tracks.push({
             id: `${pt.playlist_id}-${pt.track_id}`,
@@ -105,12 +110,12 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
             position: pt.position,
             added_at: pt.added_at,
             track: {
-              id: post.id,
-              title: title,
+              id: track.id,
+              title: track.title || 'Untitled Track',
               artist_name: profile?.username || 'Unknown Artist',
-              audio_url: post.audio_url || '',
-              duration: post.audio_duration,
-              cover_image_url: undefined, // posts table doesn't have cover images
+              audio_url: track.file_url || '',
+              duration: track.duration || undefined,
+              cover_image_url: undefined,
             },
           });
         }

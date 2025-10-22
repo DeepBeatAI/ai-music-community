@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useFollow } from '@/contexts/FollowContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserStats, calculateUserStatsFromDatabase } from '@/utils/userStats';
+import { calculateUserStatsFromDatabase } from '@/utils/userStats';
 
 interface UserStats {
   posts_count: number;

@@ -18,12 +18,17 @@ The playlist system enables users to create, organize, and manage collections of
 
 **Key Capabilities:**
 - Create public and private playlists
-- Add and remove tracks from playlists
+- Add and remove tracks from playlists (references tracks table, not posts)
 - Edit playlist metadata (name, description, cover image)
 - Delete playlists with confirmation
-- View playlists with track lists
+- View playlists with track lists (joined from tracks table)
 - Share public playlists with other users
 - Prevent duplicate tracks in playlists
+
+**Note:** Playlists now correctly reference tracks via the `tracks` table instead of posts. This enables:
+- Adding tracks directly to playlists without creating posts
+- Track reuse across multiple playlists
+- Better separation between social content (posts) and audio assets (tracks)
 
 **Components:**
 - `CreatePlaylist` - Form for creating new playlists
@@ -97,11 +102,18 @@ All implementation tasks (1-9) have been completed:
 **Tables:**
 - `playlists` - Stores playlist metadata
 - `playlist_tracks` - Junction table for playlist-track relationships
+- `tracks` - Stores audio track metadata (referenced by playlist_tracks)
+
+**Relationships:**
+- `playlist_tracks.track_id` → `tracks.id` (foreign key with CASCADE delete)
+- `playlists.user_id` → `auth.users.id` (foreign key)
+- `tracks.user_id` → `auth.users.id` (foreign key)
 
 **Security:**
 - Row Level Security (RLS) enabled on all tables
 - Policies enforce ownership and visibility rules
 - Cascade delete for referential integrity
+- Track access validated before adding to playlists
 
 **Indexes:**
 - `playlists_user_id_idx` - Fast user playlist lookups
@@ -109,6 +121,8 @@ All implementation tasks (1-9) have been completed:
 - `playlist_tracks_playlist_id_idx` - Fast playlist track lookups
 - `playlist_tracks_track_id_idx` - Fast track-to-playlist lookups
 - `playlist_tracks_position_idx` - Position-based sorting
+- `tracks_user_id_idx` - Fast user track lookups
+- `tracks_created_at_idx` - Chronological track sorting
 
 ### Type Definitions
 
@@ -165,9 +179,16 @@ if (result.success) {
 ```typescript
 import { addTrackToPlaylist } from '@/lib/playlists';
 
+// Add track from post
 const result = await addTrackToPlaylist({
   playlist_id: 'playlist-uuid',
-  track_id: 'track-uuid'
+  track_id: post.track_id // Get track ID from audio post
+});
+
+// Or add track directly from track library
+const result = await addTrackToPlaylist({
+  playlist_id: 'playlist-uuid',
+  track_id: track.id // Direct track ID
 });
 
 if (result.success) {
@@ -176,6 +197,8 @@ if (result.success) {
   console.error('Error:', result.error);
 }
 ```
+
+**Note:** The `track_id` parameter now references the `tracks` table, not the `posts` table. This allows adding tracks to playlists without requiring a post to exist.
 
 ### Using the Performance Dashboard
 

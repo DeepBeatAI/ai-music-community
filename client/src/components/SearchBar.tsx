@@ -46,9 +46,7 @@ export default function SearchBar({
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const lastFiltersRef = useRef<string>('');
   const previousCurrentQueryRef = useRef(currentQuery);
-  const previousPostTypeRef = useRef(postType);
   const cacheExpiryTime = 5 * 60 * 1000; // 5 minutes
 
   // FIXED: Prevent state conflicts - only sync if it's an external change

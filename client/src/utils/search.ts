@@ -142,9 +142,15 @@ export async function searchContent(
       // Apply search filters
       if (filters.query && filters.query.trim()) {
         const query = filters.query.trim();
-        // Search in post content, audio filename (legacy), and track title/description
+        console.log('🔍 Search query construction:', {
+          query,
+          searchingColumns: ['content', 'audio_filename'],
+          note: 'Track columns will be filtered client-side'
+        });
+        // FIXED: Only search posts table columns - track columns filtered client-side
+        // PostgREST doesn't support .or() with related table columns
         postsQuery = postsQuery.or(
-          `content.ilike.%${query}%,audio_filename.ilike.%${query}%,track.title.ilike.%${query}%,track.description.ilike.%${query}%`
+          `content.ilike.%${query}%,audio_filename.ilike.%${query}%`
         );
       }
 
@@ -173,7 +179,50 @@ export async function searchContent(
         console.error('Posts search error:', postsError);
         // Don't throw, continue with empty posts
       } else {
-        posts = postsData || [];
+        // Apply client-side filtering for track columns if we have a search query
+        if (postsData && filters.query && filters.query.trim()) {
+          const queryLower = filters.query.trim().toLowerCase();
+          console.log('🔍 Applying client-side track filtering for query:', queryLower);
+          
+          // Filter to include posts that match in either posts columns OR track columns
+          posts = postsData.filter(post => {
+            // Check if already matched in posts table columns
+            const matchesPostColumns = 
+              post.content?.toLowerCase().includes(queryLower) ||
+              post.audio_filename?.toLowerCase().includes(queryLower);
+            
+            // Check track columns if post has a track
+            // Handles posts without tracks correctly by checking post.track first
+            const matchesTrackColumns = post.track && (
+              post.track.title?.toLowerCase().includes(queryLower) ||
+              post.track.description?.toLowerCase().includes(queryLower)
+            );
+            
+            // Preserve posts that match in EITHER posts columns OR track columns
+            const isMatch = matchesPostColumns || matchesTrackColumns;
+            
+            if (matchesTrackColumns && !matchesPostColumns) {
+              console.log('✅ Track match found:', {
+                postId: post.id,
+                trackTitle: post.track?.title,
+                trackDescription: post.track?.description?.substring(0, 50),
+                matchedIn: post.track?.title?.toLowerCase().includes(queryLower) ? 'title' : 'description'
+              });
+            }
+            
+            return isMatch;
+          });
+          
+          console.log('🔍 Client-side filtering results:', {
+            originalCount: postsData.length,
+            filteredCount: posts.length,
+            removedCount: postsData.length - posts.length,
+            postsWithTracks: posts.filter(p => p.track).length,
+            postsWithoutTracks: posts.filter(p => !p.track).length
+          });
+        } else {
+          posts = postsData || [];
+        }
       }
 
       // Search users only if we have a query and not filtering for creators only

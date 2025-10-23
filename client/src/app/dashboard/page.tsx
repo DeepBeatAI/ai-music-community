@@ -1335,7 +1335,7 @@ export default function Dashboard() {
                       htmlFor="audioDescription"
                       className="block text-sm font-medium text-gray-300 mb-2"
                     >
-                      Description{" "}
+                      What&apos;s on your mind?{" "}
                       <span className="text-gray-500">(optional)</span>
                     </label>
                     <textarea

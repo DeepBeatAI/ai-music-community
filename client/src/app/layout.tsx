@@ -5,7 +5,6 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { FollowProvider } from '@/contexts/FollowContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import CacheTestDashboard from '@/components/CacheTestDashboard';
 import PerformanceDashboard from '@/components/performance/PerformanceDashboard';
 import { useEffect } from 'react';
 import { suppressExtensionErrors } from '@/utils/extensionErrorHandler';
@@ -39,12 +38,8 @@ export default function RootLayout({
             <FollowProvider>
               <ToastProvider>
                 {children}
-                {/* Performance Dashboard - always available */}
+                {/* Performance Dashboard - unified monitoring interface */}
                 <PerformanceDashboard />
-                {/* Only show cache test dashboard in development */}
-                {process.env.NODE_ENV === 'development' && (
-                  <CacheTestDashboard />
-                )}
               </ToastProvider>
             </FollowProvider>
           </AuthProvider>

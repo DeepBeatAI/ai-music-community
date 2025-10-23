@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { metadataCache } from '@/utils/metadataCache';
+import { imageCache } from '@/utils/imageCache';
+import { audioCacheManager, audioUrlCache } from '@/utils/audioCache';
 
 type TabType = 'overview' | 'performance' | 'cache' | 'bandwidth';
 
@@ -78,10 +81,18 @@ export default function PerformanceDashboard() {
 
   const handleReset = () => {
     if (confirm('Are you sure you want to reset all performance data?')) {
+      // Clear localStorage/sessionStorage
       localStorage.removeItem('cacheStats');
       localStorage.removeItem('performanceMetrics');
       localStorage.removeItem('bandwidthStats');
       sessionStorage.removeItem('sessionStart');
+      
+      // Clear actual cache utilities
+      metadataCache.clear();
+      imageCache.clearCache();
+      audioCacheManager.clearCache();
+      
+      // Trigger refresh
       setRefreshTrigger(prev => prev + 1);
       alert('Performance data reset successfully');
     }
@@ -99,7 +110,20 @@ export default function PerformanceDashboard() {
 
   function getCacheStats() {
     try {
-      return JSON.parse(localStorage.getItem('cacheStats') || '{"hits":0,"misses":0}');
+      // Get stats from actual cache utilities
+      const audioStats = audioCacheManager.getPerformanceStats();
+      const imageStats = imageCache.getStats();
+      
+      // Calculate combined hits and misses
+      const audioHits = Math.round(audioStats.totalRequests * audioStats.hitRate);
+      const audioMisses = audioStats.totalRequests - audioHits;
+      const imageHits = Math.round(imageStats.totalImages * imageStats.hitRate);
+      const imageMisses = imageStats.totalImages - imageHits;
+      
+      return {
+        hits: audioHits + imageHits,
+        misses: audioMisses + imageMisses
+      };
     } catch {
       return { hits: 0, misses: 0 };
     }
@@ -115,14 +139,47 @@ export default function PerformanceDashboard() {
 
   function getBandwidthStats() {
     try {
-      return JSON.parse(localStorage.getItem('bandwidthStats') || '{"total":0,"cached":0,"saved":0,"resources":[]}');
-    } catch {
+      // Get stats from actual audio cache
+      const audioStats = audioCacheManager.getPerformanceStats();
+      const urlCacheStats = audioUrlCache.getCacheStats();
+      
+      // Calculate bandwidth metrics
+      const estimatedAudioSize = 3 * 1024 * 1024; // 3MB average per audio file
+      const totalTransfer = audioStats.totalRequests * estimatedAudioSize;
+      const cachedTransfer = Math.round(audioStats.totalRequests * audioStats.hitRate * estimatedAudioSize);
+      const savedBandwidth = audioStats.estimatedBandwidthSaved;
+      
+      // Build resources array from URL cache
+      const resources = (urlCacheStats?.entries || []).map((entry: { key: string; expires: Date; accessCount: number }) => ({
+        url: entry.key.length > 30 ? entry.key.substring(0, 30) + '...' : entry.key,
+        size: estimatedAudioSize,
+        cached: entry.accessCount > 1
+      }));
+      
+      return {
+        total: totalTransfer,
+        cached: cachedTransfer,
+        saved: savedBandwidth,
+        resources: resources.slice(0, 10) // Top 10
+      };
+    } catch (error) {
+      console.error('Error getting bandwidth stats:', error);
       return { total: 0, cached: 0, saved: 0, resources: [] };
     }
   }
 
   function getCacheData(key: string) {
     try {
+      // Map localStorage keys to actual cache utilities
+      if (key === 'metadataCache') {
+        return metadataCache.getStats();
+      } else if (key === 'imagesCache') {
+        return imageCache.getStats();
+      } else if (key === 'audioCache') {
+        return audioCacheManager.getPerformanceStats();
+      }
+      
+      // Fallback to localStorage for other keys
       const data = localStorage.getItem(key);
       if (!data) return null;
       return JSON.parse(data);
@@ -133,12 +190,47 @@ export default function PerformanceDashboard() {
 
   function calculateCacheSize(cacheData: unknown): number {
     if (!cacheData) return 0;
+    
+    // Handle actual cache stats objects
+    if (typeof cacheData === 'object' && cacheData !== null) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = cacheData as any;
+      
+      // For image cache stats
+      if ('totalSize' in data) {
+        return data.totalSize;
+      }
+      
+      // For metadata cache stats
+      if ('memoryUsage' in data) {
+        return data.memoryUsage;
+      }
+      
+      // For audio cache stats - estimate based on requests
+      if ('totalRequests' in data) {
+        // Rough estimate: assume average audio file is 3MB
+        return data.totalRequests * 3 * 1024 * 1024;
+      }
+    }
+    
+    // Fallback: calculate from JSON string
     const str = JSON.stringify(cacheData);
     return new Blob([str]).size;
   }
 
   function clearCache(key: string) {
-    localStorage.removeItem(key);
+    // Clear actual cache utilities
+    if (key === 'metadataCache') {
+      metadataCache.clear();
+    } else if (key === 'imagesCache') {
+      imageCache.clearCache();
+    } else if (key === 'audioCache') {
+      audioCacheManager.clearCache();
+    } else {
+      // Fallback to localStorage
+      localStorage.removeItem(key);
+    }
+    
     setRefreshTrigger(prev => prev + 1);
   }
 
@@ -288,25 +380,31 @@ export default function PerformanceDashboard() {
 
     useEffect(() => {
       const updateStats = () => {
-        const metadataCache = getCacheData('metadataCache');
-        const imagesCache = getCacheData('imagesCache');
-        const audioCache = getCacheData('audioCache');
+        const metadataStats = getCacheData('metadataCache');
+        const imagesStats = getCacheData('imagesCache');
+        const audioStats = getCacheData('audioCache');
 
         setCacheStats({
           metadata: {
-            size: calculateCacheSize(metadataCache),
-            items: metadataCache ? Object.keys(metadataCache).length : 0,
-            hits: metadataCache?.hits || 0
+            size: calculateCacheSize(metadataStats),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            items: (metadataStats as any)?.totalEntries || 0,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            hits: (metadataStats as any)?.validEntries || 0
           },
           images: {
-            size: calculateCacheSize(imagesCache),
-            items: imagesCache ? Object.keys(imagesCache).length : 0,
-            hits: imagesCache?.hits || 0
+            size: calculateCacheSize(imagesStats),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            items: (imagesStats as any)?.totalImages || 0,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            hits: Math.round(((imagesStats as any)?.totalImages || 0) * ((imagesStats as any)?.hitRate || 0))
           },
           audio: {
-            size: calculateCacheSize(audioCache),
-            items: audioCache ? Object.keys(audioCache).length : 0,
-            hits: audioCache?.hits || 0
+            size: calculateCacheSize(audioStats),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            items: (audioStats as any)?.totalRequests || 0,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            hits: Math.round(((audioStats as any)?.totalRequests || 0) * ((audioStats as any)?.hitRate || 0))
           }
         });
       };

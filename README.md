@@ -13,6 +13,33 @@ A platform for creators to share and discover AI-generated music.
 
 ## Key Features
 
+### Playlist System
+Create and manage collections of your favorite tracks:
+- **Create Playlists**: Organize tracks into custom collections with names and descriptions
+- **Privacy Controls**: Choose between public playlists (visible to all) or private playlists (personal only)
+- **Track Management**: Add and remove tracks from playlists with position tracking
+- **Playlist Discovery**: Browse your own playlists and discover public playlists from other users
+- **Secure Access**: Row Level Security (RLS) ensures users can only modify their own playlists
+- **Optimized Performance**: Indexed queries and efficient data fetching for fast load times
+
+**Usage**:
+1. Navigate to the "Playlists" section from the main navigation
+2. Click "Create Playlist" to start a new collection
+3. Add tracks to playlists using the "Add to Playlist" button on any track
+4. View and manage your playlists from the playlists page
+5. Click on a playlist to see all tracks and manage the collection
+
+### Performance Dashboard
+Real-time monitoring for developers and power users:
+- **Overview Tab**: Session duration, cache hit rate, API calls saved, and optimization status
+- **Performance Tab**: Component render tracking and effect execution monitoring
+- **Cache Tab**: Detailed statistics for metadata, images, and audio caching
+- **Bandwidth Tab**: Total transfer, cached transfer, and bandwidth savings metrics
+- **Auto-Refresh**: Optional 5-second auto-refresh for live metric updates
+- **Data Management**: Clear cache and bandwidth data, generate performance reports
+
+**Access**: Click the performance dashboard button in the bottom-right corner of any page to expand the monitoring interface.
+
 ### Analytics System
 Comprehensive metrics tracking with historical accuracy:
 - Daily snapshots of platform activity

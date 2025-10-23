@@ -325,6 +325,14 @@ export class AudioCacheManager {
 
   clearCache(): void {
     this.urlCache.clearCache();
+    // Also reset performance metrics
+    this.performanceMetrics = {
+      cacheHits: 0,
+      cacheMisses: 0,
+      totalBandwidthSaved: 0,
+      averageLoadTime: 0,
+      loadTimes: []
+    };
   }
 
   getCacheStats() {

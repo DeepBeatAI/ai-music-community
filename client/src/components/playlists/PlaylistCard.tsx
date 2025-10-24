@@ -4,12 +4,17 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { deletePlaylist } from '@/lib/playlists';
-import type { Playlist } from '@/types/playlist';
+import type { Playlist, PlaylistWithOwner } from '@/types/playlist';
 
 interface PlaylistCardProps {
-  playlist: Playlist;
+  playlist: Playlist | PlaylistWithOwner;
   onDelete?: () => void;
   isOwner: boolean;
+}
+
+// Type guard to check if playlist has owner information
+function isPlaylistWithOwner(playlist: Playlist | PlaylistWithOwner): playlist is PlaylistWithOwner {
+  return 'owner' in playlist && playlist.owner !== null;
 }
 
 export function PlaylistCard({ playlist, onDelete, isOwner }: PlaylistCardProps) {
@@ -109,15 +114,40 @@ export function PlaylistCard({ playlist, onDelete, isOwner }: PlaylistCardProps)
             </h3>
           </Link>
           
+          {/* Creator name for public playlists */}
+          {!isOwner && isPlaylistWithOwner(playlist) && (
+            <p className="text-sm text-gray-500 mt-1">
+              by {playlist.owner.username}
+            </p>
+          )}
+          
           {playlist.description && (
             <p className="text-sm text-gray-600 mt-1 line-clamp-2">
               {playlist.description}
             </p>
           )}
 
-          <p className="text-xs text-gray-500 mt-2">
-            Created {createdDate}
-          </p>
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-xs text-gray-500">
+              Created {createdDate}
+            </p>
+            
+            {/* Public badge for public playlists */}
+            {playlist.is_public && !isOwner && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                <svg
+                  className="w-3 h-3"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                  <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                </svg>
+                Public
+              </span>
+            )}
+          </div>
 
           {/* Action Buttons (Owner Only) */}
           {isOwner && (

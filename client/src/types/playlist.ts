@@ -24,7 +24,6 @@ export interface PlaylistWithOwner extends Playlist {
   owner: {
     id: string;
     username: string;
-    avatar_url?: string;
   };
 }
 

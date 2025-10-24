@@ -546,12 +546,12 @@ export default function PerformanceDashboard() {
     );
   }
 
-  // Collapsed state - fixed button in bottom-right
+  // Collapsed state - fixed button in bottom-right (above mini player)
   if (!isExpanded) {
     return (
       <button
         onClick={() => setIsExpanded(true)}
-        className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg shadow-lg transition-colors z-50 flex items-center gap-2"
+        className="fixed bottom-24 right-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg shadow-lg transition-colors z-50 flex items-center gap-2"
         aria-label="Open Performance Dashboard"
       >
         <svg
@@ -572,9 +572,9 @@ export default function PerformanceDashboard() {
     );
   }
 
-  // Expanded state - panel with tabs
+  // Expanded state - panel with tabs (above mini player)
   return (
-    <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-2xl z-50 w-[600px] max-h-[600px] flex flex-col">
+    <div className="fixed bottom-24 right-4 bg-white rounded-lg shadow-2xl z-50 w-[600px] max-h-[600px] flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-3">

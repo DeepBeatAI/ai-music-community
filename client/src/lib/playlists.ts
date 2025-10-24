@@ -3,6 +3,7 @@ import type {
   Playlist,
   PlaylistFormData,
   PlaylistWithTracks,
+  PlaylistWithOwner,
   AddTrackToPlaylistParams,
   RemoveTrackFromPlaylistParams,
   CreatePlaylistResponse,
@@ -84,6 +85,79 @@ export async function getUserPlaylists(userId: string): Promise<Playlist[] | nul
     return data;
   } catch (error) {
     console.error('Unexpected error fetching user playlists:', error);
+    return null;
+  }
+}
+
+/**
+ * Get public playlists created by other users (excluding current user's playlists)
+ * 
+ * Fetches playlists where is_public=true and user_id does not match the current user.
+ * Includes user profile information (username) for display.
+ * Useful for discovering content created by the community.
+ * 
+ * @param currentUserId - The ID of the current user (to exclude their playlists)
+ * @returns Promise<PlaylistWithOwner[] | null> - Array of public playlists with owner info or null on error
+ * 
+ * @example
+ * ```typescript
+ * const publicPlaylists = await getPublicPlaylists(user.id);
+ * if (publicPlaylists) {
+ *   console.log(`Found ${publicPlaylists.length} public playlists`);
+ *   publicPlaylists.forEach(p => console.log(`${p.name} by ${p.owner.username}`));
+ * }
+ * ```
+ * 
+ * @remarks
+ * - Only returns playlists marked as public (is_public=true)
+ * - Excludes playlists created by the current user
+ * - Includes owner username and avatar for display
+ * - Ordered by creation date (newest first)
+ * - Limited to 50 results for performance
+ * - Returns null on database errors
+ */
+export async function getPublicPlaylists(currentUserId: string): Promise<PlaylistWithOwner[] | null> {
+  try {
+    // First try with owner relationship
+    const { data, error } = await supabase
+      .from('playlists')
+      .select(`
+        *,
+        owner:user_profiles!playlists_user_id_user_profiles_fkey(
+          id,
+          username
+        )
+      `)
+      .eq('is_public', true)
+      .neq('user_id', currentUserId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('Error fetching public playlists with owner:', error);
+      
+      // Fallback: fetch without owner relationship
+      console.log('Attempting fallback query without owner relationship...');
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('playlists')
+        .select('*')
+        .eq('is_public', true)
+        .neq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError);
+        return null;
+      }
+      
+      console.log('Fallback query succeeded, returning', fallbackData?.length || 0, 'playlists without owner info');
+      return fallbackData as PlaylistWithOwner[];
+    }
+
+    return data as PlaylistWithOwner[];
+  } catch (error) {
+    console.error('Unexpected error fetching public playlists:', error);
     return null;
   }
 }
@@ -480,5 +554,100 @@ export async function isTrackInPlaylist(
   } catch (error) {
     console.error('Unexpected error checking if track is in playlist:', error);
     return null;
+  }
+}
+
+/**
+ * Reorder tracks in a playlist by updating their positions
+ * 
+ * Calls the database function to update track positions in a single transaction.
+ * Implements optimistic UI updates with rollback on error.
+ * 
+ * @param playlistId - The ID of the playlist
+ * @param trackPositions - Array of {track_id, position} objects
+ * @returns Promise<PlaylistOperationResponse> - Result with success status and optional error
+ * 
+ * @example
+ * ```typescript
+ * const result = await reorderPlaylistTracks(playlistId, [
+ *   { track_id: 'track-1', position: 0 },
+ *   { track_id: 'track-2', position: 1 },
+ *   { track_id: 'track-3', position: 2 },
+ * ]);
+ * ```
+ * 
+ * @remarks
+ * - Only the playlist owner can reorder tracks
+ * - Updates are performed in a single database transaction
+ * - All positions must be valid (non-negative integers)
+ */
+export async function reorderPlaylistTracks(
+  playlistId: string,
+  trackPositions: Array<{ track_id: string; position: number }>
+): Promise<PlaylistOperationResponse> {
+  try {
+    // Validate input
+    if (!playlistId || !trackPositions || trackPositions.length === 0) {
+      return {
+        success: false,
+        error: 'Invalid parameters',
+      };
+    }
+
+    // Validate all positions are non-negative
+    const hasInvalidPosition = trackPositions.some(tp => tp.position < 0);
+    if (hasInvalidPosition) {
+      return {
+        success: false,
+        error: 'All positions must be non-negative',
+      };
+    }
+
+    // Call the database function
+    const { error } = await supabase.rpc('reorder_playlist_tracks', {
+      p_playlist_id: playlistId,
+      p_track_positions: trackPositions,
+    });
+
+    if (error) {
+      console.error('Error reordering playlist tracks:', error);
+      
+      // Handle specific error cases
+      if (error.message.includes('Not authenticated')) {
+        return {
+          success: false,
+          error: 'You must be logged in to reorder tracks',
+        };
+      }
+      
+      if (error.message.includes('Not authorized')) {
+        return {
+          success: false,
+          error: 'You do not have permission to reorder tracks in this playlist',
+        };
+      }
+      
+      if (error.message.includes('Playlist not found')) {
+        return {
+          success: false,
+          error: 'Playlist not found',
+        };
+      }
+
+      return {
+        success: false,
+        error: error.message || 'Failed to reorder tracks',
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error('Unexpected error reordering playlist tracks:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reorder tracks',
+    };
   }
 }

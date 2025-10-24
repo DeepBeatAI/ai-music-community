@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import MainLayout from '@/components/layout/MainLayout';
-import { removeTrackFromPlaylist } from '@/lib/playlists';
+import { removeTrackFromPlaylist, reorderPlaylistTracks, getPlaylistWithTracks } from '@/lib/playlists';
+import { usePlayback } from '@/contexts/PlaybackContext';
+import { TrackReorderList } from './TrackReorderList';
 import type { PlaylistWithTracks } from '@/types/playlist';
 
 interface PlaylistDetailClientProps {
@@ -17,6 +19,9 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: Pla
   const [playlist, setPlaylist] = useState(initialPlaylist);
   const [removingTrack, setRemovingTrack] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  
+  // Playback context
+  const { playPlaylist } = usePlayback();
 
   const handleRemoveTrack = async (trackId: string) => {
     setRemovingTrack(trackId);
@@ -51,12 +56,71 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: Pla
     }
   };
 
-  const formatDuration = (seconds?: number): string => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  // Handle track reordering
+  const handleReorder = async (fromIndex: number, toIndex: number) => {
+    // Store original playlist for rollback
+    const originalPlaylist = { ...playlist };
+
+    try {
+      // Create a copy of tracks array
+      const reorderedTracks = [...playlist.tracks];
+      
+      // Remove the dragged item
+      const [draggedTrack] = reorderedTracks.splice(fromIndex, 1);
+      
+      // Insert it at the new position
+      reorderedTracks.splice(toIndex, 0, draggedTrack);
+
+      // Update positions
+      const trackPositions = reorderedTracks.map((track, index) => ({
+        track_id: track.track_id,
+        position: index,
+      }));
+
+      // Optimistic update
+      setPlaylist({
+        ...playlist,
+        tracks: reorderedTracks.map((track, index) => ({
+          ...track,
+          position: index,
+        })),
+      });
+
+      // Call database function
+      const result = await reorderPlaylistTracks(playlist.id, trackPositions);
+
+      if (!result.success) {
+        // Rollback on error
+        setPlaylist(originalPlaylist);
+        alert(result.error || 'Failed to reorder tracks');
+        return;
+      }
+
+      // Refresh playlist data from server to ensure consistency
+      const refreshedPlaylist = await getPlaylistWithTracks(playlist.id);
+      if (refreshedPlaylist) {
+        setPlaylist(refreshedPlaylist);
+      }
+    } catch (error) {
+      // Rollback on error
+      setPlaylist(originalPlaylist);
+      console.error('Error reordering tracks:', error);
+      alert('Failed to reorder tracks');
+    }
   };
+
+  // Listen for play track events from TrackReorderList
+  useEffect(() => {
+    const handlePlayTrackEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ index: number }>;
+      handlePlayTrack(customEvent.detail.index);
+    };
+
+    window.addEventListener('playTrack', handlePlayTrackEvent);
+    return () => {
+      window.removeEventListener('playTrack', handlePlayTrackEvent);
+    };
+  }, [playlist]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
@@ -66,6 +130,18 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: Pla
       day: 'numeric',
     });
   };
+
+  // Handle Play All button
+  const handlePlayAll = () => {
+    playPlaylist(playlist, 0);
+  };
+
+  // Handle play specific track
+  const handlePlayTrack = (index: number) => {
+    playPlaylist(playlist, index);
+  };
+
+
 
   return (
     <MainLayout>
@@ -191,130 +267,40 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: Pla
       {/* Track List */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Tracks
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Tracks
+            </h2>
+            
+            {/* Play All Button */}
+            {playlist.tracks.length > 0 && (
+              <button
+                onClick={handlePlayAll}
+                disabled={playlist.tracks.length === 0}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                </svg>
+                <span>Play All</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {playlist.tracks.length === 0 ? (
-          <div className="p-12 text-center">
-            <svg
-              className="w-16 h-16 mx-auto text-gray-400 mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-              />
-            </svg>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              No tracks yet
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400">
-              {isOwner
-                ? 'Add tracks to your playlist to get started'
-                : 'This playlist is empty'}
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {playlist.tracks.map((playlistTrack, index) => {
-              const track = playlistTrack.track;
-              const isRemoving = removingTrack === track.id;
-              const showConfirm = showDeleteConfirm === track.id;
-
-              return (
-                <div
-                  key={playlistTrack.id}
-                  className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    {/* Position Number */}
-                    <div className="w-8 text-center text-gray-500 dark:text-gray-400 font-medium">
-                      {index + 1}
-                    </div>
-
-                    {/* Track Cover */}
-                    <div className="flex-shrink-0">
-                      <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
-                        <svg
-                          className="w-6 h-6 text-white"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Track Info */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 dark:text-white truncate">
-                        {track.title}
-                      </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                        {track.description || 'No description'}
-                      </p>
-                    </div>
-
-                    {/* Duration */}
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatDuration(track.duration ?? undefined)}
-                    </div>
-
-                    {/* Remove Button (Owner Only) */}
-                    {isOwner && (
-                      <div className="flex-shrink-0">
-                        {showConfirm ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleRemoveTrack(track.id)}
-                              disabled={isRemoving}
-                              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors disabled:opacity-50"
-                            >
-                              {isRemoving ? 'Removing...' : 'Confirm'}
-                            </button>
-                            <button
-                              onClick={() => setShowDeleteConfirm(null)}
-                              disabled={isRemoving}
-                              className="px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm rounded hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors disabled:opacity-50"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setShowDeleteConfirm(track.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                            aria-label="Remove track"
-                          >
-                            <svg
-                              className="w-5 h-5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <TrackReorderList
+          playlist={playlist}
+          isOwner={isOwner}
+          onReorder={handleReorder}
+          onRemoveTrack={handleRemoveTrack}
+          removingTrack={removingTrack}
+          showDeleteConfirm={showDeleteConfirm}
+          setShowDeleteConfirm={setShowDeleteConfirm}
+        />
       </div>
       </div>
     </MainLayout>

@@ -4,11 +4,10 @@
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { waitFor } from '@testing-library/react';
 import { renderHook, act } from '@testing-library/react';
 import { PlaybackProvider, usePlayback } from '@/contexts/PlaybackContext';
-import type { Playlist, PlaylistTrack } from '@/types/playlist';
-import React from 'react';
+import type { PlaylistWithTracks } from '@/types/playlist';
 
 // Mock dependencies
 jest.mock('@/lib/supabase');
@@ -21,7 +20,9 @@ jest.mock('@/lib/audio/AudioManager', () => {
   return {
     __esModule: true,
     default: jest.fn().mockImplementation(() => ({
+      // @ts-expect-error - Mock returns undefined for Promise<void>
       loadTrack: jest.fn().mockResolvedValue(undefined),
+      // @ts-expect-error - Mock returns undefined for Promise<void>
       play: jest.fn().mockResolvedValue(undefined),
       pause: jest.fn(),
       resume: jest.fn(),
@@ -35,65 +36,91 @@ jest.mock('@/lib/audio/AudioManager', () => {
   };
 });
 
-const mockPlaylist: Playlist = {
+const mockPlaylist: PlaylistWithTracks = {
   id: 'playlist-1',
   name: 'Test Playlist',
   description: 'Test Description',
   user_id: 'user-1',
   is_public: true,
+  cover_image_url: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  track_count: 3,
   tracks: [
     {
       id: 'pt-1',
-      playlist_id: 'playlist-1',
       track_id: 'track-1',
       position: 0,
       added_at: new Date().toISOString(),
       track: {
         id: 'track-1',
         title: 'Track 1',
-        artist_name: 'Artist 1',
-        audio_url: 'https://example.com/track1.mp3',
+        file_url: 'https://example.com/track1.mp3',
         duration: 180,
         user_id: 'user-1',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }
+        description: null,
+        genre: null,
+        tags: null,
+        is_public: true,
+mime_type: null,
+play_count: null,
+        file_size: null,
+compression_applied: null,
+compression_ratio: null,
+original_file_size: null,
+        }
     },
     {
       id: 'pt-2',
-      playlist_id: 'playlist-1',
       track_id: 'track-2',
       position: 1,
       added_at: new Date().toISOString(),
       track: {
         id: 'track-2',
         title: 'Track 2',
-        artist_name: 'Artist 2',
-        audio_url: 'https://example.com/track2.mp3',
+        file_url: 'https://example.com/track2.mp3',
         duration: 200,
         user_id: 'user-1',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }
+        description: null,
+        genre: null,
+        tags: null,
+        is_public: true,
+mime_type: null,
+play_count: null,
+        file_size: null,
+compression_applied: null,
+compression_ratio: null,
+original_file_size: null,
+        }
     },
     {
       id: 'pt-3',
-      playlist_id: 'playlist-1',
       track_id: 'track-3',
       position: 2,
       added_at: new Date().toISOString(),
       track: {
         id: 'track-3',
         title: 'Track 3',
-        artist_name: 'Artist 3',
-        audio_url: 'https://example.com/track3.mp3',
+        file_url: 'https://example.com/track3.mp3',
         duration: 220,
         user_id: 'user-1',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }
+        description: null,
+        genre: null,
+        tags: null,
+        is_public: true,
+mime_type: null,
+play_count: null,
+        file_size: null,
+compression_applied: null,
+compression_ratio: null,
+original_file_size: null,
+        }
     }
   ]
 };
@@ -140,7 +167,7 @@ describe('PlaybackContext Integration', () => {
     });
 
     await act(async () => {
-      await result.current.playTrack(mockPlaylist, 1);
+      await result.current.playPlaylist(mockPlaylist, 1);
     });
 
     await waitFor(() => {
@@ -294,3 +321,10 @@ describe('PlaybackContext Integration', () => {
     expect(result.current.isPlaying).toBe(false);
   });
 });
+
+
+
+
+
+
+

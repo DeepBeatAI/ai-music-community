@@ -3,11 +3,9 @@
  * Tests core playback logic, queue management, and state persistence
  */
 
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import { PlaybackProvider, usePlayback } from '@/contexts/PlaybackContext';
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { buildQueue, getNextTrack, getPreviousTrack } from '@/lib/audio/queueUtils';
-import type { Playlist, Track } from '@/types/playlist';
+import type { Track } from '@/types/track';
 
 // Mock Supabase
 jest.mock('@/lib/supabase', () => ({
@@ -27,17 +25,89 @@ jest.mock('@/utils/audioCache', () => ({
   getCachedAudioUrl: jest.fn((url: string) => Promise.resolve(url))
 }));
 
-describe('Queue Management', () => {
-  const mockTracks: Track[] = [
-    { id: '1', title: 'Track 1', artist_name: 'Artist 1', audio_url: 'url1', duration: 180 } as Track,
-    { id: '2', title: 'Track 2', artist_name: 'Artist 2', audio_url: 'url2', duration: 200 } as Track,
-    { id: '3', title: 'Track 3', artist_name: 'Artist 3', audio_url: 'url3', duration: 220 } as Track,
-    { id: '4', title: 'Track 4', artist_name: 'Artist 4', audio_url: 'url4', duration: 240 } as Track,
+const mockTracks: Track[] = [
+    { 
+      id: '1', 
+      title: 'Track 1', 
+      file_url: 'url1',
+      duration: 180,
+      user_id: 'user-1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      description: null,
+      genre: null,
+      tags: null,
+      is_public: true,
+      mime_type: null,
+      play_count: null,
+      file_size: null,
+      compression_applied: null,
+      compression_ratio: null,
+      original_file_size: null,
+    },
+    { 
+      id: '2', 
+      title: 'Track 2', 
+      file_url: 'url2',
+      duration: 200,
+      user_id: 'user-1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      description: null,
+      genre: null,
+      tags: null,
+      is_public: true,
+      mime_type: null,
+      play_count: null,
+      file_size: null,
+      compression_applied: null,
+      compression_ratio: null,
+      original_file_size: null,
+    },
+    { 
+      id: '3', 
+      title: 'Track 3', 
+      file_url: 'url3',
+      duration: 220,
+      user_id: 'user-1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      description: null,
+      genre: null,
+      tags: null,
+      is_public: true,
+      mime_type: null,
+      play_count: null,
+      file_size: null,
+      compression_applied: null,
+      compression_ratio: null,
+      original_file_size: null,
+    },
+    { 
+      id: '4', 
+      title: 'Track 4', 
+      file_url: 'url4',
+      duration: 240,
+      user_id: 'user-1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      description: null,
+      genre: null,
+      tags: null,
+      is_public: true,
+      mime_type: null,
+      play_count: null,
+      file_size: null,
+      compression_applied: null,
+      compression_ratio: null,
+      original_file_size: null,
+    },
   ];
 
+describe('Queue Management', () => {
   describe('buildQueue', () => {
     it('should build queue in original order without shuffle', () => {
-      const queue = buildQueue(mockTracks, 0, false);
+      const queue = buildQueue(mockTracks, false);
       
       expect(queue).toHaveLength(4);
       expect(queue[0].id).toBe('1');
@@ -46,66 +116,58 @@ describe('Queue Management', () => {
       expect(queue[3].id).toBe('4');
     });
 
-    it('should build queue starting from specified index', () => {
-      const queue = buildQueue(mockTracks, 2, false);
+    it('should return copy of tracks array', () => {
+      const queue = buildQueue(mockTracks, false);
       
       expect(queue).toHaveLength(4);
-      expect(queue[0].id).toBe('3'); // Start from index 2
-      expect(queue[1].id).toBe('4');
-      expect(queue[2].id).toBe('1');
-      expect(queue[3].id).toBe('2');
+      expect(queue).not.toBe(mockTracks); // Should be a new array
+      expect(queue[0]).toBe(mockTracks[0]); // But same track objects
     });
 
     it('should shuffle queue when shuffle is true', () => {
-      const queue = buildQueue(mockTracks, 0, true);
+      const queue = buildQueue(mockTracks, true);
       
       expect(queue).toHaveLength(4);
       // Queue should contain all tracks
       expect(queue.map(t => t.id).sort()).toEqual(['1', '2', '3', '4']);
-      // First track should remain the same (current track)
-      expect(queue[0].id).toBe('1');
     });
   });
 
   describe('getNextTrack', () => {
     it('should return next track in queue', () => {
-      const next = getNextTrack(mockTracks, 0, 'off', false);
-      expect(next?.track.id).toBe('2');
-      expect(next?.index).toBe(1);
+      const next = getNextTrack(mockTracks, 0, 'off');
+      expect(next?.id).toBe('2');
     });
 
     it('should return null at end with repeat off', () => {
-      const next = getNextTrack(mockTracks, 3, 'off', false);
+      const next = getNextTrack(mockTracks, 3, 'off');
       expect(next).toBeNull();
     });
 
     it('should loop to first track with repeat playlist', () => {
-      const next = getNextTrack(mockTracks, 3, 'playlist', false);
-      expect(next?.track.id).toBe('1');
-      expect(next?.index).toBe(0);
+      const next = getNextTrack(mockTracks, 3, 'playlist');
+      expect(next?.id).toBe('1');
     });
 
     it('should return same track with repeat track', () => {
-      const next = getNextTrack(mockTracks, 2, 'track', false);
-      expect(next?.track.id).toBe('3');
-      expect(next?.index).toBe(2);
+      const next = getNextTrack(mockTracks, 2, 'track');
+      expect(next?.id).toBe('3');
     });
   });
 
   describe('getPreviousTrack', () => {
     it('should return previous track in queue', () => {
-      const prev = getPreviousTrack(mockTracks, 2, false);
-      expect(prev?.track.id).toBe('2');
-      expect(prev?.index).toBe(1);
+      const prev = getPreviousTrack(mockTracks, 2);
+      expect(prev?.id).toBe('2');
     });
 
     it('should return null at start', () => {
-      const prev = getPreviousTrack(mockTracks, 0, false);
+      const prev = getPreviousTrack(mockTracks, 0);
       expect(prev).toBeNull();
     });
 
-    it('should loop to last track with repeat playlist', () => {
-      const prev = getPreviousTrack(mockTracks, 0, false);
+    it('should not loop to last track', () => {
+      const prev = getPreviousTrack(mockTracks, 0);
       expect(prev).toBeNull(); // No looping on previous
     });
   });
@@ -199,20 +261,18 @@ describe('Shuffle and Repeat Modes', () => {
     expect(currentMode).toBe('off');
   });
 
-  it('should preserve current track when toggling shuffle', () => {
-    const tracks: Track[] = [
-      { id: '1', title: 'Track 1' } as Track,
-      { id: '2', title: 'Track 2' } as Track,
-      { id: '3', title: 'Track 3' } as Track,
-    ];
-
-    const currentTrackId = '2';
-    const currentIndex = 1;
-
+  it('should shuffle tracks when shuffle is enabled', () => {
     // Build queue with shuffle
-    const shuffledQueue = buildQueue(tracks, currentIndex, true);
+    const shuffledQueue = buildQueue(mockTracks.slice(0, 3), true);
     
-    // Current track should still be first in queue
-    expect(shuffledQueue[0].id).toBe(currentTrackId);
+    // Should contain all tracks
+    expect(shuffledQueue).toHaveLength(3);
+    expect(shuffledQueue.map(t => t.id).sort()).toEqual(['1', '2', '3']);
   });
 });
+
+
+
+
+
+

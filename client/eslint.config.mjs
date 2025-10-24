@@ -13,7 +13,17 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     // Ignore generated and problematic files
-    ignores: ["src/types/database.ts", "src/types/supabase.ts"],
+    ignores: [
+      "src/types/database.ts",
+      "src/types/supabase.ts",
+      ".next/**",
+      "out/**",
+      "build/**",
+      "dist/**",
+      "node_modules/**",
+      "coverage/**",
+      "**/*.log",
+    ],
   },
   {
     // Relax rules for test files

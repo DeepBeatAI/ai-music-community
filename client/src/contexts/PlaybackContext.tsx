@@ -454,7 +454,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       setCurrentTrackIndex(nextIndex);
       setCurrentTrack(nextTrack);
       
-      const audioUrl = nextTrack.file_url || (nextTrack as any)?.audio_url || (nextTrack as unknown)?.audioUrl;
+      const audioUrl = nextTrack.file_url || (nextTrack as any)?.audio_url || (nextTrack as any)?.audioUrl;
       if (audioUrl) {
         getCachedAudioUrl(audioUrl)
           .then((cachedUrl) => audioManagerRef.current?.loadTrack(cachedUrl))
@@ -525,7 +525,6 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     setCurrentTrackIndex(prevIndex);
     setCurrentTrack(prevTrack);
     
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const audioUrl = prevTrack.file_url || (prevTrack as any)?.audio_url || (prevTrack as any)?.audioUrl;
     if (audioUrl) {
       getCachedAudioUrl(audioUrl)

@@ -39,10 +39,20 @@ const eslintConfig = [
     // Downgrade blocking rules to warnings for production code
     rules: {
       "@typescript-eslint/no-unused-vars": "warn",
+      // Allow 'any' for legitimate use cases (backward compatibility, dynamic data)
+      // Use eslint-disable comments for specific lines if autofix is too aggressive
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "warn",
       "@typescript-eslint/no-unsafe-function-type": "warn",
       "react/no-unescaped-entities": "warn",
+    },
+  },
+  {
+    // Allow 'any' in specific contexts where it's necessary
+    files: ["**/contexts/**/*.tsx", "**/contexts/**/*.ts"],
+    rules: {
+      // Context files often need 'any' for flexibility with dynamic data
+      "@typescript-eslint/no-explicit-any": "off",
     },
   },
 ];

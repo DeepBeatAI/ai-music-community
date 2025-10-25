@@ -7,6 +7,24 @@
 
 ## Recent Fixes
 
+### Fix: Volume Changes Stopping Playback (January 25, 2025)
+
+**Issue:** Changing volume in mini player stopped audio playback and made all controls unresponsive.
+
+**Root Cause:** AudioManager initialization effect had `volume` in dependencies, causing AudioManager to be destroyed and recreated on every volume change.
+
+**Solution Implemented:**
+- Removed `volume` from AudioManager initialization effect dependencies
+- Changed `[volume]` to `[]` so effect only runs on mount/unmount
+- Volume changes now handled exclusively through `setVolume()` callback
+- AudioManager instance persists for component lifetime
+
+**Status:** ✅ Fixed and built successfully (no TypeScript errors)  
+**Documentation:** [Fix Details](./fix-volume-stopping-playback.md)  
+**Pending:** User manual testing verification
+
+---
+
 ### Fix: Rapid Track Navigation Race Condition (January 25, 2025)
 
 **Issue:** When rapidly clicking next/previous buttons, AbortError would occur and playback would fail.
@@ -164,6 +182,27 @@
 
 ---
 
+## All Fixes Completed
+
+### Summary of All Fixes
+
+A total of **10 fixes** have been implemented:
+
+1. ✅ Rapid track navigation race condition
+2. ✅ UI improvements (padding, username display)
+3. ✅ Volume control implementation
+4. ✅ Playlist link button
+5. ✅ State restoration errors
+6. ✅ Repeat track mode not working
+7. ✅ Mini player closing after final track
+8. ✅ Position accuracy after refresh
+9. ✅ Volume not persisting
+10. ✅ **Volume changes stopping playback** (CRITICAL - just fixed)
+
+**Comprehensive Documentation:** [All Fixes Summary](./all-fixes-summary.md)
+
+---
+
 ## Next Steps
 
 ### Immediate Actions Required
@@ -172,6 +211,7 @@
    - Follow `manual-testing-guide.md`
    - Document results in the guide
    - Report any issues found
+   - **Priority:** Test volume control thoroughly (just fixed critical bug)
 
 2. **Fix Automated Tests** (Optional, can be done later)
    - Update test API signatures to match implementation

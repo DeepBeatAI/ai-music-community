@@ -130,7 +130,15 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [progress, setProgress] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
-  const [volume, setVolumeState] = useState<number>(100);
+  const [volume, setVolumeState] = useState<number>(() => {
+    // Restore volume from localStorage
+    try {
+      const savedVolume = localStorage.getItem('playback_volume');
+      return savedVolume ? parseInt(savedVolume) : 100;
+    } catch {
+      return 100;
+    }
+  });
   
   // AudioManager instance ref
   const audioManagerRef = useRef<AudioManager | null>(null);
@@ -154,6 +162,9 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   useEffect(() => {
     // Create AudioManager instance
     audioManagerRef.current = new AudioManager();
+    
+    // Set initial volume from state (which was restored from localStorage)
+    audioManagerRef.current.setVolume(volume / 100);
     
     // Set up event handlers
     const handleEnded = (): void => {
@@ -213,7 +224,10 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         audioManagerRef.current = null;
       }
     };
-  }, []); // No dependencies needed - using refs for dynamic values
+    // Note: volume is intentionally NOT in dependencies. It's only used for initial setup.
+    // Volume changes are handled by the setVolume() callback to avoid recreating AudioManager.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Playback actions
   
@@ -490,7 +504,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         isNavigatingRef.current = false;
       }
     }
-  }, [queue, currentTrackIndex, repeatMode, stop]);
+  }, [queue, currentTrackIndex, repeatMode]);
   
   // Update nextRef whenever next function changes
   useEffect(() => {
@@ -615,6 +629,13 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     if (audioManagerRef.current) {
       audioManagerRef.current.setVolume(clampedVolume / 100);
     }
+    
+    // Persist volume to localStorage
+    try {
+      localStorage.setItem('playback_volume', clampedVolume.toString());
+    } catch (error) {
+      console.error('Failed to persist volume:', error);
+    }
   }, []);
 
   const buildQueue = useCallback((tracks: PlaylistTrackDisplay[], shuffle: boolean): void => {
@@ -719,7 +740,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       };
       
       persistPlaybackState(state);
-    }, 1000); // 1 second throttle
+    }, 500); // 500ms throttle for immediate changes
     
     // Cleanup on unmount
     return () => {
@@ -737,6 +758,41 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     queue,
     persistPlaybackState,
   ]);
+  
+  /**
+   * Effect to save position before page unload
+   */
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Save current position immediately before page unload
+      if (activePlaylist && currentTrack && audioManagerRef.current) {
+        const state: StoredPlaybackState = {
+          playlistId: activePlaylist.id,
+          trackId: currentTrack.id,
+          trackIndex: currentTrackIndex,
+          position: audioManagerRef.current.getCurrentTime(),
+          isPlaying,
+          shuffleMode,
+          repeatMode,
+          queue: queue.map(t => t.id),
+          timestamp: Date.now(),
+        };
+        
+        // Use synchronous sessionStorage.setItem for beforeunload
+        try {
+          sessionStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
+        } catch (error) {
+          console.error('Failed to save state on unload:', error);
+        }
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [activePlaylist, currentTrack, currentTrackIndex, isPlaying, shuffleMode, repeatMode, queue]);
   
   /**
    * Effect to restore state on mount

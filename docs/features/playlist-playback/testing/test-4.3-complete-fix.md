@@ -136,6 +136,8 @@ const tracksWithArtistNames = sortedTracks.map((pt: any) => {
 3. ✅ **Schema Mismatch** - Removed non-existent `updated_at` column reference
 4. ✅ **Missing Artist Names** - Added user profile join to fetch usernames
 5. ✅ **Playback During Reorder** - Added `updatePlaylist` to sync queue with new order
+6. ✅ **Shuffle Mode Play Button** - Changed from index-based to ID-based track selection
+7. ✅ **Shuffle Specific Track** - Fixed queue building to maintain shuffle after clicking specific track
 
 **Status:** ✅ ALL FIXES COMPLETE  
 **Date:** October 25, 2025  
@@ -143,3 +145,5 @@ const tracksWithArtistNames = sortedTracks.map((pt: any) => {
 
 **Related Documentation:**
 - [Test 4.5 Fix Details](./test-4.5-playback-during-reorder-fix.md) - Playback queue synchronization
+- [Shuffle Play Button Fix](./test-shuffle-play-button-fix.md) - ID-based track selection
+- [Shuffle Specific Track Fix](./test-shuffle-specific-track-fix.md) - Correct queue building in shuffle mode

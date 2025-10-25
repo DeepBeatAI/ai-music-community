@@ -128,6 +128,12 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [queue, setQueue] = useState<PlaylistTrackDisplay[]>([]);
   const [shuffleMode, setShuffleMode] = useState<boolean>(false);
+  const shuffleModeRef = useRef<boolean>(false);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    shuffleModeRef.current = shuffleMode;
+  }, [shuffleMode]);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [progress, setProgress] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
@@ -256,14 +262,35 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       // Extract tracks from playlist
       const tracks = playlist.tracks.map(pt => pt.track);
       
-      // Build queue based on shuffle mode
-      const orderedQueue = shuffleMode ? queueUtils.shuffleArray([...tracks]) : tracks;
-      setQueue(orderedQueue);
-      
-      // Set current track and index
-      setCurrentTrackIndex(startIndex);
-      const trackToPlay = orderedQueue[startIndex];
+      // Get the track to play (from original order)
+      const trackToPlay = tracks[startIndex];
       setCurrentTrack(trackToPlay);
+      
+      // Build queue based on shuffle mode
+      let orderedQueue: PlaylistTrackDisplay[];
+      let currentIndex: number;
+      
+      // Use ref to get the latest shuffle mode value
+      const currentShuffleMode = shuffleModeRef.current;
+      console.log('[PlaybackContext] Building queue - shuffleMode:', currentShuffleMode, 'startIndex:', startIndex);
+      
+      if (currentShuffleMode) {
+        // In shuffle mode: put selected track first, then shuffle the rest
+        const remaining = tracks.filter((_, idx) => idx !== startIndex);
+        const shuffled = queueUtils.shuffleArray(remaining);
+        orderedQueue = [trackToPlay, ...shuffled];
+        currentIndex = 0; // Selected track is always at position 0
+        console.log('[PlaybackContext] Shuffle mode - Queue order:', orderedQueue.map(t => t.title));
+      } else {
+        // In normal mode: use original order
+        orderedQueue = tracks;
+        currentIndex = startIndex;
+        console.log('[PlaybackContext] Normal mode - Queue order:', orderedQueue.map(t => t.title));
+      }
+      
+      setQueue(orderedQueue);
+      setCurrentTrackIndex(currentIndex);
+      console.log('[PlaybackContext] Queue set with', orderedQueue.length, 'tracks, current index:', currentIndex);
       
       // Debug: Log the entire track object to see what fields it has
       console.log('[PlaybackContext] Track object:', trackToPlay);
@@ -300,7 +327,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       setIsPlaying(false);
       // TODO: Show user-friendly error notification
     }
-  }, [shuffleMode]);
+  }, []); // Empty deps - using shuffleModeRef to get latest value
 
   /**
    * Play a single track (creates a single-track playlist)
@@ -479,6 +506,10 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       // Move to next track
       const nextIndex = currentTrackIndex + 1;
       const nextTrack = queue[nextIndex];
+      
+      console.log('[PlaybackContext] Moving to next track - currentIndex:', currentTrackIndex, 'nextIndex:', nextIndex);
+      console.log('[PlaybackContext] Next track:', nextTrack?.title);
+      console.log('[PlaybackContext] Queue length:', queue.length);
       
       setCurrentTrackIndex(nextIndex);
       setCurrentTrack(nextTrack);

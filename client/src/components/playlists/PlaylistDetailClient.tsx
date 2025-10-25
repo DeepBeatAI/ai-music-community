@@ -115,8 +115,8 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
   // Listen for play track events from TrackReorderList
   useEffect(() => {
     const handlePlayTrackEvent = (event: Event) => {
-      const customEvent = event as CustomEvent<{ index: number }>;
-      handlePlayTrack(customEvent.detail.index);
+      const customEvent = event as CustomEvent<{ trackId: string }>;
+      handlePlayTrackByTrackId(customEvent.detail.trackId);
     };
 
     window.addEventListener('playTrack', handlePlayTrackEvent);
@@ -139,9 +139,15 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
     playPlaylist(playlist, 0);
   };
 
-  // Handle play specific track
-  const handlePlayTrack = (index: number) => {
-    playPlaylist(playlist, index);
+  // Handle play specific track by track ID
+  const handlePlayTrackByTrackId = (trackId: string) => {
+    // Find the track index in the original playlist order
+    const index = playlist.tracks.findIndex(pt => pt.track.id === trackId);
+    if (index >= 0) {
+      playPlaylist(playlist, index);
+    } else {
+      console.error('Track not found in playlist:', trackId);
+    }
   };
 
 

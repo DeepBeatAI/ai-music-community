@@ -219,8 +219,8 @@ export function TrackReorderList({
                   if (isTrackPlaying(track.id)) {
                     pause();
                   } else {
-                    // This will be handled by parent component
-                    const event = new CustomEvent('playTrack', { detail: { index } });
+                    // Pass track ID instead of index to handle shuffle mode correctly
+                    const event = new CustomEvent('playTrack', { detail: { trackId: track.id } });
                     window.dispatchEvent(event);
                   }
                 }}

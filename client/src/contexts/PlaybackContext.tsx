@@ -135,6 +135,10 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   
   // Ref to store the next function for use in event handlers
   const nextRef = useRef<(() => void) | null>(null);
+  
+  // Track navigation debouncing
+  const isNavigatingRef = useRef<boolean>(false);
+  const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize AudioManager on mount
   useEffect(() => {
@@ -379,12 +383,31 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
 
   /**
    * Skip to the next track
-   * Handles repeat mode logic
+   * Handles repeat mode logic with debouncing to prevent rapid-fire navigation
    */
   const next = useCallback((): void => {
     if (!audioManagerRef.current || queue.length === 0) {
       return;
     }
+    
+    // Debounce rapid navigation attempts
+    if (isNavigatingRef.current) {
+      console.log('Navigation already in progress, ignoring request');
+      return;
+    }
+    
+    // Set navigation flag
+    isNavigatingRef.current = true;
+    
+    // Clear any existing timeout
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current);
+    }
+    
+    // Reset navigation flag after a delay
+    navigationTimeoutRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 500); // 500ms debounce
     
     // Check if we're at the last track
     const isLastTrack = currentTrackIndex >= queue.length - 1;
@@ -402,17 +425,26 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
           getCachedAudioUrl(audioUrl)
             .then((cachedUrl) => audioManagerRef.current?.loadTrack(cachedUrl))
             .then(() => audioManagerRef.current?.play())
+            .then(() => setIsPlaying(true))
             .catch((error) => {
-              console.error('Failed to play next track:', error);
+              // Only log non-abort errors
+              if (error?.name !== 'AbortError') {
+                console.error('Failed to play next track:', error);
+              }
               setIsPlaying(false);
+            })
+            .finally(() => {
+              isNavigatingRef.current = false;
             });
         } else {
           console.error('No audio URL found for first track');
           setIsPlaying(false);
+          isNavigatingRef.current = false;
         }
       } else {
         // Stop playback (repeat is off or track)
         stop();
+        isNavigatingRef.current = false;
       }
     } else {
       // Move to next track
@@ -427,13 +459,21 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         getCachedAudioUrl(audioUrl)
           .then((cachedUrl) => audioManagerRef.current?.loadTrack(cachedUrl))
           .then(() => audioManagerRef.current?.play())
+          .then(() => setIsPlaying(true))
           .catch((error) => {
-            console.error('Failed to play next track:', error);
+            // Only log non-abort errors
+            if (error?.name !== 'AbortError') {
+              console.error('Failed to play next track:', error);
+            }
             setIsPlaying(false);
+          })
+          .finally(() => {
+            isNavigatingRef.current = false;
           });
       } else {
         console.error('No audio URL found for next track');
         setIsPlaying(false);
+        isNavigatingRef.current = false;
       }
     }
   }, [queue, currentTrackIndex, repeatMode, stop]);
@@ -446,17 +486,37 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   /**
    * Skip to the previous track
    * If at the beginning, restart the current track
+   * Includes debouncing to prevent rapid-fire navigation
    */
   const previous = useCallback((): void => {
     if (!audioManagerRef.current || queue.length === 0) {
       return;
     }
     
-    // If we're at the first track, restart it
+    // Debounce rapid navigation attempts
+    if (isNavigatingRef.current) {
+      console.log('Navigation already in progress, ignoring request');
+      return;
+    }
+    
+    // If we're at the first track, restart it (no debounce needed for seek)
     if (currentTrackIndex === 0) {
       audioManagerRef.current.seek(0);
       return;
     }
+    
+    // Set navigation flag
+    isNavigatingRef.current = true;
+    
+    // Clear any existing timeout
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current);
+    }
+    
+    // Reset navigation flag after a delay
+    navigationTimeoutRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 500); // 500ms debounce
     
     // Move to previous track
     const prevIndex = currentTrackIndex - 1;
@@ -465,18 +525,26 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     setCurrentTrackIndex(prevIndex);
     setCurrentTrack(prevTrack);
     
-    const audioUrl = prevTrack.file_url || (prevTrack as any)?.audio_url || (prevTrack as any)?.audioUrl;
+    const audioUrl = prevTrack.file_url || (prevTrack as any)?.audio_url || (prevTrack as unknown)?.audioUrl;
     if (audioUrl) {
       getCachedAudioUrl(audioUrl)
         .then((cachedUrl) => audioManagerRef.current?.loadTrack(cachedUrl))
         .then(() => audioManagerRef.current?.play())
+        .then(() => setIsPlaying(true))
         .catch((error) => {
-          console.error('Failed to play previous track:', error);
+          // Only log non-abort errors
+          if (error?.name !== 'AbortError') {
+            console.error('Failed to play previous track:', error);
+          }
           setIsPlaying(false);
+        })
+        .finally(() => {
+          isNavigatingRef.current = false;
         });
     } else {
       console.error('No audio URL found for previous track');
       setIsPlaying(false);
+      isNavigatingRef.current = false;
     }
   }, [queue, currentTrackIndex]);
 

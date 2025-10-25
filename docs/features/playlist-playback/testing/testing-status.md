@@ -1,7 +1,33 @@
 # Playlist Playback Testing Status
 
-**Last Updated:** January 24, 2025  
-**Status:** READY FOR MANUAL TESTING
+**Last Updated:** January 25, 2025  
+**Status:** IN PROGRESS - Manual Testing with Fixes Applied
+
+---
+
+## Recent Fixes
+
+### Fix: Rapid Track Navigation Race Condition (January 25, 2025)
+
+**Issue:** When rapidly clicking next/previous buttons, AbortError would occur and playback would fail.
+
+**Root Cause:** Race condition when multiple track navigation requests overlapped, causing play() promises to be interrupted by new load() calls.
+
+**Solution Implemented:**
+1. **AudioManager Improvements:**
+   - Added state tracking for pending play operations and loading state
+   - Enhanced `loadTrack()` to wait for pending operations and pause before loading
+   - Enhanced `play()` to wait for loading to complete
+   - Added proper error filtering to ignore expected AbortErrors
+
+2. **PlaybackContext Debouncing:**
+   - Added 500ms debounce to next/previous functions
+   - Prevents rapid-fire navigation from creating race conditions
+   - Properly tracks navigation state with refs
+
+**Status:** ✅ Fixed and built successfully (no TypeScript errors)  
+**Documentation:** [Fix Details](./fix-rapid-navigation-race-condition.md)  
+**Pending:** User manual testing verification
 
 ---
 

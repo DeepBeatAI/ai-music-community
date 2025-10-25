@@ -17,6 +17,8 @@ export class AudioManager {
   private audio: HTMLAudioElement;
   private currentTrackUrl: string | null = null;
   private eventHandlers: Map<string, AudioEventHandler[]> = new Map();
+  private pendingPlayPromise: Promise<void> | null = null;
+  private isLoadingTrack: boolean = false;
 
   constructor() {
     this.audio = new Audio();
@@ -115,6 +117,22 @@ export class AudioManager {
    */
   public async loadTrack(audioUrl: string): Promise<void> {
     try {
+      // Wait for any pending play promise to resolve/reject before loading new track
+      if (this.pendingPlayPromise) {
+        try {
+          await this.pendingPlayPromise;
+        } catch {
+          // Ignore errors from previous play attempt
+        }
+        this.pendingPlayPromise = null;
+      }
+      
+      // Pause current playback to prevent interruption errors
+      this.audio.pause();
+      
+      // Set loading flag
+      this.isLoadingTrack = true;
+      
       // TODO: Integrate with getCachedAudioUrl when available
       // const cachedUrl = await getCachedAudioUrl(audioUrl);
       // this.audio.src = cachedUrl;
@@ -125,7 +143,28 @@ export class AudioManager {
       
       // Preload the audio
       this.audio.load();
+      
+      // Wait for the audio to be ready to play
+      await new Promise<void>((resolve, reject) => {
+        const handleCanPlay = (): void => {
+          this.audio.removeEventListener('canplay', handleCanPlay);
+          this.audio.removeEventListener('error', handleError);
+          this.isLoadingTrack = false;
+          resolve();
+        };
+        
+        const handleError = (event: Event): void => {
+          this.audio.removeEventListener('canplay', handleCanPlay);
+          this.audio.removeEventListener('error', handleError);
+          this.isLoadingTrack = false;
+          reject(event);
+        };
+        
+        this.audio.addEventListener('canplay', handleCanPlay, { once: true });
+        this.audio.addEventListener('error', handleError, { once: true });
+      });
     } catch (error) {
+      this.isLoadingTrack = false;
       console.error('Failed to load track:', error);
       throw error;
     }
@@ -137,9 +176,23 @@ export class AudioManager {
    */
   public async play(): Promise<void> {
     try {
-      await this.audio.play();
+      // Wait for any pending load to complete
+      if (this.isLoadingTrack) {
+        console.log('Waiting for track to finish loading...');
+        // Wait a bit for the load to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Store the play promise so we can wait for it in loadTrack
+      this.pendingPlayPromise = this.audio.play();
+      await this.pendingPlayPromise;
+      this.pendingPlayPromise = null;
     } catch (error) {
-      console.error('Failed to play audio:', error);
+      this.pendingPlayPromise = null;
+      // Only log non-abort errors
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('Failed to play audio:', error);
+      }
       throw error;
     }
   }
@@ -191,6 +244,14 @@ export class AudioManager {
    */
   public isPlaying(): boolean {
     return !this.audio.paused;
+  }
+
+  /**
+   * Check if a track is currently loading
+   * @returns True if loading, false otherwise
+   */
+  public isLoading(): boolean {
+    return this.isLoadingTrack;
   }
 
   /**

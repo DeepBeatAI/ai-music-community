@@ -138,9 +138,17 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   // Ref to store the next function for use in event handlers
   const nextRef = useRef<(() => void) | null>(null);
   
+  // Ref to store current repeat mode for event handlers
+  const repeatModeRef = useRef<RepeatMode>(repeatMode);
+  
   // Track navigation debouncing
   const isNavigatingRef = useRef<boolean>(false);
   const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Update repeatModeRef when repeatMode changes
+  useEffect(() => {
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
 
   // Initialize AudioManager on mount
   useEffect(() => {
@@ -150,17 +158,17 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     // Set up event handlers
     const handleEnded = (): void => {
       // Track ended - handle automatic progression based on repeat mode
-      console.log('Track ended - checking repeat mode');
+      console.log('Track ended - checking repeat mode:', repeatModeRef.current);
       
       // If repeat track is enabled, restart the current track
-      if (repeatMode === 'track' && audioManagerRef.current) {
+      if (repeatModeRef.current === 'track' && audioManagerRef.current) {
         console.log('Repeat track enabled - restarting current track');
         audioManagerRef.current.seek(0);
         audioManagerRef.current.play().catch((error) => {
           console.error('Failed to restart track:', error);
         });
       } else if (nextRef.current) {
-        // Otherwise, move to next track (or stop if at end)
+        // Otherwise, move to next track (or pause if at end)
         console.log('Moving to next track');
         nextRef.current();
       }
@@ -205,7 +213,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         audioManagerRef.current = null;
       }
     };
-  }, [repeatMode]); // Add repeatMode as dependency
+  }, []); // No dependencies needed - using refs for dynamic values
 
   // Playback actions
   
@@ -444,8 +452,12 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
           isNavigatingRef.current = false;
         }
       } else {
-        // Stop playback (repeat is off or track)
-        stop();
+        // Pause playback at end (repeat is off)
+        // Don't call stop() as that would close the mini player
+        if (audioManagerRef.current) {
+          audioManagerRef.current.pause();
+        }
+        setIsPlaying(false);
         isNavigatingRef.current = false;
       }
     } else {

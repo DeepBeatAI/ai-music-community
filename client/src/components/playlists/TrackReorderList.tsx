@@ -52,9 +52,14 @@ export function TrackReorderList({
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
     
+    // Store reference to the element before setTimeout
+    const element = e.currentTarget;
+    
     // Add dragging class after a small delay to avoid flickering
     setTimeout(() => {
-      e.currentTarget.classList.add('dragging');
+      if (element) {
+        element.classList.add('dragging');
+      }
     }, 0);
   };
 

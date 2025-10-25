@@ -1,11 +1,31 @@
 # Playlist Playback Testing Status
 
-**Last Updated:** January 25, 2025  
+**Last Updated:** October 25, 2025  
 **Status:** IN PROGRESS - Manual Testing with Fixes Applied
 
 ---
 
 ## Recent Fixes
+
+### Fix: Track Reorder Functionality (October 25, 2025)
+
+**Issues Found During Test 4.3:**
+1. **Backend Error:** 404 on `/rest/v1/rpc/reorder_playlist_tracks` - function didn't exist in database
+2. **Frontend Error:** `Cannot read properties of null (reading 'classList')` at TrackReorderList.tsx:57
+
+**Root Causes:**
+1. Database function existed in migration file but was never applied to remote database
+2. React's synthetic event system recycled `e.currentTarget` before setTimeout callback executed
+
+**Solutions Implemented:**
+1. Applied `reorder_playlist_tracks` function directly to remote database via Supabase MCP
+2. Stored element reference before setTimeout to prevent null access
+
+**Status:** ✅ Fixed and verified (no TypeScript errors)  
+**Documentation:** [Fix Details](./test-4.3-reorder-fix.md)  
+**Pending:** User manual testing verification
+
+---
 
 ### Fix: Volume Changes Stopping Playback (January 25, 2025)
 

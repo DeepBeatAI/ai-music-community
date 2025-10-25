@@ -22,7 +22,7 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   
   // Playback context
-  const { playPlaylist } = usePlayback();
+  const { playPlaylist, updatePlaylist } = usePlayback();
 
   const handleRemoveTrack = async (trackId: string) => {
     setRemovingTrack(trackId);
@@ -101,6 +101,8 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
       const refreshedPlaylist = await getPlaylistWithTracks(playlist.id);
       if (refreshedPlaylist) {
         setPlaylist(refreshedPlaylist);
+        // Update the playback context with the new playlist order
+        updatePlaylist(refreshedPlaylist);
       }
     } catch (error) {
       // Rollback on error

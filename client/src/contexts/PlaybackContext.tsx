@@ -82,6 +82,7 @@ export interface PlaybackContextType {
   cycleRepeat: () => void;
   stop: () => void;
   setVolume: (volume: number) => void;
+  updatePlaylist: (playlist: PlaylistWithTracks) => void;
   
   // Queue management
   buildQueue: (tracks: PlaylistTrackDisplay[], shuffle: boolean) => void;
@@ -620,6 +621,51 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   }, []);
 
   /**
+   * Update the active playlist (e.g., after reordering tracks)
+   * Rebuilds the queue while maintaining the current track position
+   */
+  const updatePlaylist = useCallback((playlist: PlaylistWithTracks): void => {
+    // Only update if this is the currently active playlist
+    if (!activePlaylist || activePlaylist.id !== playlist.id) {
+      return;
+    }
+    
+    // Update the playlist reference
+    setActivePlaylist(playlist);
+    
+    // Extract tracks from updated playlist
+    const tracks = playlist.tracks.map(pt => pt.track);
+    
+    // If we have a current track, rebuild the queue maintaining its position
+    if (currentTrack) {
+      if (shuffleMode) {
+        // In shuffle mode, keep current track at front and shuffle the rest
+        const remaining = tracks.filter(t => t.id !== currentTrack.id);
+        const shuffled = queueUtils.shuffleArray(remaining);
+        const newQueue = [currentTrack, ...shuffled];
+        setQueue(newQueue);
+        setCurrentTrackIndex(0);
+      } else {
+        // In normal mode, use the new order
+        setQueue(tracks);
+        // Find current track in the new order
+        const newIndex = tracks.findIndex(t => t.id === currentTrack.id);
+        if (newIndex >= 0) {
+          setCurrentTrackIndex(newIndex);
+        } else {
+          // Current track was removed from playlist, stop playback
+          console.warn('Current track no longer in playlist');
+          stop();
+        }
+      }
+    } else {
+      // No current track, just rebuild the queue
+      const newQueue = shuffleMode ? queueUtils.shuffleArray([...tracks]) : tracks;
+      setQueue(newQueue);
+    }
+  }, [activePlaylist, currentTrack, shuffleMode, stop]);
+
+  /**
    * Set volume (0-100)
    */
   const setVolume = useCallback((newVolume: number): void => {
@@ -926,6 +972,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     cycleRepeat,
     stop,
     setVolume,
+    updatePlaylist,
     
     // Queue management
     buildQueue,
@@ -953,6 +1000,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     cycleRepeat,
     setVolume,
     stop,
+    updatePlaylist,
     buildQueue,
     getNextTrack,
     getPreviousTrack,

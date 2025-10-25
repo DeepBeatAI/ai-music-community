@@ -220,12 +220,37 @@ export async function getPlaylistWithTracks(
       (a: { position: number }, b: { position: number }) => a.position - b.position
     );
 
+    // Fetch user profiles for artist names
+    const userIds = [...new Set(sortedTracks.map((pt: any) => pt.track?.user_id).filter(Boolean))];
+    let profiles: Array<{ user_id: string; username: string }> = [];
+    
+    if (userIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from('user_profiles')
+        .select('user_id, username')
+        .in('user_id', userIds);
+      
+      profiles = (profilesData as Array<{ user_id: string; username: string }>) || [];
+    }
+
+    // Add artist_name to each track
+    const tracksWithArtistNames = sortedTracks.map((pt: any) => {
+      const profile = profiles.find((prof) => prof.user_id === pt.track?.user_id);
+      return {
+        ...pt,
+        track: {
+          ...pt.track,
+          artist_name: profile?.username || 'Unknown Artist',
+        },
+      };
+    });
+
     // Calculate track count
-    const track_count = sortedTracks.length;
+    const track_count = tracksWithArtistNames.length;
 
     return {
       ...data,
-      tracks: sortedTracks,
+      tracks: tracksWithArtistNames,
       track_count,
     } as PlaylistWithTracks;
   } catch (error) {

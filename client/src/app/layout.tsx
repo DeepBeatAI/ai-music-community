@@ -33,7 +33,7 @@ export default function RootLayout({
         <meta name="description" content="Create, Share, Connect, and Grow Your AI Music" />
       </head>
       <body
-        className={`${geistSans.variable} antialiased`}
+        className={`${geistSans.variable} antialiased pb-24 md:pb-20`}
       >
         <ErrorBoundary>
           <AuthProvider>

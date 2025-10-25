@@ -12,9 +12,10 @@ import type { PlaylistWithTracks } from '@/types/playlist';
 interface PlaylistDetailClientProps {
   playlist: PlaylistWithTracks;
   isOwner: boolean;
+  creatorUsername?: string;
 }
 
-export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: PlaylistDetailClientProps) {
+export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creatorUsername }: PlaylistDetailClientProps) {
   const router = useRouter();
   const [playlist, setPlaylist] = useState(initialPlaylist);
   const [removingTrack, setRemovingTrack] = useState<string | null>(null);
@@ -227,6 +228,13 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner }: Pla
                 </button>
               )}
             </div>
+
+            {/* Creator Name (for non-owners) */}
+            {!isOwner && creatorUsername && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                Created by <span className="font-medium text-gray-700 dark:text-gray-300">{creatorUsername}</span>
+              </p>
+            )}
 
             {playlist.description && (
               <p className="text-gray-600 dark:text-gray-300 mb-4">

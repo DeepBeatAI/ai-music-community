@@ -3,7 +3,7 @@
  * Handles queue building, shuffling, and track navigation
  */
 
-import type { Track } from '@/types/track';
+import type { PlaylistTrackDisplay } from '@/types/playlist';
 import type { RepeatMode } from '@/contexts/PlaybackContext';
 
 /**
@@ -28,7 +28,7 @@ export function shuffleArray<T>(array: T[]): T[] {
  * @param shuffle - Whether to shuffle the queue
  * @returns The ordered queue
  */
-export function buildQueue(tracks: Track[], shuffle: boolean): Track[] {
+export function buildQueue(tracks: PlaylistTrackDisplay[], shuffle: boolean): PlaylistTrackDisplay[] {
   if (shuffle) {
     return shuffleArray(tracks);
   }
@@ -45,10 +45,10 @@ export function buildQueue(tracks: Track[], shuffle: boolean): Track[] {
  * @returns The rebuilt queue
  */
 export function rebuildQueueWithCurrentTrack(
-  tracks: Track[],
-  currentTrack: Track,
+  tracks: PlaylistTrackDisplay[],
+  currentTrack: PlaylistTrackDisplay,
   shuffle: boolean
-): Track[] {
+): PlaylistTrackDisplay[] {
   if (shuffle) {
     // Remove current track from the list
     const remaining = tracks.filter(t => t.id !== currentTrack.id);
@@ -72,10 +72,10 @@ export function rebuildQueueWithCurrentTrack(
  * @returns The next track or null if no next track
  */
 export function getNextTrack(
-  queue: Track[],
+  queue: PlaylistTrackDisplay[],
   currentIndex: number,
   repeatMode: RepeatMode
-): Track | null {
+): PlaylistTrackDisplay | null {
   // If repeat track is enabled, return the current track
   if (repeatMode === 'track') {
     return queue[currentIndex] || null;
@@ -102,9 +102,9 @@ export function getNextTrack(
  * @returns The previous track or null if no previous track
  */
 export function getPreviousTrack(
-  queue: Track[],
+  queue: PlaylistTrackDisplay[],
   currentIndex: number
-): Track | null {
+): PlaylistTrackDisplay | null {
   // Check if there's a previous track in the queue
   if (currentIndex > 0) {
     return queue[currentIndex - 1];

@@ -113,6 +113,7 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
               id: track.id,
               title: track.title || 'Untitled Track',
               artist_name: profile?.username || 'Unknown Artist',
+              description: track.description || null,
               audio_url: track.file_url || '',
               duration: track.duration || undefined,
               cover_image_url: undefined,
@@ -125,11 +126,25 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
 
   console.log('Fetched playlist tracks:', tracks.length, 'tracks');
 
+  // Fetch playlist creator's username
+  let creatorUsername = 'Unknown';
+  if (!isOwner) {
+    const { data: creatorProfile } = await supabase
+      .from('user_profiles')
+      .select('username')
+      .eq('user_id', playlist.user_id)
+      .single();
+    
+    if (creatorProfile) {
+      creatorUsername = creatorProfile.username;
+    }
+  }
+
   const playlistWithTracks: PlaylistWithTracks = {
     ...playlist,
     tracks,
     track_count: tracks.length,
   };
 
-  return <PlaylistDetailClient playlist={playlistWithTracks} isOwner={isOwner} />;
+  return <PlaylistDetailClient playlist={playlistWithTracks} isOwner={isOwner} creatorUsername={!isOwner ? creatorUsername : undefined} />;
 }

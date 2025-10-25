@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { usePlayback } from '@/contexts/PlaybackContext';
 
 /**
@@ -46,7 +47,7 @@ function TrackInfo(): React.ReactElement {
           {currentTrack.title}
         </div>
         <div className="text-xs text-gray-400 truncate">
-          {currentTrack.genre || 'Unknown Genre'}
+          {currentTrack.artist_name || 'Unknown Artist'}
         </div>
       </div>
     </div>
@@ -225,14 +226,149 @@ function ProgressBar(): React.ReactElement {
 }
 
 /**
+ * VolumeControl sub-component
+ * Volume slider with mute toggle
+ */
+function VolumeControl(): React.ReactElement {
+  const { volume, setVolume } = usePlayback();
+  const [isMuted, setIsMuted] = useState(false);
+  const [showSlider, setShowSlider] = useState(false);
+  const [previousVolume, setPreviousVolume] = useState(100);
+  const volumeRef = useRef<HTMLDivElement>(null);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Close slider when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (volumeRef.current && !volumeRef.current.contains(event.target as Node)) {
+        setShowSlider(false);
+      }
+    };
+    
+    if (showSlider) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSlider]);
+  
+  const handleMouseEnter = () => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+    setShowSlider(true);
+  };
+  
+  const handleMouseLeave = () => {
+    // Delay hiding to allow moving to the slider
+    hideTimeoutRef.current = setTimeout(() => {
+      setShowSlider(false);
+    }, 200);
+  };
+  
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseInt(e.target.value);
+    setVolume(newVolume);
+    setIsMuted(newVolume === 0);
+    if (newVolume > 0) {
+      setPreviousVolume(newVolume);
+    }
+  };
+  
+  const toggleMute = () => {
+    if (isMuted) {
+      // Unmute - restore previous volume
+      setVolume(previousVolume);
+      setIsMuted(false);
+    } else {
+      // Mute - save current volume and set to 0
+      setPreviousVolume(volume);
+      setVolume(0);
+      setIsMuted(true);
+    }
+  };
+  
+  const displayVolume = isMuted ? 0 : volume;
+  
+  return (
+    <div 
+      className="relative" 
+      ref={volumeRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <button
+        onClick={toggleMute}
+        className="p-2 text-gray-400 hover:text-white transition-colors"
+        aria-label={isMuted ? 'Unmute' : 'Mute'}
+        title={isMuted ? 'Unmute' : 'Mute'}
+        type="button"
+      >
+        {displayVolume === 0 ? (
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+          </svg>
+        ) : displayVolume < 50 ? (
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M7 9v6h4l5 5V4l-5 5H7z" />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+          </svg>
+        )}
+      </button>
+      
+      {/* Volume Slider */}
+      {showSlider && (
+        <div 
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 rounded-lg p-2 shadow-lg"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={displayVolume}
+            onChange={handleVolumeChange}
+            className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0"
+            style={{
+              background: `linear-gradient(to right, white ${displayVolume}%, rgb(75, 85, 99) ${displayVolume}%)`
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * ModeControls sub-component
- * Shuffle toggle, repeat mode cycle, and close buttons
+ * Shuffle toggle, repeat mode cycle, volume control, playlist link, and close buttons
  */
 function ModeControls(): React.ReactElement {
-  const { shuffleMode, repeatMode, toggleShuffle, cycleRepeat, stop } = usePlayback();
+  const { shuffleMode, repeatMode, toggleShuffle, cycleRepeat, stop, activePlaylist } = usePlayback();
   
   return (
     <div className="flex items-center gap-1">
+      {/* Go to Playlist Button */}
+      {activePlaylist && activePlaylist.id !== 'single-track' && (
+        <Link
+          href={`/playlists/${activePlaylist.id}`}
+          className="p-2 text-gray-400 hover:text-white transition-colors"
+          aria-label="Go to playlist"
+          title="Go to playlist"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
+          </svg>
+        </Link>
+      )}
+      
+      {/* Volume Control */}
+      <VolumeControl />
+      
       {/* Shuffle Button */}
       <button
         onClick={toggleShuffle}

@@ -1,8 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import type { PlaylistWithTracks } from '@/types/playlist';
-import type { Track } from '@/types/track';
+import type { PlaylistWithTracks, PlaylistTrackDisplay } from '@/types/playlist';
 import { AudioManager } from '@/lib/audio/AudioManager';
 import * as queueUtils from '@/lib/audio/queueUtils';
 import { getCachedAudioUrl } from '@/utils/audioCache';
@@ -45,10 +44,10 @@ const STALENESS_THRESHOLD = 3600000; // 1 hour
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface PlaybackState {
   activePlaylist: PlaylistWithTracks | null;
-  currentTrack: Track | null;
+  currentTrack: PlaylistTrackDisplay | null;
   currentTrackIndex: number;
   isPlaying: boolean;
-  queue: Track[];
+  queue: PlaylistTrackDisplay[];
   shuffleMode: boolean;
   repeatMode: RepeatMode;
   progress: number; // 0-100
@@ -61,18 +60,19 @@ interface PlaybackState {
 export interface PlaybackContextType {
   // State
   activePlaylist: PlaylistWithTracks | null;
-  currentTrack: Track | null;
+  currentTrack: PlaylistTrackDisplay | null;
   currentTrackIndex: number;
   isPlaying: boolean;
-  queue: Track[];
+  queue: PlaylistTrackDisplay[];
   shuffleMode: boolean;
   repeatMode: RepeatMode;
   progress: number;
   duration: number;
+  volume: number;
   
   // Actions
   playPlaylist: (playlist: PlaylistWithTracks, startIndex?: number) => Promise<void>;
-  playTrack: (track: Track) => Promise<void>;
+  playTrack: (track: PlaylistTrackDisplay) => Promise<void>;
   pause: () => void;
   resume: () => void;
   next: () => void;
@@ -81,11 +81,12 @@ export interface PlaybackContextType {
   toggleShuffle: () => void;
   cycleRepeat: () => void;
   stop: () => void;
+  setVolume: (volume: number) => void;
   
   // Queue management
-  buildQueue: (tracks: Track[], shuffle: boolean) => void;
-  getNextTrack: () => Track | null;
-  getPreviousTrack: () => Track | null;
+  buildQueue: (tracks: PlaylistTrackDisplay[], shuffle: boolean) => void;
+  getNextTrack: () => PlaylistTrackDisplay | null;
+  getPreviousTrack: () => PlaylistTrackDisplay | null;
 }
 
 /**
@@ -121,14 +122,15 @@ interface PlaybackProviderProps {
 export function PlaybackProvider({ children }: PlaybackProviderProps): React.ReactElement {
   // Initialize state with default values
   const [activePlaylist, setActivePlaylist] = useState<PlaylistWithTracks | null>(null);
-  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<PlaylistTrackDisplay | null>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [queue, setQueue] = useState<Track[]>([]);
+  const [queue, setQueue] = useState<PlaylistTrackDisplay[]>([]);
   const [shuffleMode, setShuffleMode] = useState<boolean>(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [progress, setProgress] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
+  const [volume, setVolumeState] = useState<number>(100);
   
   // AudioManager instance ref
   const audioManagerRef = useRef<AudioManager | null>(null);
@@ -281,7 +283,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
    * Play a single track (creates a single-track playlist)
    * @param track - The track to play
    */
-  const playTrack = useCallback(async (track: Track): Promise<void> => {
+  const playTrack = useCallback(async (track: PlaylistTrackDisplay): Promise<void> => {
     try {
       // Create a single-track playlist
       const singleTrackPlaylist: PlaylistWithTracks = {
@@ -591,16 +593,28 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     });
   }, []);
 
-  const buildQueue = useCallback((tracks: Track[], shuffle: boolean): void => {
+  /**
+   * Set volume (0-100)
+   */
+  const setVolume = useCallback((newVolume: number): void => {
+    const clampedVolume = Math.max(0, Math.min(100, newVolume));
+    setVolumeState(clampedVolume);
+    
+    if (audioManagerRef.current) {
+      audioManagerRef.current.setVolume(clampedVolume / 100);
+    }
+  }, []);
+
+  const buildQueue = useCallback((tracks: PlaylistTrackDisplay[], shuffle: boolean): void => {
     const newQueue = queueUtils.buildQueue(tracks, shuffle);
     setQueue(newQueue);
   }, []);
 
-  const getNextTrack = useCallback((): Track | null => {
+  const getNextTrack = useCallback((): PlaylistTrackDisplay | null => {
     return queueUtils.getNextTrack(queue, currentTrackIndex, repeatMode);
   }, [queue, currentTrackIndex, repeatMode]);
 
-  const getPreviousTrack = useCallback((): Track | null => {
+  const getPreviousTrack = useCallback((): PlaylistTrackDisplay | null => {
     return queueUtils.getPreviousTrack(queue, currentTrackIndex);
   }, [queue, currentTrackIndex]);
 
@@ -776,11 +790,22 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         
         // Load the track and seek to the stored position
         if (audioManagerRef.current) {
-          await audioManagerRef.current.loadTrack(track.file_url);
+          // Get the audio URL (try multiple field names for compatibility)
+          const audioUrl = track.file_url || track.audio_url;
           
-          // Seek to the stored position if it's valid
-          if (restored.position > 0) {
-            audioManagerRef.current.seek(restored.position);
+          if (audioUrl) {
+            // Use cached audio URL
+            const cachedUrl = await getCachedAudioUrl(audioUrl);
+            await audioManagerRef.current.loadTrack(cachedUrl);
+            
+            // Seek to the stored position if it's valid
+            if (restored.position > 0) {
+              audioManagerRef.current.seek(restored.position);
+            }
+          } else {
+            console.warn('No audio URL found for track, clearing state');
+            clearPlaybackState();
+            return;
           }
           
           // Don't auto-play on restoration, just restore the state
@@ -819,6 +844,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     repeatMode,
     progress,
     duration,
+    volume,
     
     // Actions
     playPlaylist,
@@ -831,6 +857,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     toggleShuffle,
     cycleRepeat,
     stop,
+    setVolume,
     
     // Queue management
     buildQueue,
@@ -846,6 +873,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     repeatMode,
     progress,
     duration,
+    volume,
     playPlaylist,
     playTrack,
     pause,
@@ -855,6 +883,7 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     seek,
     toggleShuffle,
     cycleRepeat,
+    setVolume,
     stop,
     buildQueue,
     getNextTrack,

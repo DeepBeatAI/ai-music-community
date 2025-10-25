@@ -284,7 +284,9 @@ export function TrackReorderList({
                   )}
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                  {track.description || 'No description'}
+                  {track.artist_name && track.description 
+                    ? `${track.artist_name} • ${track.description}`
+                    : track.artist_name || track.description || 'No description'}
                 </p>
               </div>
 

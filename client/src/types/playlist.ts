@@ -8,6 +8,22 @@ export type PlaylistUpdate = Database['public']['Tables']['playlists']['Update']
 export type PlaylistTrack = Database['public']['Tables']['playlist_tracks']['Row'];
 export type PlaylistTrackInsert = Database['public']['Tables']['playlist_tracks']['Insert'];
 
+// Extended track type for playlist display
+// This is a flexible type that can represent tracks from different sources
+export interface PlaylistTrackDisplay {
+  id: string;
+  title: string;
+  artist_name?: string | null;
+  description?: string | null;
+  audio_url?: string | null;
+  file_url?: string | null;
+  duration?: number | null;
+  cover_image_url?: string | null;
+  genre?: string | null;
+  // Allow any additional properties from the full Track type
+  [key: string]: any;
+}
+
 // Extended types with relationships
 export interface PlaylistWithTracks extends Playlist {
   tracks: Array<{
@@ -15,7 +31,7 @@ export interface PlaylistWithTracks extends Playlist {
     track_id: string;
     position: number;
     added_at: string;
-    track: Track; // Now correctly references Track type from tracks table
+    track: PlaylistTrackDisplay; // Use display type that includes artist_name
   }>;
   track_count: number;
 }

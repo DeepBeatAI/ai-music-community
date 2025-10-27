@@ -276,7 +276,7 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
 
       {/* Post Content */}
       <div className="p-4 space-y-4">
-        {/* Text Content */}
+        {/* Text Content / Post Caption */}
         {post.content && (
           <div className="text-gray-200 leading-relaxed">
             {truncateText(post.content, 500)}
@@ -296,6 +296,19 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
             post={post} 
             showWaveform={showWaveform}
           />
+        )}
+
+        {/* Track Description (separate from post caption) */}
+        {post.post_type === 'audio' && post.track?.description && (
+          <div className="mt-3 p-3 bg-gray-700/50 rounded-lg border border-gray-600">
+            <p className="text-sm font-semibold text-gray-300 mb-1">About this track:</p>
+            <p 
+              className="text-sm text-gray-400 leading-relaxed cursor-help" 
+              title={post.track.description}
+            >
+              {truncateText(post.track.description, 300)}
+            </p>
+          </div>
         )}
       </div>
 

@@ -288,11 +288,14 @@ export function TrackReorderList({
                     </div>
                   )}
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                  {track.artist_name && track.description 
-                    ? `${track.artist_name} • ${track.description}`
-                    : track.artist_name || track.description || 'No description'}
-                </p>
+                {track.description && (
+                  <p 
+                    className="text-sm text-gray-500 dark:text-gray-400 truncate cursor-help" 
+                    title={track.description}
+                  >
+                    {track.description}
+                  </p>
+                )}
               </div>
 
               {/* Duration */}

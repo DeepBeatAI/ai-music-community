@@ -13,14 +13,35 @@ A platform for creators to share and discover AI-generated music.
 
 ## Key Features
 
-### Playlist System
-Create and manage collections of your favorite tracks:
+### Playlist System with Playback
+Create, manage, and play collections of your favorite tracks:
+
+#### Playlist Management
 - **Create Playlists**: Organize tracks into custom collections with names and descriptions
 - **Privacy Controls**: Choose between public playlists (visible to all) or private playlists (personal only)
 - **Track Management**: Add and remove tracks from playlists with position tracking
+- **Drag-and-Drop Reordering**: Reorder tracks by dragging them to new positions (playlist owners only)
 - **Playlist Discovery**: Browse your own playlists and discover public playlists from other users
 - **Secure Access**: Row Level Security (RLS) ensures users can only modify their own playlists
 - **Optimized Performance**: Indexed queries and efficient data fetching for fast load times
+
+#### Playback Features
+- **Play All**: Start playback from the beginning of any playlist
+- **Track-Specific Playback**: Start playback from any track in the playlist
+- **Persistent Mini Player**: Audio player remains visible across all pages during playback
+- **Playback Controls**: Play/pause, previous/next track, seek to position
+- **Shuffle Mode**: Randomize track playback order
+- **Repeat Modes**: Choose from off, repeat playlist, or repeat single track
+- **State Persistence**: Playback state (position, mode, queue) persists across page refreshes
+- **Automatic Progression**: Tracks automatically advance to the next in the queue
+
+#### Mini Player
+The mini player appears at the bottom of the screen during playback and includes:
+- Current track information (title, artist, cover image)
+- Playback controls (play/pause, previous, next)
+- Progress bar with seek functionality
+- Shuffle and repeat mode toggles
+- Close button to stop playback
 
 **Usage**:
 1. Navigate to the "Playlists" section from the main navigation
@@ -28,6 +49,10 @@ Create and manage collections of your favorite tracks:
 3. Add tracks to playlists using the "Add to Playlist" button on any track
 4. View and manage your playlists from the playlists page
 5. Click on a playlist to see all tracks and manage the collection
+6. Click "Play All" to start playback from the beginning
+7. Click the play button on any track to start from that track
+8. Use the mini player to control playback while browsing the site
+9. Drag tracks to reorder them in your playlists (owners only)
 
 ### Performance Dashboard
 Real-time monitoring for developers and power users:
@@ -130,6 +155,10 @@ See [Analytics Deployment Checklist](docs/features/analytics/guides/guide-deploy
 
 ## Documentation
 
+- **Playlist Playback System**: [.kiro/specs/playlist-playback-enhancements/](.kiro/specs/playlist-playback-enhancements/)
+  - [Requirements](.kiro/specs/playlist-playback-enhancements/requirements.md)
+  - [Design](.kiro/specs/playlist-playback-enhancements/design.md)
+  - [Implementation Tasks](.kiro/specs/playlist-playback-enhancements/tasks.md)
 - **Analytics System**: [docs/features/analytics/](docs/features/analytics/)
   - [System Overview](docs/features/analytics/README.md)
   - [Backfill Guide](docs/features/analytics/guides/guide-backfill.md)

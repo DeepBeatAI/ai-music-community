@@ -58,6 +58,10 @@ export default function AudioUpload({
   const [trackDescription, setTrackDescription] = useState('');
   const [showTrackForm, setShowTrackForm] = useState(false);
   
+  // NEW: Post caption state (separate from track description)
+  const [postCaption, setPostCaption] = useState('');
+  const [showPostForm, setShowPostForm] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
@@ -201,6 +205,9 @@ export default function AudioUpload({
       if (result.success && result.track) {
         setUploadedTrack(result.track);
         
+        // Show post creation form after successful track upload
+        setShowPostForm(true);
+        
         // Notify parent component
         if (onTrackUploaded) {
           onTrackUploaded(result.track.id, result.track);
@@ -266,6 +273,8 @@ export default function AudioUpload({
     setTrackDescription('');
     setShowTrackForm(false);
     setUploadProgress(0);
+    setPostCaption('');
+    setShowPostForm(false);
     onFileRemove();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -441,13 +450,13 @@ export default function AudioUpload({
 
             <div>
               <label htmlFor="track-description" className="block text-sm font-medium text-gray-300 mb-1">
-                Description (optional)
+                Track Description (optional)
               </label>
               <textarea
                 id="track-description"
                 value={trackDescription}
                 onChange={(e) => setTrackDescription(e.target.value)}
-                placeholder="Add a description for your track"
+                placeholder="Describe your music, genre, inspiration..."
                 rows={3}
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 disabled={isUploadingTrack}
@@ -511,7 +520,7 @@ export default function AudioUpload({
       )}
 
       {/* NEW: Track Upload Success */}
-      {uploadedTrack && (
+      {uploadedTrack && !showPostForm && (
         <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
           <div className="flex items-start space-x-3">
             <span className="text-2xl">✅</span>
@@ -525,6 +534,64 @@ export default function AudioUpload({
                   {uploadedTrack.description}
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Post Caption Form (appears after track upload) */}
+      {uploadedTrack && showPostForm && (
+        <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 space-y-4">
+          <div className="flex items-start space-x-3 mb-3">
+            <span className="text-2xl">✅</span>
+            <div className="flex-1">
+              <p className="text-green-400 font-medium mb-1">Track uploaded successfully!</p>
+              <p className="text-green-300 text-sm">{uploadedTrack.title}</p>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-600 pt-4">
+            <h3 className="text-lg font-medium text-gray-200 mb-3">Create a Post? (Optional)</h3>
+            
+            <div>
+              <label htmlFor="post-caption" className="block text-sm font-medium text-gray-300 mb-1">
+                What&apos;s on your mind?
+              </label>
+              <textarea
+                id="post-caption"
+                value={postCaption}
+                onChange={(e) => setPostCaption(e.target.value)}
+                placeholder="Share your thoughts about this track..."
+                rows={3}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                This caption will appear when you share this track as a post. It&apos;s separate from the track description.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center space-x-3 mt-4">
+              <button
+                onClick={() => {
+                  // TODO: Create post with caption
+                  console.log('Creating post with caption:', postCaption);
+                  setShowPostForm(false);
+                }}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Share as Post
+              </button>
+              
+              <button
+                onClick={() => {
+                  // Skip post creation
+                  setShowPostForm(false);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Skip - Just Save Track
+              </button>
             </div>
           </div>
         </div>

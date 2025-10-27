@@ -68,6 +68,19 @@ inclusion: always
    - Auto-refresh capability (5-second intervals)
    - LocalStorage persistence for metrics
 
+### Completed Features (Month 4 Week 1)
+3. ✅ **Playlist Playback Enhancements** - Comprehensive audio playback system
+   - Sequential playlist playback with automatic track progression
+   - Persistent mini player across all pages
+   - Playback controls (play/pause, previous, next, seek)
+   - Shuffle mode with Fisher-Yates algorithm
+   - Repeat modes (off, playlist, track)
+   - State persistence across page refreshes (SessionStorage)
+   - Drag-and-drop track reordering for playlist owners
+   - Two-section playlists page (My Playlists, Public Playlists)
+   - Integration with getCachedAudioUrl for optimized loading
+   - Preloading next track for seamless transitions
+
 ### Current Sprint Focus
 1. **Audio optimization** - compression and caching improvements
 2. **Social features** - likes, comments, following system
@@ -138,8 +151,55 @@ inclusion: always
 
 **Future Improvements**:
 - Consider implementing playlist cover image upload functionality
-- Add drag-and-drop track reordering in playlists
+- ~~Add drag-and-drop track reordering in playlists~~ ✅ Completed in Month 4 Week 1
 - Implement playlist sharing with shareable links
 - Add playlist analytics (play counts, popular tracks)
 - Consider collaborative playlists (multiple owners)
 - Add export/import functionality for playlists
+
+### Month 4 Week 1 - Playlist Playback Enhancements
+
+**What Worked Well**:
+- **Context-Based Architecture**: Using React Context for global playback state provided clean separation of concerns
+- **SessionStorage Persistence**: Playback state persistence across page refreshes enhanced user experience significantly
+- **AudioManager Abstraction**: Wrapping HTMLAudioElement in a class simplified event handling and resource management
+- **Incremental Queue Building**: Building queue on-demand rather than upfront improved performance
+- **Memoization Strategy**: Proper use of useMemo and memo prevented unnecessary re-renders in mini player
+
+**Challenges Overcome**:
+- **State Synchronization**: Keeping AudioManager, Context, and UI in sync required careful event handling
+- **Shuffle Algorithm**: Implementing Fisher-Yates shuffle correctly to avoid bias in randomization
+- **Drag-and-Drop UX**: Providing visual feedback during drag operations while maintaining performance
+- **Repeat Mode Logic**: Handling three repeat modes (off/playlist/track) with proper queue management
+- **Stale State Handling**: Implementing 1-hour TTL to prevent restoring outdated playback state
+
+**Technical Insights**:
+- **Event-Driven Architecture**: Audio events (ended, timeupdate, error) drive state updates cleanly
+- **Preloading Strategy**: Preloading next track during current track playback eliminates transition delays
+- **Throttled Persistence**: Throttling SessionStorage writes to 1-second intervals prevents performance issues
+- **Optimistic UI**: Immediate visual feedback for drag-and-drop with background database updates
+- **Context Memoization**: Memoizing context value prevents consumer re-renders when state hasn't changed
+
+**Best Practices Established**:
+- Always validate restored state before applying (check playlist exists, track exists)
+- Use event-driven architecture for audio playback rather than polling
+- Implement proper cleanup in useEffect hooks to prevent memory leaks
+- Provide visual feedback for all user interactions (drag, mode toggles)
+- Test playback across page navigation to ensure persistence works
+- Use TypeScript discriminated unions for mode types (RepeatMode)
+
+**Technical Decisions**:
+- **SessionStorage over LocalStorage**: Playback state is session-specific, shouldn't persist across browser sessions
+- **Context over Redux**: Simpler state management for playback, no need for complex middleware
+- **HTML5 Drag and Drop**: Native API provides better performance than library-based solutions
+- **Fisher-Yates Shuffle**: Industry-standard algorithm ensures unbiased randomization
+- **Batch Position Updates**: Single database function call for reordering improves performance
+
+**Future Improvements**:
+- Add volume control to mini player
+- Implement playback speed adjustment (0.5x, 1x, 1.5x, 2x)
+- Add crossfade between tracks for smoother transitions
+- Implement queue visualization and manual editing
+- Add keyboard shortcuts for playback control (space, arrow keys)
+- Consider implementing collaborative playlists with real-time updates
+- Add playlist analytics (play counts, skip rates, popular tracks)

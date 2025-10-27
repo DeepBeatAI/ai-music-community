@@ -93,10 +93,17 @@ ALTER TABLE public.tracks
   ADD CONSTRAINT track_duration_positive 
     CHECK (duration IS NULL OR duration > 0);
 
--- Ensure file size is positive if provided
-ALTER TABLE public.tracks
-  ADD CONSTRAINT track_file_size_positive 
-    CHECK (file_size IS NULL OR file_size > 0);
+-- Ensure file size is positive if provided (skip if already exists)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'track_file_size_positive'
+  ) THEN
+    ALTER TABLE public.tracks
+      ADD CONSTRAINT track_file_size_positive 
+        CHECK (file_size IS NULL OR file_size > 0);
+  END IF;
+END $$;
 
 -- Ensure compression ratio is reasonable if provided
 ALTER TABLE public.tracks
@@ -271,21 +278,24 @@ INSERT INTO public.migration_log (
 -- MIGRATION COMPLETE
 -- ============================================================================
 
-RAISE NOTICE '=================================================================';
-RAISE NOTICE 'Migration 004_finalize_tracks_posts_separation completed successfully';
-RAISE NOTICE '=================================================================';
-RAISE NOTICE 'Summary:';
-RAISE NOTICE '- Added constraint: audio posts must have track_id';
-RAISE NOTICE '- Marked deprecated audio_* columns in posts table';
-RAISE NOTICE '- Added performance indexes for tracks table';
-RAISE NOTICE '- Added data integrity constraints';
-RAISE NOTICE '- Created helper functions for track management';
-RAISE NOTICE '- Updated RLS policies';
-RAISE NOTICE '=================================================================';
-RAISE NOTICE 'Next steps:';
-RAISE NOTICE '1. Monitor application for any issues';
-RAISE NOTICE '2. After 2-4 weeks verification period, run migration 005 to remove deprecated columns';
-RAISE NOTICE '3. Update application code to remove compatibility layer';
-RAISE NOTICE '=================================================================';
+DO $$
+BEGIN
+  RAISE NOTICE '=================================================================';
+  RAISE NOTICE 'Migration 004_finalize_tracks_posts_separation completed successfully';
+  RAISE NOTICE '=================================================================';
+  RAISE NOTICE 'Summary:';
+  RAISE NOTICE '- Added constraint: audio posts must have track_id';
+  RAISE NOTICE '- Marked deprecated audio_* columns in posts table';
+  RAISE NOTICE '- Added performance indexes for tracks table';
+  RAISE NOTICE '- Added data integrity constraints';
+  RAISE NOTICE '- Created helper functions for track management';
+  RAISE NOTICE '- Updated RLS policies';
+  RAISE NOTICE '=================================================================';
+  RAISE NOTICE 'Next steps:';
+  RAISE NOTICE '1. Monitor application for any issues';
+  RAISE NOTICE '2. After 2-4 weeks verification period, run migration 005 to remove deprecated columns';
+  RAISE NOTICE '3. Update application code to remove compatibility layer';
+  RAISE NOTICE '=================================================================';
+END $$;
 
 COMMIT;

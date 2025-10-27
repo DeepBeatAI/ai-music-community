@@ -145,7 +145,8 @@ export default function Dashboard() {
   // Component state
   const [activeTab, setActiveTab] = useState<"text" | "audio">("text");
   const [textContent, setTextContent] = useState("");
-  const [audioDescription, setAudioDescription] = useState("");
+  const [trackDescription, setTrackDescription] = useState(""); // Track metadata description
+  const [audioDescription, setAudioDescription] = useState(""); // Post caption
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1042,7 +1043,7 @@ export default function Dashboard() {
       const uploadResult = await uploadTrack(user.id, {
         file: selectedAudioFile,
         title: originalFileName.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, ''),
-        description: audioDescription || undefined,
+        description: trackDescription || undefined, // Track metadata description
         is_public: true,
       });
 
@@ -1057,15 +1058,16 @@ export default function Dashboard() {
         console.log('✅ Compression applied:', uploadResult.compressionInfo);
       }
 
-      // Create post with track reference
+      // Create post with track reference (post caption)
       await createAudioPost(
         user.id,
         track.id,
-        audioDescription || undefined
+        audioDescription || undefined // Post caption/social commentary
       );
 
       console.log('✅ Audio post created successfully');
       
+      setTrackDescription("");
       setAudioDescription("");
       setSelectedAudioFile(null);
 
@@ -1082,7 +1084,7 @@ export default function Dashboard() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, selectedAudioFile, audioDescription, loadPosts, paginationManager]);
+  }, [user, selectedAudioFile, trackDescription, audioDescription, loadPosts, paginationManager]);
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -1332,6 +1334,32 @@ export default function Dashboard() {
 
                   <div>
                     <label
+                      htmlFor="trackDescription"
+                      className="block text-sm font-medium text-gray-300 mb-2"
+                    >
+                      Track Description{" "}
+                      <span className="text-gray-500">(optional)</span>
+                    </label>
+                    <textarea
+                      id="trackDescription"
+                      className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      rows={2}
+                      placeholder="Describe your music, genre, inspiration..."
+                      value={trackDescription}
+                      onChange={(e) => setTrackDescription(e.target.value)}
+                      maxLength={500}
+                      disabled={isSubmitting}
+                    />
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-400">
+                        {trackDescription.length}/500 characters
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
                       htmlFor="audioDescription"
                       className="block text-sm font-medium text-gray-300 mb-2"
                     >
@@ -1343,7 +1371,7 @@ export default function Dashboard() {
                       className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white
                         focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       rows={3}
-                      placeholder="Tell us about your AI music creation... What tools did you use? What inspired this piece?"
+                      placeholder="Share your thoughts about this track..."
                       value={audioDescription}
                       onChange={(e) => setAudioDescription(e.target.value)}
                       maxLength={2000}

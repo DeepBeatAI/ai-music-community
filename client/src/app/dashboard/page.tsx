@@ -140,11 +140,12 @@ const LoadMoreErrorBoundary = ({ children }: { children: React.ReactNode }) => (
 const POSTS_PER_PAGE = 15;
 
 export default function Dashboard() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
 
   // Component state
   const [activeTab, setActiveTab] = useState<"text" | "audio">("text");
   const [textContent, setTextContent] = useState("");
+  const [trackAuthor, setTrackAuthor] = useState(""); // Track author (mandatory, immutable)
   const [trackDescription, setTrackDescription] = useState(""); // Track metadata description
   const [audioDescription, setAudioDescription] = useState(""); // Post caption
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
@@ -523,6 +524,16 @@ export default function Dashboard() {
       loadPosts(1, false);
     }
   }, [user, loadPosts]);
+
+  // Pre-fill track author with username when form opens
+  const hasInitializedAuthor = useRef(false);
+  useEffect(() => {
+    // Pre-fill when form is expanded and author is empty and we haven't initialized yet
+    if (isPostFormExpanded && profile?.username && !trackAuthor && !hasInitializedAuthor.current) {
+      setTrackAuthor(profile.username);
+      hasInitializedAuthor.current = true;
+    }
+  }, [isPostFormExpanded, profile?.username, trackAuthor]);
 
   // Handle search
   const handleSearch = useCallback(
@@ -1039,10 +1050,15 @@ export default function Dashboard() {
       const originalFileName = selectedAudioFile.name;
       console.log('Creating audio post with file:', originalFileName, 'Size:', selectedAudioFile.size);
       
+      // Ensure author is not empty
+      const authorValue = trackAuthor.trim() || profile?.username || 'Unknown Artist';
+      console.log('📝 Track author:', authorValue);
+      
       // Upload track (handles file upload AND compression internally)
       const uploadResult = await uploadTrack(user.id, {
         file: selectedAudioFile,
         title: originalFileName.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, ''),
+        author: authorValue, // Mandatory author field
         description: trackDescription || undefined, // Track metadata description
         is_public: true,
       });
@@ -1067,6 +1083,8 @@ export default function Dashboard() {
 
       console.log('✅ Audio post created successfully');
       
+      setTrackAuthor(profile?.username || ""); // Reset to default
+      hasInitializedAuthor.current = false; // Allow re-initialization for next upload
       setTrackDescription("");
       setAudioDescription("");
       setSelectedAudioFile(null);
@@ -1084,7 +1102,7 @@ export default function Dashboard() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, selectedAudioFile, trackDescription, audioDescription, loadPosts, paginationManager]);
+  }, [user, selectedAudioFile, trackAuthor, profile?.username, trackDescription, audioDescription, paginationManager, loadPosts]);
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -1334,6 +1352,40 @@ export default function Dashboard() {
 
                   <div>
                     <label
+                      htmlFor="trackAuthor"
+                      className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2"
+                    >
+                      Track Author *
+                      <span 
+                        className="text-amber-500 cursor-help" 
+                        title="Author cannot be changed after upload. To change, you must delete and re-upload the track."
+                      >
+                        ⚠️
+                      </span>
+                    </label>
+                    <input
+                      id="trackAuthor"
+                      type="text"
+                      className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white
+                        focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter artist/author name"
+                      value={trackAuthor}
+                      onChange={(e) => setTrackAuthor(e.target.value)}
+                      maxLength={100}
+                      required
+                      disabled={isSubmitting}
+                    />
+                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                      <span>⚠️</span>
+                      <span>Warning: Author cannot be changed after upload</span>
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Default is your username. Edit for covers, remixes, or collaborations.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
                       htmlFor="trackDescription"
                       className="block text-sm font-medium text-gray-300 mb-2"
                     >
@@ -1395,7 +1447,13 @@ export default function Dashboard() {
                   <div className="mt-6 flex justify-between items-center">
                     <button
                       type="button"
-                      onClick={() => setIsPostFormExpanded(false)}
+                      onClick={() => {
+                        setIsPostFormExpanded(false);
+                        // Reset initialization flag so author will be pre-filled next time
+                        hasInitializedAuthor.current = false;
+                        // Clear the author field
+                        setTrackAuthor("");
+                      }}
                       className="px-4 py-2 text-gray-400 hover:text-gray-200 transition-colors text-sm"
                     >
                       Cancel
@@ -1406,7 +1464,7 @@ export default function Dashboard() {
                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       disabled={
                         isSubmitting ||
-                        (activeTab === "audio" && !selectedAudioFile)
+                        (activeTab === "audio" && (!selectedAudioFile || !trackAuthor.trim()))
                       }
                     >
                       {isSubmitting ? (

@@ -59,6 +59,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: mockFile,
         title: 'Integration Test Track',
+        author: 'Test Artist',
         description: 'Test track for integration testing',
         is_public: true,
       });
@@ -115,6 +116,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: mockFile,
         title: 'Compression Test Track',
+        author: 'Test Artist',
         is_public: true,
       });
 
@@ -145,6 +147,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: mockFile,
         title: 'Reusable Track',
+        author: 'Test Artist',
         description: 'This track will be used in multiple posts',
         is_public: true,
       });
@@ -204,6 +207,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: mockFile,
         title: 'Persistent Track',
+        author: 'Test Artist',
         is_public: true,
       });
 
@@ -230,6 +234,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const track1Result = await uploadTrack(TEST_USER_ID, {
         file: createMockAudioFile('playlist-track-1.mp3'),
         title: 'Playlist Track 1',
+        author: 'Test Artist',
         is_public: true,
       });
       const track1Id = track1Result.track!.id;
@@ -238,6 +243,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const track2Result = await uploadTrack(TEST_USER_ID, {
         file: createMockAudioFile('playlist-track-2.mp3'),
         title: 'Playlist Track 2',
+        author: 'Test Artist',
         is_public: true,
       });
       const track2Id = track2Result.track!.id;
@@ -282,6 +288,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: createMockAudioFile('duplicate-test.mp3'),
         title: 'Duplicate Test Track',
+        author: 'Test Artist',
         is_public: true,
       });
       const trackId = uploadResult.track!.id;
@@ -318,6 +325,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: largeFile,
         title: 'Too Large Track',
+        author: 'Test Artist',
         is_public: true,
       });
 
@@ -331,6 +339,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: invalidFile,
         title: 'Invalid Format Track',
+        author: 'Test Artist',
         is_public: true,
       });
 
@@ -344,6 +353,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: mockFile,
         title: '', // Empty title
+        author: 'Test Artist',
         is_public: true,
       });
 
@@ -356,6 +366,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: createMockAudioFile('delete-test.mp3'),
         title: 'Track to Delete',
+        author: 'Test Artist',
         is_public: true,
       });
       const trackId = uploadResult.track!.id;
@@ -419,6 +430,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: createMockAudioFile('constraint-test.mp3'),
         title: 'Constraint Test Track',
+        author: 'Test Artist',
         is_public: true,
       });
       const trackId = uploadResult.track!.id;
@@ -444,6 +456,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: mockFile,
         title: '   ', // Whitespace only
+        author: 'Test Artist',
         is_public: true,
       });
 
@@ -458,6 +471,7 @@ describe('Tracks vs Posts Separation - End-to-End Integration', () => {
       const uploadResult = await uploadTrack(TEST_USER_ID, {
         file: mockFile,
         title: longTitle,
+        author: 'Test Artist',
         is_public: true,
       });
 

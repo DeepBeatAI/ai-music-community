@@ -63,6 +63,7 @@ describe('Track Management Functions', () => {
     const validUploadData: TrackUploadData = {
       file: createMockFile(1024 * 1024, 'audio/mpeg', 'test.mp3'), // 1MB
       title: 'Test Track',
+      author: 'Test Artist',
       description: 'Test Description',
       is_public: true,
     };
@@ -85,6 +86,7 @@ describe('Track Management Functions', () => {
         id: mockTrackId,
         user_id: mockUserId,
         title: 'Test Track',
+        author: 'Test Artist',
         description: 'Test Description',
         file_url: 'https://example.com/test.mp3',
         file_size: 1024 * 1024,
@@ -322,6 +324,7 @@ describe('Track Management Functions', () => {
           id: mockTrackId,
           user_id: mockUserId,
           title: 'Test Track',
+          author: 'Test Artist',
           description: 'Test Description',
           file_url: 'https://example.com/compressed.mp3',
           file_size: 2 * 1024 * 1024,
@@ -501,6 +504,7 @@ describe('Track Management Functions', () => {
         id: mockTrackId,
         user_id: mockUserId,
         title: 'Test Track',
+        author: 'Test Artist',
         description: 'Test Description',
         file_url: 'https://example.com/test.mp3',
         file_size: 1024 * 1024,
@@ -576,6 +580,7 @@ describe('Track Management Functions', () => {
         id: 'track-1',
         user_id: mockUserId,
         title: 'Public Track 1',
+        author: 'Test Artist',
         description: null,
         file_url: 'https://example.com/track1.mp3',
         file_size: 1024,
@@ -595,6 +600,7 @@ describe('Track Management Functions', () => {
         id: 'track-2',
         user_id: mockUserId,
         title: 'Private Track',
+        author: 'Test Artist',
         description: null,
         file_url: 'https://example.com/track2.mp3',
         file_size: 1024,

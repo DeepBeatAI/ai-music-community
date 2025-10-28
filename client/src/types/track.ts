@@ -28,6 +28,7 @@ export interface TrackWithCompression extends Track {
 // Form data interfaces
 export interface TrackFormData {
   title: string;
+  author: string; // Mandatory, immutable after creation
   description?: string;
   genre?: string;
   tags?: string;

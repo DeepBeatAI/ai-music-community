@@ -28,7 +28,8 @@ jest.mock('@/utils/audioCache', () => ({
 const mockTracks: Track[] = [
     { 
       id: '1', 
-      title: 'Track 1', 
+      title: 'Track 1',
+      author: 'Test Artist',
       file_url: 'url1',
       duration: 180,
       user_id: 'user-1',
@@ -47,7 +48,8 @@ const mockTracks: Track[] = [
     },
     { 
       id: '2', 
-      title: 'Track 2', 
+      title: 'Track 2',
+      author: 'Test Artist',
       file_url: 'url2',
       duration: 200,
       user_id: 'user-1',
@@ -66,7 +68,8 @@ const mockTracks: Track[] = [
     },
     { 
       id: '3', 
-      title: 'Track 3', 
+      title: 'Track 3',
+      author: 'Test Artist',
       file_url: 'url3',
       duration: 220,
       user_id: 'user-1',
@@ -85,7 +88,8 @@ const mockTracks: Track[] = [
     },
     { 
       id: '4', 
-      title: 'Track 4', 
+      title: 'Track 4',
+      author: 'Test Artist',
       file_url: 'url4',
       duration: 240,
       user_id: 'user-1',

@@ -109,6 +109,38 @@ export async function uploadTrack(
   const startTime = Date.now();
   
   try {
+    // Validate author field (mandatory)
+    if (!uploadData.author || uploadData.author.trim().length === 0) {
+      const errorDetails = createTrackError(TrackUploadError.VALIDATION_ERROR, 'Author is required');
+      logTrackError('uploadTrack:validation:author', errorDetails, {
+        userId,
+        fileName: uploadData.file.name,
+      });
+      
+      return {
+        success: false,
+        error: 'Author is required',
+        errorCode: TrackUploadError.VALIDATION_ERROR,
+        details: 'Author field cannot be empty',
+      };
+    }
+
+    if (uploadData.author.length > 100) {
+      const errorDetails = createTrackError(TrackUploadError.VALIDATION_ERROR, 'Author name too long');
+      logTrackError('uploadTrack:validation:author', errorDetails, {
+        userId,
+        fileName: uploadData.file.name,
+        authorLength: uploadData.author.length,
+      });
+      
+      return {
+        success: false,
+        error: 'Author name must be 100 characters or less',
+        errorCode: TrackUploadError.VALIDATION_ERROR,
+        details: `Author length: ${uploadData.author.length} characters`,
+      };
+    }
+    
     // Validate upload data
     const validation = validateTrackUpload(uploadData.file, uploadData.title);
     if (!validation.success) {
@@ -269,6 +301,7 @@ export async function uploadTrack(
       .insert({
         user_id: userId,
         title: uploadData.title,
+        author: uploadData.author.trim(), // Mandatory author field
         description: uploadData.description || null,
         file_url: publicUrl,
         file_size: finalFileSize,
@@ -455,8 +488,11 @@ export async function getUserTracks(
  * Updates the metadata of an existing track.
  * Only the track owner can update their tracks (enforced by RLS).
  * 
+ * NOTE: Author field is immutable and cannot be updated after track creation.
+ * To change the author, the track must be deleted and re-uploaded.
+ * 
  * @param trackId - The UUID of the track to update
- * @param updates - Partial track data to update
+ * @param updates - Partial track data to update (excluding author)
  * @returns Promise<boolean> - True if update succeeded, false otherwise
  * 
  * @example
@@ -470,7 +506,7 @@ export async function getUserTracks(
  */
 export async function updateTrack(
   trackId: string,
-  updates: Partial<TrackFormData>
+  updates: Partial<Omit<TrackFormData, 'author'>> // Exclude author from updates
 ): Promise<boolean> {
   try {
     const { error } = await supabase

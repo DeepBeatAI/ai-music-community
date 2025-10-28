@@ -38,7 +38,7 @@ export default function AudioUpload({
   uploadMode = 'legacy', // Default to legacy mode for backward compatibility
   showLibraryOption = false // Default to false for backward compatibility
 }: AudioUploadProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [validation, setValidation] = useState<AudioValidationResult | null>(null);
@@ -55,6 +55,7 @@ export default function AudioUpload({
   const [uploadedTrack, setUploadedTrack] = useState<UploadedTrack | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [trackTitle, setTrackTitle] = useState('');
+  const [trackAuthor, setTrackAuthor] = useState(''); // NEW: Author field
   const [trackDescription, setTrackDescription] = useState('');
   const [showTrackForm, setShowTrackForm] = useState(false);
   
@@ -153,6 +154,10 @@ export default function AudioUpload({
         // Auto-populate title from filename
         const defaultTitle = finalFile.name.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, '');
         setTrackTitle(defaultTitle);
+        // Pre-fill author with username from profile
+        if (profile?.username && !trackAuthor) {
+          setTrackAuthor(profile.username);
+        }
       } else {
         // LEGACY: Notify parent component directly
         onFileSelect(finalFile, validationResult.duration, compressionInfo || undefined);
@@ -168,7 +173,7 @@ export default function AudioUpload({
       setIsValidating(false);
       setIsCompressing(false);
     }
-  }, [onFileSelect, enableCompression, compressionQuality, uploadMode]);
+  }, [enableCompression, uploadMode, compressionQuality, profile?.username, trackAuthor, onFileSelect]);
 
   // NEW: Handle track upload
   const handleTrackUpload = useCallback(async () => {
@@ -191,6 +196,7 @@ export default function AudioUpload({
       const uploadData: TrackUploadData = {
         file: validation.file, // Original file (uploadTrack will handle compression internally)
         title: trackTitle || selectedFile.name.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, ''),
+        author: trackAuthor.trim() || profile?.username || 'Unknown Artist', // Mandatory author field
         description: trackDescription || undefined,
         is_public: true, // Default to public
         // Pass compression result so uploadTrack knows compression already happened
@@ -224,7 +230,7 @@ export default function AudioUpload({
     } finally {
       setIsUploadingTrack(false);
     }
-  }, [user, selectedFile, validation, trackTitle, trackDescription, compressionResult, onTrackUploaded, onFileSelect]);
+  }, [user, selectedFile, validation, trackTitle, trackAuthor, profile?.username, trackDescription, compressionResult, onTrackUploaded, onFileSelect]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -270,6 +276,7 @@ export default function AudioUpload({
     setUploadedTrack(null);
     setUploadError(null);
     setTrackTitle('');
+    setTrackAuthor(''); // Reset author field
     setTrackDescription('');
     setShowTrackForm(false);
     setUploadProgress(0);
@@ -449,6 +456,36 @@ export default function AudioUpload({
             </div>
 
             <div>
+              <label htmlFor="track-author" className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-1">
+                Track Author *
+                <span 
+                  className="text-amber-500 cursor-help" 
+                  title="Author cannot be changed after upload. To change, you must delete and re-upload the track."
+                >
+                  ⚠️
+                </span>
+              </label>
+              <input
+                id="track-author"
+                type="text"
+                value={trackAuthor}
+                onChange={(e) => setTrackAuthor(e.target.value)}
+                placeholder="Enter artist/author name"
+                maxLength={100}
+                required
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={isUploadingTrack}
+              />
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                <span>⚠️</span>
+                <span>Warning: Author cannot be changed after upload</span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Default is your username. Edit for covers, remixes, or collaborations.
+              </p>
+            </div>
+
+            <div>
               <label htmlFor="track-description" className="block text-sm font-medium text-gray-300 mb-1">
                 Track Description (optional)
               </label>
@@ -458,9 +495,18 @@ export default function AudioUpload({
                 onChange={(e) => setTrackDescription(e.target.value)}
                 placeholder="Describe your music, genre, inspiration..."
                 rows={3}
+                maxLength={500}
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 disabled={isUploadingTrack}
               />
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-xs text-gray-500">
+                  Describe the track itself (genre, inspiration, technical details)
+                </p>
+                <p className="text-xs text-gray-500">
+                  {trackDescription.length}/500
+                </p>
+              </div>
             </div>
           </div>
 
@@ -492,7 +538,7 @@ export default function AudioUpload({
           <div className="flex items-center space-x-3">
             <button
               onClick={handleTrackUpload}
-              disabled={isUploadingTrack || !trackTitle.trim()}
+              disabled={isUploadingTrack || !trackTitle.trim() || !trackAuthor.trim()}
               className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
             >
               {isUploadingTrack ? 'Uploading...' : 'Upload Track'}

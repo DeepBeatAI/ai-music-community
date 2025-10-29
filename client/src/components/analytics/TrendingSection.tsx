@@ -9,7 +9,7 @@ import {
   getCachedAnalytics,
   type TrendingTrack,
   type PopularCreator,
-} from '@/lib/analytics';
+} from '@/lib/trendingAnalytics';
 import { TrendingTrackCard } from '@/components/analytics/TrendingTrackCard';
 import { PopularCreatorCard } from '@/components/analytics/PopularCreatorCard';
 

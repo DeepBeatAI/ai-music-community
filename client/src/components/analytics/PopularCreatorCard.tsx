@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import type { PopularCreator } from '@/lib/analytics';
+import type { PopularCreator } from '@/lib/trendingAnalytics';
 
 interface PopularCreatorCardProps {
   creator: PopularCreator;

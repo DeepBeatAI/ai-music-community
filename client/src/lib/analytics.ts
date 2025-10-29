@@ -1,145 +1,130 @@
 /**
- * Analytics API Module
+ * Daily Metrics Analytics API Module
  * 
- * Provides functions to fetch trending tracks and popular creators
- * with built-in caching to reduce database load.
+ * This module handles the daily metrics collection system.
+ * For trending tracks and popular creators, see trendingAnalytics.ts
  */
 
 import { supabase } from './supabase';
-
-export interface TrendingTrack {
-  track_id: string;
-  title: string;
-  author: string;
-  play_count: number;
-  like_count: number;
-  trending_score: number;
-  created_at: string;
-}
-
-export interface PopularCreator {
-  user_id: string;
-  username: string;
-  avatar_url: string | null;
-  total_plays: number;
-  total_likes: number;
-  track_count: number;
-  creator_score: number;
-}
-
-// Cache configuration
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const cache = new Map<string, { data: unknown; timestamp: number }>();
+import type { CurrentMetrics, ActivityDataPoint } from '@/types/analytics';
 
 /**
- * Get trending tracks for last 7 days
+ * Fetch current platform metrics
  */
-export async function getTrendingTracks7Days(): Promise<TrendingTrack[]> {
+export async function fetchCurrentMetrics(): Promise<CurrentMetrics> {
   try {
-    const { data, error } = await supabase.rpc('get_trending_tracks', {
-      days_back: 7,
-      result_limit: 10,
+    // Fetch latest metrics from daily_metrics table
+    const { data, error } = await supabase
+      .from('daily_metrics')
+      .select('*')
+      .order('metric_date', { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+
+    // Transform to CurrentMetrics format
+    const metrics: CurrentMetrics = {
+      totalUsers: 0,
+      totalPosts: 0,
+      totalComments: 0,
+    };
+
+    if (data && data.length > 0) {
+      // Extract metrics from the data
+      // This is a simplified version - adjust based on your actual schema
+      data.forEach((metric: any) => {
+        if (metric.metric_category === 'users_total') {
+          metrics.totalUsers = metric.value;
+        } else if (metric.metric_category === 'posts_total') {
+          metrics.totalPosts = metric.value;
+        } else if (metric.metric_category === 'comments_total') {
+          metrics.totalComments = metric.value;
+        }
+      });
+    }
+
+    return metrics;
+  } catch (error) {
+    console.error('Error fetching current metrics:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch activity data over time
+ */
+export async function fetchActivityData(): Promise<ActivityDataPoint[]> {
+  try {
+    // Fetch activity data from daily_metrics table
+    const { data, error } = await supabase
+      .from('daily_metrics')
+      .select('*')
+      .order('metric_date', { ascending: true })
+      .limit(30); // Last 30 days
+
+    if (error) throw error;
+
+    // Transform to ActivityDataPoint format
+    const activityMap = new Map<string, ActivityDataPoint>();
+
+    data?.forEach((metric: any) => {
+      const date = metric.metric_date;
+      if (!activityMap.has(date)) {
+        activityMap.set(date, {
+          date,
+          posts: 0,
+          comments: 0,
+        });
+      }
+
+      const activity = activityMap.get(date)!;
+      if (metric.metric_category === 'posts_created') {
+        activity.posts = metric.value;
+      } else if (metric.metric_category === 'comments_created') {
+        activity.comments = metric.value;
+      }
+    });
+
+    return Array.from(activityMap.values());
+  } catch (error) {
+    console.error('Error fetching activity data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Trigger metric collection for a specific date
+ */
+export async function triggerMetricCollection(date: string): Promise<any> {
+  try {
+    // Call the database function to collect metrics
+    const { data, error } = await supabase.rpc('collect_daily_metrics', {
+      collection_date: date,
     });
 
     if (error) throw error;
-    return data || [];
+    return data;
   } catch (error) {
-    console.error('Error fetching trending tracks (7d):', error);
-    return [];
+    console.error('Error triggering metric collection:', error);
+    throw error;
   }
 }
 
 /**
- * Get trending tracks for all time
+ * Get collection status
  */
-export async function getTrendingTracksAllTime(): Promise<TrendingTrack[]> {
+export async function getCollectionStatus(): Promise<unknown> {
   try {
-    const { data, error } = await supabase.rpc('get_trending_tracks', {
-      days_back: 0, // 0 means all time
-      result_limit: 10,
-    });
+    const { data, error } = await supabase
+      .from('metric_collection_log')
+      .select('*')
+      .order('collection_date', { ascending: false })
+      .limit(10);
 
     if (error) throw error;
-    return data || [];
+    return data;
   } catch (error) {
-    console.error('Error fetching trending tracks (all time):', error);
-    return [];
+    console.error('Error fetching collection status:', error);
+    throw error;
   }
-}
-
-/**
- * Get popular creators for last 7 days
- */
-export async function getPopularCreators7Days(): Promise<PopularCreator[]> {
-  try {
-    const { data, error } = await supabase.rpc('get_popular_creators', {
-      days_back: 7,
-      result_limit: 5,
-    });
-
-    if (error) throw error;
-    return data || [];
-  } catch (error) {
-    console.error('Error fetching popular creators (7d):', error);
-    return [];
-  }
-}
-
-/**
- * Get popular creators for all time
- */
-export async function getPopularCreatorsAllTime(): Promise<PopularCreator[]> {
-  try {
-    const { data, error } = await supabase.rpc('get_popular_creators', {
-      days_back: 0, // 0 means all time
-      result_limit: 5,
-    });
-
-    if (error) throw error;
-    return data || [];
-  } catch (error) {
-    console.error('Error fetching popular creators (all time):', error);
-    return [];
-  }
-}
-
-/**
- * Cache wrapper for analytics data (5 minute cache)
- */
-export async function getCachedAnalytics<T>(
-  key: string,
-  fetcher: () => Promise<T>
-): Promise<T> {
-  const cached = cache.get(key);
-  const now = Date.now();
-
-  // Return cached data if still valid
-  if (cached && now - cached.timestamp < CACHE_DURATION) {
-    console.log(`[Analytics] Cache hit for: ${key}`);
-    return cached.data as T;
-  }
-
-  // Fetch fresh data
-  console.log(`[Analytics] Cache miss for: ${key}, fetching...`);
-  const data = await fetcher();
-  cache.set(key, { data, timestamp: now });
-  return data;
-}
-
-/**
- * Clear analytics cache (useful for testing or manual refresh)
- */
-export function clearAnalyticsCache(): void {
-  cache.clear();
-  console.log('[Analytics] Cache cleared');
-}
-
-/**
- * Get cache statistics (for monitoring)
- */
-export function getCacheStats(): { size: number; keys: string[] } {
-  return {
-    size: cache.size,
-    keys: Array.from(cache.keys()),
-  };
 }

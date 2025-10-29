@@ -1,6 +1,6 @@
 'use client';
 
-import type { TrendingTrack } from '@/lib/analytics';
+import type { TrendingTrack } from '@/lib/trendingAnalytics';
 
 interface TrendingTrackCardProps {
   track: TrendingTrack;

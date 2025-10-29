@@ -44,7 +44,9 @@ export default function MetricCollectionMonitor() {
       setTriggerSuccess(false);
       setError(null);
 
-      await triggerMetricCollection();
+      // Trigger collection for today's date
+      const today = new Date().toISOString().split('T')[0];
+      await triggerMetricCollection(today);
       
       setTriggerSuccess(true);
       

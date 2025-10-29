@@ -156,7 +156,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Display error message if author is invalid
   - _Requirements: 2.2_
 
-- [ ] 2.5 Update PostItem component for author display
+- [x] 2.5 Update PostItem component for author display
 
   - Open `client/src/components/PostItem.tsx`
   - For audio posts, display `post.track?.author` for track
@@ -165,14 +165,14 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Remove any JOINs with profiles for author display
   - _Requirements: 2.4_
 
-- [ ] 2.6 Update PlaylistTrackItem for author display
+- [x] 2.6 Update PlaylistTrackItem for author display
 
   - Open playlist track display component
   - Display `track.author` directly (no JOIN needed)
   - Show as "by [author]" below track title
   - _Requirements: 2.4_
 
-- [ ] 2.7 Update TrackCard and search results for author
+- [x] 2.7 Update TrackCard and search results for author
 
   - Find and update track card components
   - Display `track.author` directly
@@ -181,21 +181,21 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Display `track.author` for audio tracks
   - _Requirements: 2.4_
 
-- [ ] 2.8 Update trending sections for author display
+- [x] 2.8 Update trending sections for author display
 
   - Update `/home/` trending components
   - Update `/discover/` trending components
   - Display `track.author` for all tracks
   - _Requirements: 2.4_
 
-- [ ] 2.9 Run TypeScript and linting checks
+- [x] 2.9 Run TypeScript and linting checks
 
   - Execute `npm run type-check`
   - Execute `npm run lint`
   - Fix any errors found
   - _Requirements: 2.1, 2.2, 2.4_
 
-- [ ] 2.10 Manual testing for Phase 2
+- [x] 2.10 Manual testing for Phase 2
   - Upload track without editing author (should use username)
   - Upload track with custom author (e.g., "Artist A & Artist B")
   - Verify author saved correctly in database

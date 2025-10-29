@@ -5,6 +5,8 @@ import type { PlaylistWithTracks, PlaylistTrackDisplay } from '@/types/playlist'
 import { AudioManager } from '@/lib/audio/AudioManager';
 import * as queueUtils from '@/lib/audio/queueUtils';
 import { getCachedAudioUrl } from '@/utils/audioCache';
+import { playTracker } from '@/lib/playTracking';
+import { useAuth } from '@/contexts/AuthContext';
 
 /**
  * Repeat mode options for playlist playback
@@ -121,6 +123,9 @@ interface PlaybackProviderProps {
  * Provides playback state and actions to all child components
  */
 export function PlaybackProvider({ children }: PlaybackProviderProps): React.ReactElement {
+  // Get user for play tracking
+  const { user } = useAuth();
+  
   // Initialize state with default values
   const [activePlaylist, setActivePlaylist] = useState<PlaylistWithTracks | null>(null);
   const [currentTrack, setCurrentTrack] = useState<PlaylistTrackDisplay | null>(null);
@@ -148,6 +153,13 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   });
   
   // AudioManager instance ref
+  const checkPlayIntervalRef = useRef<NodeJS.Timeout | null>(null); // NEW: For play tracking
+  const userRef = useRef(user); // NEW: Ref for user to avoid dependency issues
+  
+  // Keep user ref in sync
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
   const audioManagerRef = useRef<AudioManager | null>(null);
   
   // Ref to store the next function for use in event handlers
@@ -178,6 +190,18 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       // Track ended - handle automatic progression based on repeat mode
       console.log('Track ended - checking repeat mode:', repeatModeRef.current);
       
+      // Stop play tracking for current track
+      const currentTrackId = currentTrack?.id;
+      if (currentTrackId) {
+        playTracker.onPlayStop(currentTrackId);
+      }
+      
+      // Clear interval
+      if (checkPlayIntervalRef.current) {
+        clearInterval(checkPlayIntervalRef.current);
+        checkPlayIntervalRef.current = null;
+      }
+      
       // If repeat track is enabled, restart the current track
       if (repeatModeRef.current === 'track' && audioManagerRef.current) {
         console.log('Repeat track enabled - restarting current track');
@@ -185,6 +209,17 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         audioManagerRef.current.play().catch((error) => {
           console.error('Failed to restart track:', error);
         });
+        
+        // Restart play tracking
+        if (currentTrackId && userRef.current?.id) {
+          playTracker.onPlayStart(currentTrackId);
+          checkPlayIntervalRef.current = setInterval(() => {
+            const userId = userRef.current?.id;
+            if (userId && currentTrackId) {
+              playTracker.checkAndRecordPlay(currentTrackId, userId);
+            }
+          }, 5000);
+        }
       } else if (nextRef.current) {
         // Otherwise, move to next track (or pause if at end)
         console.log('Moving to next track');
@@ -226,6 +261,15 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     
     // Cleanup on unmount
     return () => {
+      // Cleanup play tracking
+      if (checkPlayIntervalRef.current) {
+        clearInterval(checkPlayIntervalRef.current);
+        checkPlayIntervalRef.current = null;
+      }
+      if (currentTrack?.id) {
+        playTracker.onPlayStop(currentTrack.id);
+      }
+      
       if (audioManagerRef.current) {
         audioManagerRef.current.destroy();
         audioManagerRef.current = null;
@@ -311,6 +355,19 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         await audioManagerRef.current.play();
         console.log('[PlaybackContext] Playback started successfully');
         setIsPlaying(true);
+        
+        // Start play tracking if track and user are available
+        if (trackToPlay.id && userRef.current?.id) {
+          playTracker.onPlayStart(trackToPlay.id);
+          
+          // Check every 5 seconds if play should be recorded
+          checkPlayIntervalRef.current = setInterval(() => {
+            const userId = userRef.current?.id;
+            if (userId && trackToPlay.id) {
+              playTracker.checkAndRecordPlay(trackToPlay.id, userId);
+            }
+          }, 5000);
+        }
       } else {
         console.error('[PlaybackContext] Cannot play - missing requirements:', {
           hasAudioManager: !!audioManagerRef.current,
@@ -369,8 +426,19 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     if (audioManagerRef.current) {
       audioManagerRef.current.pause();
       setIsPlaying(false);
+      
+      // Stop play tracking
+      if (currentTrack?.id) {
+        playTracker.onPlayStop(currentTrack.id);
+      }
+      
+      // Clear interval
+      if (checkPlayIntervalRef.current) {
+        clearInterval(checkPlayIntervalRef.current);
+        checkPlayIntervalRef.current = null;
+      }
     }
-  }, []);
+  }, [currentTrack]);
 
   /**
    * Resume playback
@@ -382,8 +450,21 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         setIsPlaying(false);
       });
       setIsPlaying(true);
+      
+      // Start play tracking if track and user are available
+      if (currentTrack?.id && userRef.current?.id) {
+        playTracker.onPlayStart(currentTrack.id);
+        
+        // Check every 5 seconds if play should be recorded
+        checkPlayIntervalRef.current = setInterval(() => {
+          const userId = userRef.current?.id;
+          if (userId && currentTrack?.id) {
+            playTracker.checkAndRecordPlay(currentTrack.id, userId);
+          }
+        }, 5000);
+      }
     }
-  }, []);
+  }, [currentTrack]);
 
   /**
    * Seek to a specific position in the current track

@@ -101,6 +101,7 @@ const AudioPlayerSection = memo(({ post, showWaveform = true }: AudioPlayerSecti
               <WavesurferPlayer
                 key={`wavesurfer-${post.id}-${audioUrl}`}
                 audioUrl={audioUrl}
+                trackId={post.track?.id}  // Pass track ID for play count tracking
                 fileName={undefined}  // Don't pass fileName to avoid duplicate display
                 duration={audioDuration}
                 showWaveform={showWaveform}

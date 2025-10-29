@@ -4,6 +4,8 @@ import WaveSurfer from 'wavesurfer.js';
 import { formatDuration } from '@/utils/audio';
 import { getCachedAudioUrl } from '@/utils/audioCache';
 import { performanceAnalytics } from '@/utils/performanceAnalytics';
+import { playTracker } from '@/lib/playTracking';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   createWavesurferInstance, 
   WAVESURFER_THEMES, 
@@ -14,6 +16,7 @@ import {
 
 interface WavesurferPlayerProps {
   audioUrl: string;
+  trackId?: string; // NEW: Track ID for play count tracking
   fileName?: string;
   duration?: number;
   className?: string;
@@ -22,7 +25,8 @@ interface WavesurferPlayerProps {
 }
 
 export default function WavesurferPlayer({ 
-  audioUrl, 
+  audioUrl,
+  trackId, // NEW: Track ID for play count tracking
   fileName, 
   duration, 
   className = '',
@@ -40,6 +44,9 @@ export default function WavesurferPlayer({
   const [volume, setVolume] = useState(0.7);
   const [urlProcessingComplete, setUrlProcessingComplete] = useState(false);
 
+  // NEW: Get user for play tracking
+  const { user } = useAuth();
+
   // NEW: Stable managers that don't change on re-renders
   const volumeManager = useMemo(() => createVolumeManager(), []);
   const timeManager = useMemo(() => createTimeManager(), []);
@@ -48,6 +55,7 @@ export default function WavesurferPlayer({
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const initializationRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const checkPlayIntervalRef = useRef<NodeJS.Timeout | null>(null); // NEW: For play tracking
 
   // STEP 1: Process audio URL with smart caching and analytics tracking
   useEffect(() => {
@@ -247,8 +255,38 @@ export default function WavesurferPlayer({
           (wavesurfer as any)._customCleanup = cleanup;
         }
 
-        wavesurfer.on('play', () => setIsPlaying(true));
-        wavesurfer.on('pause', () => setIsPlaying(false));
+        // NEW: Play event with play tracking
+        wavesurfer.on('play', () => {
+          setIsPlaying(true);
+          
+          // Start play tracking if trackId and user are available
+          if (trackId && user?.id) {
+            playTracker.onPlayStart(trackId);
+            
+            // Check every 5 seconds if play should be recorded
+            checkPlayIntervalRef.current = setInterval(() => {
+              if (user?.id && trackId) {
+                playTracker.checkAndRecordPlay(trackId, user.id);
+              }
+            }, 5000);
+          }
+        });
+        
+        // NEW: Pause event with play tracking cleanup
+        wavesurfer.on('pause', () => {
+          setIsPlaying(false);
+          
+          // Stop play tracking
+          if (trackId) {
+            playTracker.onPlayStop(trackId);
+          }
+          
+          // Clear interval
+          if (checkPlayIntervalRef.current) {
+            clearInterval(checkPlayIntervalRef.current);
+            checkPlayIntervalRef.current = null;
+          }
+        });
 
         // ENHANCED: Better error handling with analytics
         wavesurfer.on('error', (err) => {
@@ -277,10 +315,22 @@ export default function WavesurferPlayer({
           setIsLoading(false);
         });
 
+        // NEW: Finish event with play tracking cleanup
         wavesurfer.on('finish', () => {
           setIsPlaying(false);
           setCurrentTime(0);
           timeManager.updateTime(0);
+          
+          // Stop play tracking
+          if (trackId) {
+            playTracker.onPlayStop(trackId);
+          }
+          
+          // Clear interval
+          if (checkPlayIntervalRef.current) {
+            clearInterval(checkPlayIntervalRef.current);
+            checkPlayIntervalRef.current = null;
+          }
         });
 
         // Store reference and load
@@ -332,6 +382,15 @@ export default function WavesurferPlayer({
 
     return () => {
       initializationRef.current = false;
+      
+      // NEW: Cleanup play tracking
+      if (checkPlayIntervalRef.current) {
+        clearInterval(checkPlayIntervalRef.current);
+        checkPlayIntervalRef.current = null;
+      }
+      if (trackId) {
+        playTracker.onPlayStop(trackId);
+      }
       
       // Cleanup managers
       volumeManager.cleanup();

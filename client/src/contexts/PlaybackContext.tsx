@@ -346,6 +346,15 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       
       // Load and play the track
       if (audioManagerRef.current && trackToPlay && audioUrl) {
+        // IMPORTANT: Stop tracking previous track before loading new one
+        if (checkPlayIntervalRef.current) {
+          clearInterval(checkPlayIntervalRef.current);
+          checkPlayIntervalRef.current = null;
+        }
+        if (currentTrack?.id) {
+          playTracker.onPlayStop(currentTrack.id);
+        }
+        
         console.log('[PlaybackContext] Loading track:', trackToPlay.title);
         console.log('[PlaybackContext] Original URL:', audioUrl);
         const cachedUrl = await getCachedAudioUrl(audioUrl);
@@ -384,7 +393,8 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       setIsPlaying(false);
       // TODO: Show user-friendly error notification
     }
-  }, []); // Empty deps - using shuffleModeRef to get latest value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - using shuffleModeRef to get latest value, currentTrack.id is intentionally from closure
 
   /**
    * Play a single track (creates a single-track playlist)
@@ -555,10 +565,31 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         
         const audioUrl = firstTrack.file_url || (firstTrack as any)?.audio_url || (firstTrack as any)?.audioUrl;
         if (audioUrl) {
+          // Stop tracking previous track
+          if (checkPlayIntervalRef.current) {
+            clearInterval(checkPlayIntervalRef.current);
+            checkPlayIntervalRef.current = null;
+          }
+          if (currentTrack?.id) {
+            playTracker.onPlayStop(currentTrack.id);
+          }
+          
           getCachedAudioUrl(audioUrl)
             .then((cachedUrl) => audioManagerRef.current?.loadTrack(cachedUrl))
             .then(() => audioManagerRef.current?.play())
-            .then(() => setIsPlaying(true))
+            .then(() => {
+              setIsPlaying(true);
+              // Start tracking new track
+              if (firstTrack.id && userRef.current?.id) {
+                playTracker.onPlayStart(firstTrack.id);
+                checkPlayIntervalRef.current = setInterval(() => {
+                  const userId = userRef.current?.id;
+                  if (userId && firstTrack.id) {
+                    playTracker.checkAndRecordPlay(firstTrack.id, userId);
+                  }
+                }, 5000);
+              }
+            })
             .catch((error) => {
               // Only log non-abort errors
               if (error?.name !== 'AbortError') {
@@ -597,10 +628,31 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       
       const audioUrl = nextTrack.file_url || (nextTrack as any)?.audio_url || (nextTrack as any)?.audioUrl;
       if (audioUrl) {
+        // Stop tracking previous track
+        if (checkPlayIntervalRef.current) {
+          clearInterval(checkPlayIntervalRef.current);
+          checkPlayIntervalRef.current = null;
+        }
+        if (currentTrack?.id) {
+          playTracker.onPlayStop(currentTrack.id);
+        }
+        
         getCachedAudioUrl(audioUrl)
           .then((cachedUrl) => audioManagerRef.current?.loadTrack(cachedUrl))
           .then(() => audioManagerRef.current?.play())
-          .then(() => setIsPlaying(true))
+          .then(() => {
+            setIsPlaying(true);
+            // Start tracking new track
+            if (nextTrack.id && userRef.current?.id) {
+              playTracker.onPlayStart(nextTrack.id);
+              checkPlayIntervalRef.current = setInterval(() => {
+                const userId = userRef.current?.id;
+                if (userId && nextTrack.id) {
+                  playTracker.checkAndRecordPlay(nextTrack.id, userId);
+                }
+              }, 5000);
+            }
+          })
           .catch((error) => {
             // Only log non-abort errors
             if (error?.name !== 'AbortError') {
@@ -617,7 +669,8 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         isNavigatingRef.current = false;
       }
     }
-  }, [queue, currentTrackIndex, repeatMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, currentTrackIndex, repeatMode]); // currentTrack.id is intentionally from closure to stop OLD track
   
   // Update nextRef whenever next function changes
   useEffect(() => {
@@ -668,10 +721,31 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
     
     const audioUrl = prevTrack.file_url || (prevTrack as any)?.audio_url || (prevTrack as any)?.audioUrl;
     if (audioUrl) {
+      // Stop tracking previous track
+      if (checkPlayIntervalRef.current) {
+        clearInterval(checkPlayIntervalRef.current);
+        checkPlayIntervalRef.current = null;
+      }
+      if (currentTrack?.id) {
+        playTracker.onPlayStop(currentTrack.id);
+      }
+      
       getCachedAudioUrl(audioUrl)
         .then((cachedUrl) => audioManagerRef.current?.loadTrack(cachedUrl))
         .then(() => audioManagerRef.current?.play())
-        .then(() => setIsPlaying(true))
+        .then(() => {
+          setIsPlaying(true);
+          // Start tracking new track
+          if (prevTrack.id && userRef.current?.id) {
+            playTracker.onPlayStart(prevTrack.id);
+            checkPlayIntervalRef.current = setInterval(() => {
+              const userId = userRef.current?.id;
+              if (userId && prevTrack.id) {
+                playTracker.checkAndRecordPlay(prevTrack.id, userId);
+              }
+            }, 5000);
+          }
+        })
         .catch((error) => {
           // Only log non-abort errors
           if (error?.name !== 'AbortError') {
@@ -687,7 +761,8 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
       setIsPlaying(false);
       isNavigatingRef.current = false;
     }
-  }, [queue, currentTrackIndex]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, currentTrackIndex]); // currentTrack.id is intentionally from closure to stop OLD track
 
   /**
    * Toggle shuffle mode

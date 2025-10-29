@@ -68,7 +68,7 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
     console.log('Fetching tracks for track IDs:', trackIds);
     const { data: tracksData, error: tracksDataError } = await supabase
       .from('tracks')
-      .select('id, title, description, file_url, duration, user_id')
+      .select('id, title, author, description, file_url, duration, user_id')
       .in('id', trackIds);
 
     if (tracksDataError) {
@@ -78,28 +78,17 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
       console.log('Successfully fetched tracks:', tracksData?.length || 0);
     }
 
-    // Fetch user profiles separately
-    let profiles: Array<{ user_id: string; username: string }> = [];
-    if (tracksData && tracksData.length > 0) {
-      const userIds = [...new Set(tracksData.map((t) => t.user_id))];
-      const { data: profilesData } = await supabase
-        .from('user_profiles')
-        .select('user_id, username')
-        .in('user_id', userIds);
-      
-      profiles = (profilesData as Array<{ user_id: string; username: string }>) || [];
-    }
-
     // Combine the data
     if (tracksData) {
       for (const pt of playlistTracks) {
         const track = tracksData.find((t) => t.id === pt.track_id);
         if (track) {
-          const profile = profiles.find((prof) => prof.user_id === track.user_id);
           
           console.log('Track data:', {
             id: track.id,
             title: track.title,
+            author: track.author,
+            description: track.description,
             duration: track.duration,
             file_url: track.file_url
           });
@@ -112,9 +101,11 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
             track: {
               id: track.id,
               title: track.title || 'Untitled Track',
-              artist_name: profile?.username || 'Unknown Artist',
+              author: track.author || 'Unknown Artist',
+              artist_name: track.author || 'Unknown Artist', // Deprecated field for backward compatibility
               description: track.description || null,
               audio_url: track.file_url || '',
+              file_url: track.file_url || '', // Add file_url for compatibility
               duration: track.duration || undefined,
               cover_image_url: undefined,
             },

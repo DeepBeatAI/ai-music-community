@@ -13,7 +13,8 @@ export type PlaylistTrackInsert = Database['public']['Tables']['playlist_tracks'
 export interface PlaylistTrackDisplay {
   id: string;
   title: string;
-  artist_name?: string | null;
+  author?: string | null; // Track author field (mandatory in database, but optional here for flexibility)
+  artist_name?: string | null; // Deprecated: use author instead
   description?: string | null;
   audio_url?: string | null;
   file_url?: string | null;

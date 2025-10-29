@@ -298,16 +298,28 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
           />
         )}
 
-        {/* Track Description (separate from post caption) */}
-        {post.post_type === 'audio' && post.track?.description && (
+        {/* Track Metadata (author and description - separate from post caption) */}
+        {post.post_type === 'audio' && post.track && (post.track.author || post.track.description) && (
           <div className="mt-3 p-3 bg-gray-700/50 rounded-lg border border-gray-600">
-            <p className="text-sm font-semibold text-gray-300 mb-1">About this track:</p>
-            <p 
-              className="text-sm text-gray-400 leading-relaxed cursor-help" 
-              title={post.track.description}
-            >
-              {truncateText(post.track.description, 300)}
-            </p>
+            <p className="text-sm font-semibold text-gray-300 mb-2">About this track:</p>
+            <div className="space-y-1">
+              {post.track.author && (
+                <p className="text-sm text-gray-400">
+                  <span className="font-medium text-gray-300">Author:</span> {post.track.author}
+                </p>
+              )}
+              {post.track.description && (
+                <p className="text-sm text-gray-400">
+                  <span className="font-medium text-gray-300">Description:</span>{' '}
+                  <span 
+                    className="cursor-help" 
+                    title={post.track.description}
+                  >
+                    {truncateText(post.track.description, 300)}
+                  </span>
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>

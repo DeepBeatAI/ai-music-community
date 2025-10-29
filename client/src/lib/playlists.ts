@@ -220,37 +220,30 @@ export async function getPlaylistWithTracks(
       (a: { position: number }, b: { position: number }) => a.position - b.position
     );
 
-    // Fetch user profiles for artist names
-    const userIds = [...new Set(sortedTracks.map((pt: any) => pt.track?.user_id).filter(Boolean))];
-    let profiles: Array<{ user_id: string; username: string }> = [];
-    
-    if (userIds.length > 0) {
-      const { data: profilesData } = await supabase
-        .from('user_profiles')
-        .select('user_id, username')
-        .in('user_id', userIds);
-      
-      profiles = (profilesData as Array<{ user_id: string; username: string }>) || [];
-    }
-
-    // Add artist_name to each track
-    const tracksWithArtistNames = sortedTracks.map((pt: any) => {
-      const profile = profiles.find((prof) => prof.user_id === pt.track?.user_id);
+    // Note: Tracks now have author field directly from database (no need to join profiles)
+    // The author field is mandatory and immutable, set during track upload
+    // We keep artist_name for backward compatibility but it's deprecated
+    const tracksWithAuthor = sortedTracks.map((pt: any) => {
       return {
         ...pt,
         track: {
           ...pt.track,
-          artist_name: profile?.username || 'Unknown Artist',
+          // Ensure author field is present (comes directly from tracks table)
+          author: pt.track?.author || 'Unknown Artist',
+          // artist_name is deprecated but kept for backward compatibility
+          artist_name: pt.track?.author || 'Unknown Artist',
+          // Ensure file_url is available for playback
+          file_url: pt.track?.file_url || pt.track?.audio_url,
         },
       };
     });
 
     // Calculate track count
-    const track_count = tracksWithArtistNames.length;
+    const track_count = tracksWithAuthor.length;
 
     return {
       ...data,
-      tracks: tracksWithArtistNames,
+      tracks: tracksWithAuthor,
       track_count,
     } as PlaylistWithTracks;
   } catch (error) {

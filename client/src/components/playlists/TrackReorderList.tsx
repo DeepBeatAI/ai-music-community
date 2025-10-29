@@ -288,14 +288,24 @@ export function TrackReorderList({
                     </div>
                   )}
                 </div>
-                {track.description && (
-                  <p 
-                    className="text-sm text-gray-500 dark:text-gray-400 truncate cursor-help" 
-                    title={track.description}
-                  >
-                    {track.description}
-                  </p>
-                )}
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                  {track.author && (
+                    <span>
+                      <span className="font-medium">Author:</span> {track.author}
+                    </span>
+                  )}
+                  {track.author && track.description && (
+                    <span className="mx-2">•</span>
+                  )}
+                  {track.description && (
+                    <span>
+                      <span className="font-medium">Description:</span> {track.description}
+                    </span>
+                  )}
+                  {!track.author && !track.description && (
+                    <span className="text-gray-400 italic">No metadata available</span>
+                  )}
+                </p>
               </div>
 
               {/* Duration */}

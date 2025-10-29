@@ -47,7 +47,7 @@ function TrackInfo(): React.ReactElement {
           {currentTrack.title}
         </div>
         <div className="text-xs text-gray-400 truncate">
-          {currentTrack.artist_name || 'Unknown Artist'}
+          {currentTrack.author || 'Unknown Artist'}
         </div>
       </div>
     </div>

@@ -12,7 +12,8 @@ This implementation plan breaks down the track metadata enhancements into discre
 
 ## Phase 1: Track Description vs Post Caption Separation
 
-- [ ] 1.1 Create database migration for description clarification
+- [x] 1.1 Create database migration for description clarification
+
   - Create file `supabase/migrations/YYYYMMDD_separate_track_description_post_caption.sql`
   - Write migration to copy `track.description` to `post.content` for audio posts where `post.content` is empty
   - Clear `track.description` for migrated tracks
@@ -25,7 +26,8 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Test rollback if needed
   - _Requirements: 1.1, 1.3_
 
-- [ ] 1.2 Update AudioUpload component with track description field
+- [x] 1.2 Update AudioUpload component with track description field
+
   - Open `client/src/components/AudioUpload.tsx`
   - Add `trackDescription` state variable
   - Add textarea field labeled "Track Description (optional)"
@@ -41,7 +43,8 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Ensure post caption is saved to `posts.content` separately
   - _Requirements: 1.2_
 
-- [ ] 1.3 Update PostItem component
+- [x] 1.3 Update PostItem component
+
   - Open `client/src/components/PostItem.tsx`
   - Ensure audio posts display `post.content` as caption
   - Add optional section to display `post.track?.description` if available
@@ -49,33 +52,37 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Label it "About this track:"
   - _Requirements: 1.4_
 
-- [ ] 1.4 Update PlaylistTrackItem component
+- [x] 1.4 Update PlaylistTrackItem component
+
   - Open `client/src/components/PlaylistTrackItem.tsx` (or similar)
   - Ensure displays `track.description` not `post.content`
   - Show description below track title and author
   - Handle empty description gracefully
   - _Requirements: 1.4_
 
-- [ ] 1.5 Update trending sections
+- [x] 1.5 Update trending sections
+
   - Check `/home/` trending section components
   - Check `/discover/` trending section components
   - Ensure audio posts display `post.content` as caption
   - Verify track descriptions show in appropriate contexts
   - _Requirements: 1.4_
 
-- [ ] 1.6 Update track detail modals
+- [x] 1.6 Update track detail modals
+
   - Find track detail modal components
   - Ensure displays `track.description` prominently
   - For audio posts, show both `post.content` and `track.description` in separate sections
   - _Requirements: 1.4_
 
-- [ ] 1.7 Run TypeScript and linting checks
+- [x] 1.7 Run TypeScript and linting checks
+
   - Execute `npm run type-check` or `tsc --noEmit`
   - Execute `npm run lint`
   - Fix any errors found
   - _Requirements: 1.1, 1.2, 1.4_
 
-- [ ] 1.8 Manual testing for Phase 1
+- [x] 1.8 Manual testing for Phase 1
   - Upload new track with description
   - Create post with caption
   - Verify track description in database
@@ -85,12 +92,12 @@ This implementation plan breaks down the track metadata enhancements into discre
   - View track in library (should show track description)
   - _Requirements: 1.1, 1.2, 1.4_
 
-
 ---
 
 ## Phase 2: Mandatory Track Author Field
 
-- [ ] 2.1 Create database migration for author field
+- [x] 2.1 Create database migration for author field
+
   - Create file `supabase/migrations/YYYYMMDD_add_track_author_field.sql`
   - Add `author` TEXT column (nullable initially)
   - Backfill author from `profiles.username` via JOIN
@@ -109,7 +116,8 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Check migration logs
   - _Requirements: 2.1, 2.3_
 
-- [ ] 2.2 Update TypeScript types for author field
+- [x] 2.2 Update TypeScript types for author field
+
   - Open `client/src/types/track.ts`
   - Add `author: string` to Track interface (required, not optional)
   - Update TrackFormData to include `author: string`
@@ -118,7 +126,8 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Verify author field is included in generated types
   - _Requirements: 2.1_
 
-- [ ] 2.3 Update track API functions for author field
+- [x] 2.3 Update track API functions for author field
+
   - Open `client/src/lib/tracks.ts`
   - Add author validation in uploadTrack (required, 1-100 characters)
   - Include author in INSERT statement
@@ -129,11 +138,12 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Add comment explaining author is immutable
   - _Requirements: 2.2, 2.3_
 
-- [ ] 2.4 Update AudioUpload component with author field and warnings
+- [x] 2.4 Update AudioUpload component with author field and warnings
+
   - Open `client/src/components/AudioUpload.tsx`
   - Add `trackAuthor` state variable
   - Pre-fill with `user.username` on component mount
-  - Add text input field labeled "Track Author *"
+  - Add text input field labeled "Track Author \*"
   - Add required attribute and maxLength={100}
   - Position field after track title
   - Add warning icon (AlertTriangle) next to label
@@ -147,6 +157,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 2.2_
 
 - [ ] 2.5 Update PostItem component for author display
+
   - Open `client/src/components/PostItem.tsx`
   - For audio posts, display `post.track?.author` for track
   - Display `post.user_profiles?.username` for post creator
@@ -155,12 +166,14 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 2.4_
 
 - [ ] 2.6 Update PlaylistTrackItem for author display
+
   - Open playlist track display component
   - Display `track.author` directly (no JOIN needed)
   - Show as "by [author]" below track title
   - _Requirements: 2.4_
 
 - [ ] 2.7 Update TrackCard and search results for author
+
   - Find and update track card components
   - Display `track.author` directly
   - Remove any profile JOINs for author
@@ -169,12 +182,14 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 2.4_
 
 - [ ] 2.8 Update trending sections for author display
+
   - Update `/home/` trending components
   - Update `/discover/` trending components
   - Display `track.author` for all tracks
   - _Requirements: 2.4_
 
 - [ ] 2.9 Run TypeScript and linting checks
+
   - Execute `npm run type-check`
   - Execute `npm run lint`
   - Fix any errors found
@@ -191,12 +206,12 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Verify author displays correctly everywhere
   - _Requirements: 2.2, 2.3, 2.4, 2.5_
 
-
 ---
 
 ## Phase 3: Play Count Tracking and Analytics
 
 - [ ] 3.1 Create database migration for play tracking
+
   - Create file `supabase/migrations/YYYYMMDD_play_count_tracking.sql`
   - Verify play_count column exists with DEFAULT 0
   - Add index on play_count (DESC)
@@ -210,6 +225,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.1, 3.2_
 
 - [ ] 3.2 Create get_trending_tracks database function
+
   - Create function `get_trending_tracks(days_back INTEGER, result_limit INTEGER)`
   - Calculate trending score: `(play_count * 0.6) + (like_count * 0.3) + (recency_score * 0.1)`
   - Recency score: `max(0, 100 - days_since_creation)`
@@ -223,6 +239,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.4, 3.6, 3.7_
 
 - [ ] 3.3 Create get_popular_creators database function
+
   - Create function `get_popular_creators(days_back INTEGER, result_limit INTEGER)`
   - Calculate creator score: `(total_plays * 0.6) + (total_likes * 0.4)`
   - Aggregate plays and likes per user
@@ -235,6 +252,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.8, 3.9_
 
 - [ ] 3.4 Create play tracking system module
+
   - Create file `client/src/lib/playTracking.ts`
   - Define PlayEvent interface
   - Create PlayTracker class
@@ -251,6 +269,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.1, 3.2_
 
 - [ ] 3.5 Integrate play tracking with WavesurferPlayer
+
   - Open `client/src/components/WavesurferPlayer.tsx`
   - Import playTracker
   - Add checkPlayInterval ref
@@ -263,6 +282,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.2_
 
 - [ ] 3.6 Integrate play tracking with mini player
+
   - Find mini player component
   - Import playTracker
   - Add same play tracking logic as WavesurferPlayer
@@ -270,6 +290,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.2_
 
 - [ ] 3.7 Create analytics API module
+
   - Create file `client/src/lib/analytics.ts`
   - Define TrendingTrack interface
   - Define PopularCreator interface
@@ -283,6 +304,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.5, 3.6, 3.7, 3.8, 3.9, 3.11_
 
 - [ ] 3.8 Create TrendingSection component for analytics
+
   - Create file `client/src/components/analytics/TrendingSection.tsx`
   - Add state for trending7d, trendingAllTime, creators7d, creatorsAllTime
   - Add loading state
@@ -293,6 +315,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.5_
 
 - [ ] 3.9 Create TrendingTrackCard component
+
   - Create file `client/src/components/analytics/TrendingTrackCard.tsx`
   - Accept track, rank, showDate props
   - Display rank number
@@ -304,6 +327,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.6, 3.7_
 
 - [ ] 3.10 Create PopularCreatorCard component
+
   - Create file `client/src/components/analytics/PopularCreatorCard.tsx`
   - Accept creator, rank props
   - Display rank badge
@@ -316,12 +340,14 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.8, 3.9_
 
 - [ ] 3.11 Add TrendingSection to /analytics/ page
+
   - Open analytics page component
   - Import and render TrendingSection component
   - Position in appropriate location
   - _Requirements: 3.5_
 
 - [ ] 3.12 Create DiscoverTrendingSection for /discover/ page
+
   - Create file `client/src/components/discover/DiscoverTrendingSection.tsx`
   - Similar to TrendingSection but with more prominent design
   - Add track cover images
@@ -334,6 +360,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.10_
 
 - [ ] 3.13 Update "Most Popular" and "Most Relevant" filters
+
   - Find dashboard sorting logic
   - Ensure "Most Popular" sorts by play_count DESC
   - Add play_count to query if not already included
@@ -343,12 +370,14 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.3_
 
 - [ ] 3.14 Run TypeScript and linting checks
+
   - Execute `npm run type-check`
   - Execute `npm run lint`
   - Fix any errors found
   - _Requirements: All Phase 3_
 
 - [ ] 3.15 Unit tests for play tracking
+
   - Test PlayTracker class methods
   - Test 30-second threshold
   - Test debounce logic
@@ -356,6 +385,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - _Requirements: 3.1, 3.2_
 
 - [ ] 3.16 Performance tests for analytics queries
+
   - Measure increment_play_count execution time (target: < 50ms)
   - Measure get_trending_tracks execution time (target: < 200ms)
   - Measure get_popular_creators execution time (target: < 200ms)
@@ -380,36 +410,41 @@ This implementation plan breaks down the track metadata enhancements into discre
 ## Task Execution Guidelines
 
 ### Prerequisites
+
 - Supabase CLI installed and configured
 - Local development database running
 - All dependencies installed (`npm install`)
 - Development server can run (`npm run dev`)
 
 ### Execution Order
+
 Tasks MUST be executed in phase order (Phase 1 → Phase 2 → Phase 3). Within each phase, tasks should be completed sequentially as they have dependencies.
 
 ### Testing Requirements
+
 - Run TypeScript checks after each task: `npm run type-check`
 - Run ESLint after each task: `npm run lint`
 - Fix all errors before proceeding to next task
 - Manual testing should be performed after completing each phase
 
 ### Git Workflow
+
 - Commit after completing each major task
 - Use descriptive commit messages referencing task numbers
 - Example: "feat: Add track description field to upload form (Task 1.2)"
 - Push regularly to backup progress
 
 ### Pause Points for User Testing
+
 After completing each phase, pause for user testing:
+
 1. **After Phase 1**: Test track description vs post caption separation
 2. **After Phase 2**: Test track author field and immutability
 3. **After Phase 3**: Test play count tracking and analytics dashboard
 
 ---
 
-*Implementation Plan Version: 1.0*  
-*Created: January 2025*  
-*Status: Ready for Execution*  
-*Total Estimated Effort: 20-28 hours*
-
+_Implementation Plan Version: 1.0_  
+_Created: January 2025_  
+_Status: Ready for Execution_  
+_Total Estimated Effort: 20-28 hours_

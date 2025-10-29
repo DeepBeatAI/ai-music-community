@@ -6,7 +6,7 @@
  */
 
 import { supabase } from './supabase';
-import type { CurrentMetrics, ActivityDataPoint } from '@/types/analytics';
+import type { CurrentMetrics, ActivityDataPoint, CollectionStatus } from '@/types/analytics';
 
 /**
  * Fetch current platform metrics
@@ -95,7 +95,7 @@ export async function fetchActivityData(): Promise<ActivityDataPoint[]> {
 /**
  * Trigger metric collection for a specific date
  */
-export async function triggerMetricCollection(date: string): Promise<any> {
+export async function triggerMetricCollection(date: string): Promise<unknown> {
   try {
     // Call the database function to collect metrics
     const { data, error } = await supabase.rpc('collect_daily_metrics', {
@@ -113,16 +113,29 @@ export async function triggerMetricCollection(date: string): Promise<any> {
 /**
  * Get collection status
  */
-export async function getCollectionStatus(): Promise<unknown> {
+export async function getCollectionStatus(): Promise<CollectionStatus | null> {
   try {
     const { data, error } = await supabase
       .from('metric_collection_log')
       .select('*')
       .order('collection_date', { ascending: false })
-      .limit(10);
+      .limit(1)
+      .single();
 
     if (error) throw error;
-    return data;
+    
+    // Transform to CollectionStatus format if data exists
+    if (data) {
+      return {
+        last_run: data.collection_date || new Date().toISOString(),
+        status: data.status || 'completed',
+        metrics_collected: data.metrics_collected || 0,
+        duration_ms: data.duration_ms || 0,
+        error_message: data.error_message,
+      };
+    }
+    
+    return null;
   } catch (error) {
     console.error('Error fetching collection status:', error);
     throw error;

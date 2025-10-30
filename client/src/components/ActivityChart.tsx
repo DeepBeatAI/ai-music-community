@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 interface ActivityDataPoint {
   date: string;
+  users: number;
   posts: number;
   comments: number;
 }
@@ -14,6 +15,7 @@ interface ActivityChartProps {
 
 interface TooltipData {
   date: string;
+  users: number;
   posts: number;
   comments: number;
   x: number;
@@ -39,13 +41,23 @@ export default function ActivityChart({ data }: ActivityChartProps) {
   const chartHeight = height - padding.top - padding.bottom;
 
   // Find max values for scaling
+  const maxUsers = Math.max(...data.map((d) => d.users), 1);
   const maxPosts = Math.max(...data.map((d) => d.posts), 1);
   const maxComments = Math.max(...data.map((d) => d.comments), 1);
-  const maxValue = Math.max(maxPosts, maxComments);
+  const maxValue = Math.max(maxUsers, maxPosts, maxComments);
 
   // Scale functions
   const xScale = (index: number) => (index / (data.length - 1)) * chartWidth;
   const yScale = (value: number) => chartHeight - (value / maxValue) * chartHeight;
+
+  // Generate path for users line
+  const usersPath = data
+    .map((d, i) => {
+      const x = padding.left + xScale(i);
+      const y = padding.top + yScale(d.users);
+      return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
+    })
+    .join(' ');
 
   // Generate path for posts line
   const postsPath = data
@@ -78,11 +90,15 @@ export default function ActivityChart({ data }: ActivityChartProps) {
       {/* Legend */}
       <div className="flex items-center gap-6 mb-4">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-blue-500 rounded"></div>
-          <span className="text-sm text-gray-400">Posts</span>
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(59, 130, 246)' }}></div>
+          <span className="text-sm text-gray-400">Total Users</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-green-500 rounded"></div>
+          <span className="text-sm text-gray-400">Posts</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(245, 158, 11)' }}></div>
           <span className="text-sm text-gray-400">Comments</span>
         </div>
       </div>
@@ -142,11 +158,21 @@ export default function ActivityChart({ data }: ActivityChartProps) {
             );
           })}
 
+          {/* Users line */}
+          <path
+            d={usersPath}
+            fill="none"
+            stroke="rgb(59, 130, 246)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
           {/* Posts line */}
           <path
             d={postsPath}
             fill="none"
-            stroke="#3B82F6"
+            stroke="#10B981"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -156,7 +182,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
           <path
             d={commentsPath}
             fill="none"
-            stroke="#10B981"
+            stroke="rgb(245, 158, 11)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -165,7 +191,6 @@ export default function ActivityChart({ data }: ActivityChartProps) {
           {/* Invisible hover areas for better interaction */}
           {data.map((d, i) => {
             const x = padding.left + xScale(i);
-            const centerY = padding.top + chartHeight / 2;
             return (
               <rect
                 key={`hover-${i}`}
@@ -179,6 +204,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setTooltip({
                     date: d.date,
+                    users: d.users,
                     posts: d.posts,
                     comments: d.comments,
                     x: rect.left + rect.width / 2,
@@ -186,6 +212,24 @@ export default function ActivityChart({ data }: ActivityChartProps) {
                   });
                 }}
                 onMouseLeave={() => setTooltip(null)}
+              />
+            );
+          })}
+
+          {/* Data points for users */}
+          {data.map((d, i) => {
+            const x = padding.left + xScale(i);
+            const y = padding.top + yScale(d.users);
+            return (
+              <circle
+                key={`user-${i}`}
+                cx={x}
+                cy={y}
+                r="4"
+                fill="rgb(59, 130, 246)"
+                stroke="#1F2937"
+                strokeWidth="2"
+                style={{ pointerEvents: 'none' }}
               />
             );
           })}
@@ -200,7 +244,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
                 cx={x}
                 cy={y}
                 r="4"
-                fill="#3B82F6"
+                fill="#10B981"
                 stroke="#1F2937"
                 strokeWidth="2"
                 style={{ pointerEvents: 'none' }}
@@ -218,7 +262,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
                 cx={x}
                 cy={y}
                 r="4"
-                fill="#10B981"
+                fill="rgb(245, 158, 11)"
                 stroke="#1F2937"
                 strokeWidth="2"
                 style={{ pointerEvents: 'none' }}
@@ -233,7 +277,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
             className="fixed bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl z-50 pointer-events-none"
             style={{
               left: `${tooltip.x}px`,
-              top: `${tooltip.y - 80}px`,
+              top: `${tooltip.y - 100}px`,
               transform: 'translateX(-50%)',
             }}
           >
@@ -242,12 +286,17 @@ export default function ActivityChart({ data }: ActivityChartProps) {
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-xs">
-                <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: 'rgb(59, 130, 246)' }}></div>
+                <span className="text-gray-300">Total Users:</span>
+                <span className="text-white font-semibold">{tooltip.users}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 bg-green-500 rounded"></div>
                 <span className="text-gray-300">Posts:</span>
                 <span className="text-white font-semibold">{tooltip.posts}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <div className="w-3 h-3 bg-green-500 rounded"></div>
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: 'rgb(245, 158, 11)' }}></div>
                 <span className="text-gray-300">Comments:</span>
                 <span className="text-white font-semibold">{tooltip.comments}</span>
               </div>

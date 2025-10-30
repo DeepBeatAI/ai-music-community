@@ -210,7 +210,7 @@ This implementation plan breaks down the track metadata enhancements into discre
 
 ## Phase 3: Play Count Tracking and Analytics
 
-- [ ] 3.1 Create database migration for play tracking
+- [x] 3.1 Create database migration for play tracking
 
   - Create file `supabase/migrations/YYYYMMDD_play_count_tracking.sql`
   - Verify play_count column exists with DEFAULT 0
@@ -224,7 +224,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Test function on development database
   - _Requirements: 3.1, 3.2_
 
-- [ ] 3.2 Create get_trending_tracks database function
+- [x] 3.2 Create get_trending_tracks database function
 
   - Create function `get_trending_tracks(days_back INTEGER, result_limit INTEGER)`
   - Calculate trending score: `(play_count * 0.6) + (like_count * 0.3) + (recency_score * 0.1)`
@@ -238,7 +238,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Test function with sample data
   - _Requirements: 3.4, 3.6, 3.7_
 
-- [ ] 3.3 Create get_popular_creators database function
+- [x] 3.3 Create get_popular_creators database function
 
   - Create function `get_popular_creators(days_back INTEGER, result_limit INTEGER)`
   - Calculate creator score: `(total_plays * 0.6) + (total_likes * 0.4)`
@@ -251,7 +251,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Test function with sample data
   - _Requirements: 3.8, 3.9_
 
-- [ ] 3.4 Create play tracking system module
+- [x] 3.4 Create play tracking system module
 
   - Create file `client/src/lib/playTracking.ts`
   - Define PlayEvent interface
@@ -268,7 +268,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Export playTracker singleton
   - _Requirements: 3.1, 3.2_
 
-- [ ] 3.5 Integrate play tracking with WavesurferPlayer
+- [x] 3.5 Integrate play tracking with WavesurferPlayer
 
   - Open `client/src/components/WavesurferPlayer.tsx`
   - Import playTracker
@@ -281,7 +281,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Clean up interval on unmount
   - _Requirements: 3.2_
 
-- [ ] 3.6 Integrate play tracking with mini player
+- [x] 3.6 Integrate play tracking with mini player
 
   - Find mini player component
   - Import playTracker
@@ -289,7 +289,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Handle play, pause, finish events
   - _Requirements: 3.2_
 
-- [ ] 3.7 Create analytics API module
+- [x] 3.7 Create analytics API module
 
   - Create file `client/src/lib/analytics.ts`
   - Define TrendingTrack interface
@@ -303,7 +303,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Create getCachedAnalytics wrapper function
   - _Requirements: 3.5, 3.6, 3.7, 3.8, 3.9, 3.11_
 
-- [ ] 3.8 Create TrendingSection component for analytics
+- [x] 3.8 Create TrendingSection component for analytics
 
   - Create file `client/src/components/analytics/TrendingSection.tsx`
   - Add state for trending7d, trendingAllTime, creators7d, creatorsAllTime
@@ -314,7 +314,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Handle loading and empty states
   - _Requirements: 3.5_
 
-- [ ] 3.9 Create TrendingTrackCard component
+- [x] 3.9 Create TrendingTrackCard component
 
   - Create file `client/src/components/analytics/TrendingTrackCard.tsx`
   - Accept track, rank, showDate props
@@ -326,7 +326,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Style with hover effects
   - _Requirements: 3.6, 3.7_
 
-- [ ] 3.10 Create PopularCreatorCard component
+- [x] 3.10 Create PopularCreatorCard component
 
   - Create file `client/src/components/analytics/PopularCreatorCard.tsx`
   - Accept creator, rank props
@@ -339,14 +339,14 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Style as card with hover effects
   - _Requirements: 3.8, 3.9_
 
-- [ ] 3.11 Add TrendingSection to /analytics/ page
+- [x] 3.11 Add TrendingSection to /analytics/ page
 
   - Open analytics page component
   - Import and render TrendingSection component
   - Position in appropriate location
   - _Requirements: 3.5_
 
-- [ ] 3.12 Create DiscoverTrendingSection for /discover/ page
+- [x] 3.12 Create DiscoverTrendingSection for /discover/ page
 
   - Create file `client/src/components/discover/DiscoverTrendingSection.tsx`
   - Similar to TrendingSection but with more prominent design
@@ -359,7 +359,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Add to /discover/ page
   - _Requirements: 3.10_
 
-- [ ] 3.13 Update "Most Popular" and "Most Relevant" filters
+- [x] 3.13 Update "Most Popular" and "Most Relevant" filters
 
   - Find dashboard sorting logic
   - Ensure "Most Popular" sorts by play_count DESC
@@ -369,14 +369,14 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Show "New" badge if play_count = 0
   - _Requirements: 3.3_
 
-- [ ] 3.14 Run TypeScript and linting checks
+- [x] 3.14 Run TypeScript and linting checks
 
   - Execute `npm run type-check`
   - Execute `npm run lint`
   - Fix any errors found
   - _Requirements: All Phase 3_
 
-- [ ] 3.15 Unit tests for play tracking
+- [x] 3.15 Unit tests for play tracking
 
   - Test PlayTracker class methods
   - Test 30-second threshold
@@ -384,7 +384,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Test retry queue
   - _Requirements: 3.1, 3.2_
 
-- [ ] 3.16 Performance tests for analytics queries
+- [x] 3.16 Performance tests for analytics queries
 
   - Measure increment_play_count execution time (target: < 50ms)
   - Measure get_trending_tracks execution time (target: < 200ms)
@@ -393,7 +393,7 @@ This implementation plan breaks down the track metadata enhancements into discre
   - Verify indexes are used (EXPLAIN ANALYZE)
   - _Requirements: 3.11_
 
-- [ ] 3.17 Manual testing for Phase 3
+- [x] 3.17 Manual testing for Phase 3
   - Play track for 30+ seconds → Verify play count increments
   - Play track for < 30 seconds → Verify no increment
   - Play same track twice → Verify both counted (after debounce)

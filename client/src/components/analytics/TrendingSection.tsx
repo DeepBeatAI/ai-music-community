@@ -57,9 +57,58 @@ export function TrendingSection() {
     return (
       <div className="space-y-8">
         <h2 className="text-2xl font-bold text-white">Trending & Popular</h2>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-        </div>
+
+        {/* Trending Tracks Skeleton (Last 7 Days) */}
+        <section>
+          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            <span>🔥</span>
+            <span>Top 10 Trending Tracks (Last 7 Days)</span>
+          </h3>
+          <div className="space-y-2">
+            {[...Array(10)].map((_, index) => (
+              <TrendingTrackSkeleton key={`trending-7d-skeleton-${index}`} />
+            ))}
+          </div>
+        </section>
+
+        {/* Trending Tracks Skeleton (All Time) */}
+        <section>
+          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            <span>⭐</span>
+            <span>Top 10 Trending Tracks (All Time)</span>
+          </h3>
+          <div className="space-y-2">
+            {[...Array(10)].map((_, index) => (
+              <TrendingTrackSkeleton key={`trending-all-skeleton-${index}`} />
+            ))}
+          </div>
+        </section>
+
+        {/* Popular Creators Skeleton (Last 7 Days) */}
+        <section>
+          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            <span>🎵</span>
+            <span>Top 5 Popular Creators (Last 7 Days)</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(5)].map((_, index) => (
+              <PopularCreatorSkeleton key={`creator-7d-skeleton-${index}`} />
+            ))}
+          </div>
+        </section>
+
+        {/* Popular Creators Skeleton (All Time) */}
+        <section>
+          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            <span>👑</span>
+            <span>Top 5 Popular Creators (All Time)</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(5)].map((_, index) => (
+              <PopularCreatorSkeleton key={`creator-all-skeleton-${index}`} />
+            ))}
+          </div>
+        </section>
       </div>
     );
   }
@@ -169,6 +218,89 @@ export function TrendingSection() {
           <p className="text-gray-400">No creators yet</p>
         )}
       </section>
+    </div>
+  );
+}
+
+/**
+ * TrendingTrackSkeleton Component
+ * Loading skeleton matching TrendingTrackCard layout
+ */
+function TrendingTrackSkeleton() {
+  return (
+    <div className="flex items-center gap-4 p-4 bg-gray-800 rounded-lg animate-pulse">
+      {/* Rank Skeleton */}
+      <div className="w-8 h-8 bg-gray-700 rounded flex-shrink-0"></div>
+
+      {/* Track Info Skeleton */}
+      <div className="flex-1 min-w-0 space-y-2">
+        <div className="h-5 bg-gray-700 rounded w-3/4"></div>
+        <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+      </div>
+
+      {/* Stats Skeleton */}
+      <div className="flex gap-4 flex-shrink-0">
+        <div className="text-center space-y-1">
+          <div className="h-5 w-12 bg-gray-700 rounded"></div>
+          <div className="h-3 w-12 bg-gray-700 rounded"></div>
+        </div>
+        <div className="text-center space-y-1">
+          <div className="h-5 w-12 bg-gray-700 rounded"></div>
+          <div className="h-3 w-12 bg-gray-700 rounded"></div>
+        </div>
+        <div className="text-center space-y-1">
+          <div className="h-5 w-12 bg-gray-700 rounded"></div>
+          <div className="h-3 w-12 bg-gray-700 rounded"></div>
+        </div>
+      </div>
+
+      {/* Button Skeleton */}
+      <div className="w-20 h-10 bg-gray-700 rounded flex-shrink-0"></div>
+    </div>
+  );
+}
+
+/**
+ * PopularCreatorSkeleton Component
+ * Loading skeleton matching PopularCreatorCard layout
+ */
+function PopularCreatorSkeleton() {
+  return (
+    <div className="relative p-4 bg-gray-800 rounded-lg animate-pulse">
+      {/* Rank Badge Skeleton */}
+      <div className="absolute top-2 right-2 w-8 h-8 bg-gray-700 rounded-full"></div>
+
+      {/* Creator Info Skeleton */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-12 h-12 rounded-full bg-gray-700 flex-shrink-0"></div>
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="h-5 bg-gray-700 rounded w-3/4"></div>
+          <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+        </div>
+      </div>
+
+      {/* Stats Skeleton */}
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="space-y-1">
+          <div className="h-5 bg-gray-700 rounded w-16"></div>
+          <div className="h-3 bg-gray-700 rounded w-20"></div>
+        </div>
+        <div className="space-y-1">
+          <div className="h-5 bg-gray-700 rounded w-16"></div>
+          <div className="h-3 bg-gray-700 rounded w-20"></div>
+        </div>
+      </div>
+
+      {/* Score Skeleton */}
+      <div className="pt-3 border-t border-gray-700">
+        <div className="text-center space-y-1">
+          <div className="h-6 bg-gray-700 rounded w-16 mx-auto"></div>
+          <div className="h-3 bg-gray-700 rounded w-24 mx-auto"></div>
+        </div>
+      </div>
+
+      {/* Button Skeleton */}
+      <div className="mt-3 h-10 bg-gray-700 rounded"></div>
     </div>
   );
 }

@@ -50,10 +50,14 @@ export interface MetricsQueryParams {
 
 /**
  * ActivityDataPoint interface
- * Represents activity data for a single date (posts and comments created)
+ * Represents activity data for a single date
+ * - users: Cumulative total users as of this date
+ * - posts: Daily posts created on this date
+ * - comments: Daily comments created on this date
  */
 export interface ActivityDataPoint {
   date: string;
+  users: number;
   posts: number;
   comments: number;
 }

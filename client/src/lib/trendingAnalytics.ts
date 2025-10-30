@@ -17,6 +17,8 @@ export interface TrendingTrack {
   like_count: number;
   trending_score: number;
   created_at: string;
+  /** Audio file URL for playback in the mini player */
+  file_url: string;
 }
 
 export interface PopularCreator {

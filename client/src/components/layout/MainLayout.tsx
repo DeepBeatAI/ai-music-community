@@ -74,16 +74,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
                     >
                       Community Board
                     </Link>
-                    <Link 
-                      href="/feed" 
-                      className={`text-sm font-medium transition-colors ${
-                        pathname === '/feed' 
-                          ? 'text-blue-400' 
-                          : 'text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      Activity Feed
-                    </Link>
                   </div>
 
                   {/* Notification Center */}

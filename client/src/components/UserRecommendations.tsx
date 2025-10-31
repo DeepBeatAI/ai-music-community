@@ -58,7 +58,7 @@ export default function UserRecommendations({
   if (!user || loading) {
     return (
       <div className={`bg-gray-800 rounded-lg p-6 ${className}`}>
-        <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>
+        {title && <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>}
         <div className="flex justify-center py-4">
           <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
         </div>
@@ -70,7 +70,7 @@ export default function UserRecommendations({
 
   return (
     <div className={`bg-gray-800 rounded-lg p-6 ${className}`}>
-      <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>
+      {title && <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>}
       <div className="space-y-4">
         {recommendations.map((rec) => (
           <div key={rec.id} className={showProfileButton ? "p-2 bg-gray-700 rounded-lg" : "flex items-center space-x-3 p-3 bg-gray-700 rounded-lg"}>

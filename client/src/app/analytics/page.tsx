@@ -9,7 +9,6 @@ import ActivityChart from '@/components/ActivityChart';
 import { fetchCurrentMetrics, fetchActivityData } from '@/lib/analytics';
 import type { CurrentMetrics, ActivityDataPoint } from '@/types/analytics';
 import MetricCollectionMonitor from '@/components/MetricCollectionMonitor';
-import { TrendingSection } from '@/components/analytics/TrendingSection';
 
 export default function AnalyticsPage() {
   const { user, loading } = useAuth();
@@ -256,11 +255,6 @@ export default function AnalyticsPage() {
         ) : (
           <ActivityChart data={activityData} />
         )}
-
-        {/* Trending & Popular Section */}
-        <div className="mt-8">
-          <TrendingSection />
-        </div>
 
         {/* Admin Monitoring Section */}
         <div className="mt-8">

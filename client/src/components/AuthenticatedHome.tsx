@@ -93,10 +93,10 @@ export default function AuthenticatedHome() {
         getActivityFeed(user.id, { following: true }, 0, 6),
       ]);
       
-      // Limit display to top items (full data is cached for reuse)
-      setTrendingTracks(trending.slice(0, 4)); // Show top 4 trending tracks
+      // Limit display to top 3 items for all sections (full data is cached for reuse)
+      setTrendingTracks(trending.slice(0, 3)); // Show top 3 trending tracks
       setPopularCreators(popular.slice(0, 3)); // Show top 3 popular creators
-      setRecentActivity(activity);
+      setRecentActivity(activity.slice(0, 3)); // Show top 3 recent activities
     } catch (error) {
       console.error('Error loading home content:', error);
       // Don't throw - allow page to render with empty states
@@ -156,14 +156,14 @@ export default function AuthenticatedHome() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-white">Recent Activity</h2>
                 <button
-                  onClick={() => router.push('/feed')}
+                  onClick={() => router.push('/dashboard')}
                   className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
                 >
                   View All
                 </button>
               </div>
               <div className="space-y-4">
-                {recentActivity.slice(0, 3).map((activity) => (
+                {recentActivity.map((activity) => (
                   <div
                     key={activity.id}
                     className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
@@ -197,7 +197,7 @@ export default function AuthenticatedHome() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-white">🔥 Trending This Week</h2>
                 <button
-                  onClick={() => router.push('/analytics')}
+                  onClick={() => router.push('/discover')}
                   className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
                 >
                   View All
@@ -221,7 +221,7 @@ export default function AuthenticatedHome() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-white">⭐ Popular Creators</h2>
                 <button
-                  onClick={() => router.push('/analytics')}
+                  onClick={() => router.push('/discover')}
                   className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
                 >
                   View All

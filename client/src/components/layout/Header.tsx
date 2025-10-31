@@ -56,14 +56,6 @@ export default function Header() {
                   Community Board
                 </Link>
             )}
-            {user && (
-                <Link 
-                  href="/feed" 
-                  className={`transition-colors ${pathname === '/feed' ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
-                >
-                  Activity Feed
-                </Link>
-            )}
           </nav>
           <div className="flex items-center space-x-4">
             {user ? (
@@ -139,14 +131,6 @@ export default function Header() {
                   className={`block px-3 py-2 rounded-md text-base font-medium ${pathname === '/dashboard' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
                 >
                   Community Board
-                </Link>
-            )}
-            {user && (
-                <Link 
-                  href="/feed" 
-                  className={`block px-3 py-2 rounded-md text-base font-medium ${pathname === '/feed' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
-                >
-                  Activity Feed
                 </Link>
             )}
             {user ? (

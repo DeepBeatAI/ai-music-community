@@ -3,34 +3,110 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
-import EditablePost from '@/components/EditablePost';
 import { useAuth } from '@/contexts/AuthContext';
-import { getTrendingContent, getFeaturedCreators } from '@/utils/search';
+import { getTrendingTracks7Days, getPopularCreators7Days } from '@/lib/trendingAnalytics';
+import type { TrendingTrack, PopularCreator } from '@/lib/trendingAnalytics';
+import { TrendingTrackCard } from '@/components/analytics/TrendingTrackCard';
+import { PopularCreatorCard } from '@/components/analytics/PopularCreatorCard';
 import UserRecommendations from '@/components/UserRecommendations';
 
+/**
+ * DiscoverPage Component
+ * 
+ * Public discovery page for finding trending content and popular creators.
+ * Works for both authenticated and unauthenticated users.
+ * 
+ * Displays three main sections:
+ * 1. "Suggested for You" - Personalized recommendations (authenticated users only)
+ * 2. "Trending This Week" - Objective popularity based on plays + likes
+ * 3. "Popular Creators" - Objective popularity based on plays + likes
+ * 
+ * DATA FLOW:
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ DiscoverPage Component                                          │
+ * │                                                                 │
+ * │  loadDefaultContent() triggers on mount (no auth required)     │
+ * │  ↓                                                              │
+ * │  Promise.all([                                                 │
+ * │    getTrendingTracks7Days(),                                   │
+ * │    getPopularCreators7Days()                                   │
+ * │  ])                                                             │
+ * │  ↓                                                              │
+ * │  Cache Layer (5-minute TTL, built into trendingAnalytics)     │
+ * │  ↓                                                              │
+ * │  Database Functions:                                           │
+ * │  - get_trending_tracks(7, 10) → TrendingTrack[]               │
+ * │    Formula: (play_count × 0.7) + (like_count × 0.3)           │
+ * │  - get_popular_creators(7, 5) → PopularCreator[]              │
+ * │    Formula: (total_plays × 0.6) + (total_likes × 0.4)         │
+ * │  ↓                                                              │
+ * │  State Updates:                                                │
+ * │  - setTrendingTracks(all 10 tracks)                           │
+ * │  - setPopularCreators(all 5 creators)                         │
+ * └─────────────────────────────────────────────────────────────────┘
+ * 
+ * IMPORTANT NOTES:
+ * - This page is PUBLIC - works without authentication
+ * - Trending/Popular sections use OBJECTIVE metrics (no personalization)
+ * - "Suggested for You" section only shows for authenticated users
+ * - Uses same database functions as Home and Analytics pages
+ * - Caching is handled internally by trendingAnalytics module
+ * - Empty states guide users to create content or explore
+ * 
+ * CONSISTENCY:
+ * - Same 7-day time window as Home and Analytics pages
+ * - Same scoring formulas ensure consistent results across pages
+ * - Same data sources (database functions) for reliability
+ * 
+ * GOTCHA: Unlike Home page, this doesn't use getCachedAnalytics wrapper
+ * because the trendingAnalytics functions already have internal caching.
+ * The cache is shared across all pages that call these functions.
+ */
 export default function DiscoverPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
-  const [featuredCreators, setFeaturedCreators] = useState<any[]>([]);
+  const [trendingTracks, setTrendingTracks] = useState<TrendingTrack[]>([]);
+  const [popularCreators, setPopularCreators] = useState<PopularCreator[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Allow discover page to work without authentication
+    // Load content on mount - no authentication required
+    // This allows public discovery of platform content
     loadDefaultContent();
   }, []);
 
+  /**
+   * Load trending tracks and popular creators
+   * 
+   * Fetches objective popularity data that's the same for all users.
+   * Uses Promise.all for concurrent fetching to minimize load time.
+   * 
+   * GOTCHA: We don't use getCachedAnalytics wrapper here because
+   * the trendingAnalytics functions already have internal caching.
+   * The cache is shared across all pages, so if Home page loaded
+   * this data recently, Discover page will get cached results.
+   * 
+   * ERROR HANDLING: On error, we set empty arrays to show the
+   * empty state UI rather than crashing the page.
+   */
   const loadDefaultContent = async () => {
     setLoading(true);
     try {
-      const [trending, creators] = await Promise.all([
-        getTrendingContent(8),
-        getFeaturedCreators(6),
+      // Fetch both data sources concurrently
+      const [tracks, creators] = await Promise.all([
+        // Trending tracks: Last 7 days, sorted by engagement score
+        getTrendingTracks7Days(),
+        // Popular creators: Last 7 days, sorted by creator score
+        getPopularCreators7Days(),
       ]);
-      setTrendingPosts(trending);
-      setFeaturedCreators(creators);
+      
+      setTrendingTracks(tracks);
+      setPopularCreators(creators);
     } catch (error) {
       console.error('Error loading default content:', error);
+      // Set empty arrays on error to show empty state UI
+      setTrendingTracks([]);
+      setPopularCreators([]);
     } finally {
       setLoading(false);
     }
@@ -57,7 +133,7 @@ export default function DiscoverPage() {
           {/* Personalized Recommendations for Authenticated Users */}
           {user && (
             <UserRecommendations 
-              title="Recommended for You" 
+              title="Suggested for You" 
               limit={6} 
               className="mb-8" 
               showProfileButton={true}
@@ -65,66 +141,40 @@ export default function DiscoverPage() {
           )}
 
           {/* Trending Section */}
-          {trendingPosts.length > 0 && (
+          {trendingTracks.length > 0 && (
             <div>
               <h2 className="text-xl font-semibold text-white mb-4">🔥 Trending This Week</h2>
               <div className="space-y-4">
-                {trendingPosts.map((post) => (
-                  <EditablePost
-                    key={post.id}
-                    post={post}
-                    currentUserId={user?.id || ''}
-                    onDelete={() => {}}
-                    onUpdate={(postId, newContent) => {
-                      // Optimistic update
-                      setTrendingPosts(prev => prev.map(p => 
-                        p.id === postId 
-                          ? { ...p, content: newContent, updated_at: new Date().toISOString() }
-                          : p
-                      ));
-                    }}
+                {trendingTracks.map((track, index) => (
+                  <TrendingTrackCard
+                    key={track.track_id}
+                    track={track}
+                    rank={index + 1}
+                    showDate={false}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Featured Creators */}
-          {featuredCreators.length > 0 && (
+          {/* Popular Creators */}
+          {popularCreators.length > 0 && (
             <div>
-              <h2 className="text-xl font-semibold text-white mb-4">⭐ Featured Creators</h2>
+              <h2 className="text-xl font-semibold text-white mb-4">⭐ Popular Creators</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {featuredCreators.map((creator) => (
-                  <div
-                    key={creator.id}
-                    className="bg-gray-800 p-6 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
-                    onClick={() => router.push(`/profile/${creator.username}`)}
-                  >
-                    <div className="text-center">
-                      <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <span className="text-white font-bold text-xl">
-                          {creator.username[0].toUpperCase()}
-                        </span>
-                      </div>
-                      <h3 className="font-medium text-white mb-2">{creator.username}</h3>
-                      <div className="text-sm text-gray-400 space-y-1">
-                        <div className="flex justify-center space-x-4">
-                          <span>{creator.user_stats?.posts_count || 0} posts</span>
-                          <span>{creator.user_stats?.followers_count || 0} followers</span>
-                        </div>
-                        <div>
-                          <span>{creator.user_stats?.likes_received || 0} likes received</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                {popularCreators.map((creator, index) => (
+                  <PopularCreatorCard
+                    key={creator.user_id}
+                    creator={creator}
+                    rank={index + 1}
+                  />
                 ))}
               </div>
             </div>
           )}
 
           {/* Empty State */}
-          {trendingPosts.length === 0 && featuredCreators.length === 0 && !loading && (
+          {trendingTracks.length === 0 && popularCreators.length === 0 && !loading && (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">🎵</div>
               <h2 className="text-xl font-semibold text-white mb-2">Start Exploring!</h2>

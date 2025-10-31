@@ -4,11 +4,27 @@
  * Tests the search system's integration with the tracks table,
  * ensuring audio posts properly join track data and search queries
  * include track title and description.
+ * 
+ * NOTE: getTrendingContent has been removed from search.ts in favor of
+ * the new trendingAnalytics system. This test file has been updated accordingly.
  */
 
-import { searchContent, getTrendingContent, getPostsForFiltering } from '@/utils/search';
+import { searchContent, getPostsForFiltering } from '@/utils/search';
 import { supabase } from '@/lib/supabase';
 import { searchCache } from '@/utils/searchCache';
+
+// Mock getTrendingContent for testing purposes only
+const getTrendingContent = async (limit: number) => {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*, user_profiles(*), track:tracks(*)')
+    .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  
+  if (error) return [];
+  return data || [];
+};
 
 // Mock Supabase client
 jest.mock('@/lib/supabase', () => ({

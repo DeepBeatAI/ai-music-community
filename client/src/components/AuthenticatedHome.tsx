@@ -1,46 +1,115 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFollow } from '@/contexts/FollowContext';
 import UserRecommendations from './UserRecommendations';
-import FollowButton from './FollowButton';
-import { getTrendingContent, getFeaturedCreators } from '@/utils/recommendations';
-import { getActivityFeed, getActivityIconForPost } from '@/utils/activityFeed';
+import { getActivityFeed, getActivityIconForPost, type ActivityFeedItem } from '@/utils/activityFeed';
+import { getTrendingTracks7Days, getPopularCreators7Days, getCachedAnalytics, type TrendingTrack, type PopularCreator } from '@/lib/trendingAnalytics';
+import { TrendingTrackCard } from './analytics/TrendingTrackCard';
 
+/**
+ * AuthenticatedHome Component
+ * 
+ * Main home page for authenticated users displaying:
+ * 1. Trending tracks (objective popularity based on plays + likes)
+ * 2. Popular creators (objective popularity based on plays + likes)
+ * 3. Personalized user recommendations (social proof + activity patterns)
+ * 4. Recent activity from followed users
+ * 
+ * DATA FLOW:
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ AuthenticatedHome Component                                     │
+ * │                                                                 │
+ * │  loadHomeContent() triggers on mount when user is available    │
+ * │  ↓                                                              │
+ * │  Promise.all([                                                 │
+ * │    getCachedAnalytics('home_trending_7d', getTrendingTracks7Days),  │
+ * │    getCachedAnalytics('home_popular_creators_7d', getPopularCreators7Days), │
+ * │    getActivityFeed(user.id, { following: true }, 0, 6)         │
+ * │  ])                                                             │
+ * │  ↓                                                              │
+ * │  Cache Layer (5-minute TTL)                                    │
+ * │  ↓                                                              │
+ * │  Database Functions:                                           │
+ * │  - get_trending_tracks(7, 4) → TrendingTrack[]                │
+ * │    Formula: (play_count × 0.7) + (like_count × 0.3)           │
+ * │  - get_popular_creators(7, 3) → PopularCreator[]              │
+ * │    Formula: (total_plays × 0.6) + (total_likes × 0.4)         │
+ * │  ↓                                                              │
+ * │  State Updates:                                                │
+ * │  - setTrendingTracks(top 4 tracks)                            │
+ * │  - setPopularCreators(top 3 creators)                         │
+ * │  - setRecentActivity(activity feed)                           │
+ * └─────────────────────────────────────────────────────────────────┘
+ * 
+ * IMPORTANT NOTES:
+ * - Trending/Popular sections use OBJECTIVE metrics (no personalization)
+ * - "Suggested for You" section uses PERSONALIZED recommendations
+ * - All data is cached for 5 minutes to reduce database load
+ * - Cache keys are page-specific to avoid conflicts with other pages
+ * - Empty states are handled gracefully when no data is available
+ * - Errors are logged but don't crash the page
+ * 
+ * CONSISTENCY:
+ * - Uses same database functions as Analytics and Discover pages
+ * - Same 7-day time window across all pages
+ * - Same scoring formulas ensure consistent results
+ */
 export default function AuthenticatedHome() {
   const { user, profile } = useAuth();
-  const { getFollowStatus } = useFollow();
   const router = useRouter();
-  const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
-  const [featuredCreators, setFeaturedCreators] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [trendingTracks, setTrendingTracks] = useState<TrendingTrack[]>([]);
+  const [popularCreators, setPopularCreators] = useState<PopularCreator[]>([]);
+  const [recentActivity, setRecentActivity] = useState<ActivityFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  /**
+   * Load all home page content in parallel
+   * 
+   * Uses Promise.all for concurrent fetching to minimize load time.
+   * Each data source is wrapped in getCachedAnalytics to leverage
+   * the 5-minute cache and reduce database queries.
+   * 
+   * Cache keys are prefixed with 'home_' to avoid conflicts with
+   * other pages that fetch the same data.
+   * 
+   * GOTCHA: We slice the results after fetching to show only the
+   * desired number of items (4 tracks, 3 creators) while still
+   * caching the full result set for potential reuse.
+   */
+  const loadHomeContent = useCallback(async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      // Fetch all data sources concurrently for better performance
+      const [trending, popular, activity] = await Promise.all([
+        // Trending tracks: Objective popularity (plays + likes)
+        getCachedAnalytics('home_trending_7d', getTrendingTracks7Days),
+        // Popular creators: Objective popularity (plays + likes)
+        getCachedAnalytics('home_popular_creators_7d', getPopularCreators7Days),
+        // Activity feed: Personalized based on following relationships
+        getActivityFeed(user.id, { following: true }, 0, 6),
+      ]);
+      
+      // Limit display to top items (full data is cached for reuse)
+      setTrendingTracks(trending.slice(0, 4)); // Show top 4 trending tracks
+      setPopularCreators(popular.slice(0, 3)); // Show top 3 popular creators
+      setRecentActivity(activity);
+    } catch (error) {
+      console.error('Error loading home content:', error);
+      // Don't throw - allow page to render with empty states
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
       loadHomeContent();
     }
-  }, [user]);
-
-  const loadHomeContent = async () => {
-    setLoading(true);
-    try {
-      const [trending, featured, activity] = await Promise.all([
-        getTrendingContent(4),
-        getFeaturedCreators(3, user!.id),
-        getActivityFeed(user!.id, { following: true }, 0, 6),
-      ]);
-      setTrendingPosts(trending);
-      setFeaturedCreators(featured);
-      setRecentActivity(activity);
-    } catch (error) {
-      console.error('Error loading home content:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [user, loadHomeContent]);
 
   if (loading) {
     return (
@@ -123,41 +192,86 @@ export default function AuthenticatedHome() {
           )}
 
           {/* Trending This Week */}
-          {trendingPosts.length > 0 && (
+          {trendingTracks.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-white">🔥 Trending This Week</h2>
                 <button
-                  onClick={() => router.push('/discover')}
+                  onClick={() => router.push('/analytics')}
                   className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
                 >
                   View All
                 </button>
               </div>
-              <div className="space-y-4">
-                {trendingPosts.slice(0, 2).map((post) => (
-                  <div key={post.id} className="bg-gray-800 p-4 rounded-lg">
-                    <div className="flex items-start space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                        <span className="text-white font-semibold text-sm">
-                          {post.user_profiles?.username?.[0]?.toUpperCase() || 'U'}
-                        </span>
+              <div className="space-y-2">
+                {trendingTracks.map((track, index) => (
+                  <TrendingTrackCard
+                    key={track.track_id}
+                    track={track}
+                    rank={index + 1}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Popular Creators */}
+          {popularCreators.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white">⭐ Popular Creators</h2>
+                <button
+                  onClick={() => router.push('/analytics')}
+                  className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
+                >
+                  View All
+                </button>
+              </div>
+              <div className="space-y-3">
+                {popularCreators.map((creator, index) => (
+                  <div key={creator.user_id} className="bg-gray-800 p-4 rounded-lg hover:bg-gray-750 transition-colors">
+                    <div className="flex items-center gap-4">
+                      {/* Rank Badge */}
+                      <div className="text-2xl font-bold text-amber-500 w-8 flex-shrink-0">
+                        #{index + 1}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="font-medium text-white">{post.user_profiles?.username || 'Unknown'}</span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(post.created_at).toLocaleDateString()}
+
+                      {/* Creator Info */}
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                             onClick={() => router.push(`/profile/${creator.user_id}`)}>
+                          <span className="text-white font-semibold text-sm">
+                            {creator.username[0].toUpperCase()}
                           </span>
                         </div>
-                        <p className="text-gray-300 mb-2">{post.content}</p>
-                        {post.post_type === 'audio' && (
-                          <div className="flex items-center space-x-2 text-blue-400">
-                            <span>♪</span>
-                            <span className="text-sm">{post.track?.title || post.audio_filename || 'Audio Track'}</span>
-                          </div>
-                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-white truncate cursor-pointer hover:text-blue-300 transition-colors"
+                             onClick={() => router.push(`/profile/${creator.user_id}`)}>
+                            {creator.username}
+                          </p>
+                          <p className="text-sm text-gray-400">{creator.track_count} tracks</p>
+                        </div>
                       </div>
+
+                      {/* Stats */}
+                      <div className="flex gap-4 text-sm flex-shrink-0">
+                        <div className="text-center">
+                          <div className="font-semibold text-white">{creator.total_plays}</div>
+                          <div className="text-gray-500 text-xs">plays</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-semibold text-white">{creator.total_likes}</div>
+                          <div className="text-gray-500 text-xs">likes</div>
+                        </div>
+                      </div>
+
+                      {/* View Profile Button */}
+                      <button
+                        onClick={() => router.push(`/profile/${creator.user_id}`)}
+                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors flex-shrink-0"
+                      >
+                        View
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -166,7 +280,7 @@ export default function AuthenticatedHome() {
           )}
 
           {/* Empty State */}
-          {!loading && recentActivity.length === 0 && trendingPosts.length === 0 && (
+          {!loading && recentActivity.length === 0 && trendingTracks.length === 0 && popularCreators.length === 0 && (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">🎶</div>
               <h2 className="text-xl font-semibold text-white mb-2">Ready to Get Started?</h2>
@@ -195,49 +309,6 @@ export default function AuthenticatedHome() {
         <div className="space-y-6">
           {/* Personalized User Recommendations */}
           <UserRecommendations limit={4} />
-
-          {/* Featured Creators */}
-          {featuredCreators.length > 0 && (
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Featured Creators</h3>
-              <div className="space-y-4">
-                {featuredCreators.map((creator) => (
-                  <div key={creator.id} className="flex items-start space-x-3 p-3 bg-gray-700 rounded-lg">
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                         onClick={() => router.push(`/profile/${creator.username}`)}>
-                      <span className="text-white font-semibold text-sm">
-                        {creator.username[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="font-medium text-white text-sm truncate cursor-pointer hover:text-blue-300 transition-colors"
-                           onClick={() => router.push(`/profile/${creator.username}`)}>
-                          {creator.username}
-                        </p>
-                        <FollowButton 
-                          userId={creator.user_id}
-                          username={creator.username}
-                          size="sm"
-                          variant="secondary"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs text-gray-400">
-                          {getFollowStatus(creator.user_id).followerCount} followers • {creator.user_stats?.posts_count || 0} posts
-                        </p>
-                        {creator.reason && (
-                          <p className="text-xs text-blue-400 truncate">
-                            {creator.reason}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Quick Actions */}
           <div className="bg-gray-800 rounded-lg p-6">

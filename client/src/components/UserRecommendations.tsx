@@ -95,7 +95,7 @@ export default function UserRecommendations({
                     </h4>
                     
                     {showReason && rec.reason && (
-                      <p className="text-xs text-gray-400 truncate">{rec.reason}</p>
+                      <p className="text-xs text-gray-400">{rec.reason}</p>
                     )}
                     
                     <div className="flex space-x-3 text-xs text-gray-500 mt-1">
@@ -143,7 +143,7 @@ export default function UserRecommendations({
                   </h4>
                   
                   {showReason && rec.reason && (
-                    <p className="text-xs text-gray-400 truncate">{rec.reason}</p>
+                    <p className="text-xs text-gray-400">{rec.reason}</p>
                   )}
                   
                   <div className="flex space-x-3 text-xs text-gray-500 mt-1">

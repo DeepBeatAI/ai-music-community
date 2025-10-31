@@ -22,7 +22,8 @@ export { formatDuration as formatDurationFromFormat, formatFileSize as formatFil
 
 // Export search utilities with specific names to avoid conflicts
 export * from './search';
-export { getFeaturedCreators as getFeaturedCreatorsFromRecommendations, getTrendingContent as getTrendingContentFromRecommendations } from './recommendations';
+// Note: getFeaturedCreators and getTrendingContent have been removed from recommendations.ts
+// in favor of the new trendingAnalytics system (getPopularCreators7Days, getTrendingTracks7Days)
 
 // New compact reporting system utilities
 export * from './reportTemplates';

@@ -6,9 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import MetricsGrid from '@/components/MetricsGrid';
 import ActivityChart from '@/components/ActivityChart';
-import { fetchCurrentMetrics, fetchActivityData } from '@/lib/analytics';
+import { fetchRealTimeMetrics, fetchActivityData, refreshAnalytics } from '@/lib/analytics';
 import type { CurrentMetrics, ActivityDataPoint } from '@/types/analytics';
-import MetricCollectionMonitor from '@/components/MetricCollectionMonitor';
 
 export default function AnalyticsPage() {
   const { user, loading } = useAuth();
@@ -20,7 +19,6 @@ export default function AnalyticsPage() {
   const [activityData, setActivityData] = useState<ActivityDataPoint[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
 
   // Ensure we're on the client side
   useEffect(() => {
@@ -63,7 +61,7 @@ export default function AnalyticsPage() {
     throw lastError;
   };
 
-  // Fetch platform metrics with retry logic
+  // Fetch real-time metrics on page load
   useEffect(() => {
     const loadMetrics = async () => {
       if (!user) return;
@@ -72,20 +70,20 @@ export default function AnalyticsPage() {
         setMetricsLoading(true);
         setMetricsError(null);
 
-        // Use the new analytics API to fetch current metrics with retry
-        const currentMetrics = await retryWithBackoff(() => fetchCurrentMetrics());
+        // Fetch real-time metrics from live tables with retry
+        const currentMetrics = await retryWithBackoff(() => fetchRealTimeMetrics());
         setMetrics(currentMetrics);
       } catch (error) {
-        console.error('Error fetching platform metrics:', error);
+        console.error('Error fetching real-time metrics:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        setMetricsError(`Failed to load platform metrics: ${errorMessage}`);
+        setMetricsError(`Failed to load real-time metrics: ${errorMessage}`);
       } finally {
         setMetricsLoading(false);
       }
     };
 
     loadMetrics();
-  }, [user, retryCount]);
+  }, [user]);
 
   // Fetch activity data over time with retry logic
   useEffect(() => {
@@ -109,14 +107,33 @@ export default function AnalyticsPage() {
     };
 
     loadActivityData();
-  }, [user, retryCount]);
+  }, [user]);
 
   /**
    * Manual refresh handler
-   * Increments retry count to trigger data refetch
+   * Triggers metric collection and refreshes all data
    */
-  const handleRefresh = () => {
-    setRetryCount(prev => prev + 1);
+  const handleRefresh = async () => {
+    try {
+      setMetricsLoading(true);
+      setActivityLoading(true);
+      setMetricsError(null);
+      setActivityError(null);
+
+      // Trigger collection and fetch updated data
+      const { metrics: updatedMetrics, activityData: updatedActivity } = 
+        await refreshAnalytics();
+
+      setMetrics(updatedMetrics);
+      setActivityData(updatedActivity);
+    } catch (error) {
+      console.error('Error refreshing analytics:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setMetricsError(`Failed to refresh: ${errorMessage}`);
+    } finally {
+      setMetricsLoading(false);
+      setActivityLoading(false);
+    }
   };
 
   // Show loading state while checking auth
@@ -255,11 +272,6 @@ export default function AnalyticsPage() {
         ) : (
           <ActivityChart data={activityData} />
         )}
-
-        {/* Admin Monitoring Section */}
-        <div className="mt-8">
-          <MetricCollectionMonitor />
-        </div>
       </div>
     </MainLayout>
   );

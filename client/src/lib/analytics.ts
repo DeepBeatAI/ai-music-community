@@ -51,6 +51,114 @@ function getErrorMessage(error: unknown): string {
 }
 
 /**
+ * Fetch real-time metrics by querying live tables
+ * This provides up-to-the-second counts without waiting for collection
+ */
+export async function fetchRealTimeMetrics(): Promise<CurrentMetrics> {
+  try {
+    console.log('Fetching real-time metrics from live tables...');
+
+    // Query all three tables in parallel for performance
+    // Note: user_profiles query doesn't use head:true due to RLS policy compatibility (returns 204 with null count)
+    const [usersResult, tracksResult, commentsResult] = await Promise.all([
+      supabase.from('user_profiles').select('user_id', { count: 'exact' }),
+      supabase.from('tracks').select('*', { count: 'exact', head: true }),
+      supabase.from('comments').select('*', { count: 'exact', head: true }),
+    ]);
+
+    // Check for errors in each query
+    if (usersResult.error) {
+      console.error('Error fetching users count:', {
+        code: usersResult.error.code,
+        message: usersResult.error.message,
+        details: usersResult.error.details,
+        hint: usersResult.error.hint,
+      });
+      throw usersResult.error;
+    }
+
+    if (tracksResult.error) {
+      console.error('Error fetching tracks count:', {
+        code: tracksResult.error.code,
+        message: tracksResult.error.message,
+        details: tracksResult.error.details,
+        hint: tracksResult.error.hint,
+      });
+      throw tracksResult.error;
+    }
+
+    if (commentsResult.error) {
+      console.error('Error fetching comments count:', {
+        code: commentsResult.error.code,
+        message: commentsResult.error.message,
+        details: commentsResult.error.details,
+        hint: commentsResult.error.hint,
+      });
+      throw commentsResult.error;
+    }
+
+    // Build metrics object from counts
+    const metrics: CurrentMetrics = {
+      totalUsers: usersResult.count || 0,
+      totalPosts: tracksResult.count || 0,
+      totalComments: commentsResult.count || 0,
+    };
+
+    console.log('Fetched real-time metrics:', {
+      totalUsers: metrics.totalUsers,
+      totalPosts: metrics.totalPosts,
+      totalComments: metrics.totalComments,
+    });
+
+    return metrics;
+  } catch (error) {
+    console.error('Error fetching real-time metrics:', error);
+    const userMessage = getErrorMessage(error);
+    throw new Error(userMessage);
+  }
+}
+
+/**
+ * Trigger metric collection and return updated data
+ * This combines collection with data refresh for the refresh button
+ */
+export async function refreshAnalytics(): Promise<{
+  metrics: CurrentMetrics;
+  activityData: ActivityDataPoint[];
+}> {
+  try {
+    console.log('Starting analytics refresh...');
+
+    // Step 1: Trigger metric collection for today
+    const today = new Date().toISOString().split('T')[0];
+    console.log('Triggering metric collection for:', today);
+    await triggerMetricCollection(today);
+
+    // Step 2: Wait for collection to complete
+    console.log('Waiting 500ms for collection to complete...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Step 3: Fetch updated data in parallel
+    console.log('Fetching updated metrics and activity data...');
+    const [metrics, activityData] = await Promise.all([
+      fetchRealTimeMetrics(),
+      fetchActivityData(),
+    ]);
+
+    console.log('Analytics refresh completed successfully:', {
+      metricsCount: Object.keys(metrics).length,
+      activityDataPoints: activityData.length,
+    });
+
+    return { metrics, activityData };
+  } catch (error) {
+    console.error('Error refreshing analytics:', error);
+    const userMessage = getErrorMessage(error);
+    throw new Error(userMessage);
+  }
+}
+
+/**
  * Fetch current platform metrics
  */
 export async function fetchCurrentMetrics(): Promise<CurrentMetrics> {

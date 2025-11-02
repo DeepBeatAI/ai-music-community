@@ -157,7 +157,7 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Back Button */}
         <button
-          onClick={() => router.push('/playlists')}
+          onClick={() => router.push('/library')}
           className="mb-6 flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
         >
           <svg

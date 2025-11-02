@@ -31,10 +31,10 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
     .eq('id', id)
     .single();
 
-  // If playlist not found or error, redirect to playlists page
+  // If playlist not found or error, redirect to library page
   if (playlistError || !playlist) {
     console.error('Error fetching playlist:', playlistError);
-    redirect('/playlists');
+    redirect('/library');
   }
 
   // Check if user is the owner
@@ -45,7 +45,7 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
 
   // If user doesn't have access, redirect
   if (!hasAccess) {
-    redirect('/playlists');
+    redirect('/library');
   }
 
   // Fetch playlist tracks (just the junction table data)

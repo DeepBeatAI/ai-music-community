@@ -1,0 +1,62 @@
+/**
+ * Responsive Design Test Utilities
+ * 
+ * This file contains utility classes for testing responsive breakpoints.
+ * Add this to your page temporarily to visualize breakpoints.
+ */
+
+/* Breakpoint indicator (for testing only) */
+.breakpoint-indicator {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 9999;
+}
+
+.breakpoint-indicator::before {
+  content: 'Mobile (< 768px)';
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .breakpoint-indicator::before {
+    content: 'Tablet (768-1023px)';
+  }
+}
+
+@media (min-width: 1024px) {
+  .breakpoint-indicator::before {
+    content: 'Desktop (≥ 1024px)';
+  }
+}
+
+/* Grid overlay for testing (for testing only) */
+.grid-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 9998;
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 0, 0, 0.1) 0px,
+      transparent 1px,
+      transparent 8px,
+      rgba(255, 0, 0, 0.1) 9px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 0, 0, 0.1) 0px,
+      transparent 1px,
+      transparent 8px,
+      rgba(255, 0, 0, 0.1) 9px
+    );
+}

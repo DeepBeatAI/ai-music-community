@@ -30,10 +30,10 @@ export default async function EditPlaylistPage({ params }: EditPlaylistPageProps
     .eq('id', id)
     .single();
 
-  // If playlist not found or error, redirect to playlists page
+  // If playlist not found or error, redirect to library page
   if (error || !playlist) {
     console.error('Error fetching playlist:', error);
-    redirect('/playlists');
+    redirect('/library');
   }
 
   // Check if user is the owner

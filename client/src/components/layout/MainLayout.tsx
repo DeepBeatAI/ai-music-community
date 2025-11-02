@@ -45,14 +45,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       Home
                     </Link>
                     <Link 
-                      href="/playlists" 
+                      href="/library" 
                       className={`text-sm font-medium transition-colors ${
-                        pathname?.startsWith('/playlists') 
+                        pathname?.startsWith('/library') 
                           ? 'text-blue-400' 
                           : 'text-gray-300 hover:text-white'
                       }`}
                     >
-                      Playlists
+                      My Library
                     </Link>
                     <Link 
                       href="/discover" 

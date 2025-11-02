@@ -36,10 +36,10 @@ export default function Header() {
             </Link>
             {user && (
                 <Link 
-                  href="/playlists" 
-                  className={`transition-colors ${pathname?.startsWith('/playlists') ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
+                  href="/library" 
+                  className={`transition-colors ${pathname?.startsWith('/library') ? 'text-white font-semibold' : 'text-gray-300 hover:text-white'}`}
                 >
-                  Playlists
+                  My Library
                 </Link>
             )}
             <Link 
@@ -113,10 +113,10 @@ export default function Header() {
             </Link>
             {user && (
                 <Link 
-                  href="/playlists" 
-                  className={`block px-3 py-2 rounded-md text-base font-medium ${pathname?.startsWith('/playlists') ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+                  href="/library" 
+                  className={`block px-3 py-2 rounded-md text-base font-medium ${pathname?.startsWith('/library') ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
                 >
-                  Playlists
+                  My Library
                 </Link>
             )}
             <Link 

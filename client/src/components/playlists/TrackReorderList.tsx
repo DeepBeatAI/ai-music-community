@@ -12,6 +12,7 @@ interface TrackReorderListProps {
   removingTrack: string | null;
   showDeleteConfirm: string | null;
   setShowDeleteConfirm: (trackId: string | null) => void;
+  showTrackNumbers?: boolean; // Optional prop to show/hide track numbers (default: false for playlists)
 }
 
 export function TrackReorderList({
@@ -22,6 +23,7 @@ export function TrackReorderList({
   removingTrack,
   showDeleteConfirm,
   setShowDeleteConfirm,
+  showTrackNumbers = false, // Default to false for playlists
 }: TrackReorderListProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -208,10 +210,12 @@ export function TrackReorderList({
                 </div>
               )}
 
-              {/* Position Number */}
-              <div className="w-8 text-center text-gray-500 dark:text-gray-400 font-medium">
-                {index + 1}
-              </div>
+              {/* Track Number (only shown for albums, not playlists) */}
+              {showTrackNumbers && (
+                <div className="w-8 text-center text-gray-500 dark:text-gray-400 font-medium">
+                  {index + 1}
+                </div>
+              )}
 
               {/* Play/Pause Button */}
               <button

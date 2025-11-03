@@ -165,10 +165,10 @@ export function TrackCardWithActions({
         title: track.title,
         author: track.author,
         description: track.description,
-        audio_url: track.audio_url,
+        audio_url: track.file_url, // Tracks use file_url, not audio_url
         file_url: track.file_url,
         duration: track.duration,
-        cover_image_url: track.cover_image_url,
+        cover_image_url: null, // Tracks don't have cover images
         genre: track.genre,
       };
 
@@ -178,6 +178,7 @@ export function TrackCardWithActions({
         name: 'Now Playing',
         description: null,
         user_id: userId,
+        cover_image_url: null, // Temporary playlist has no cover
         is_public: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

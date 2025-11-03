@@ -128,16 +128,11 @@ describe('Library API Functions', () => {
       expect(result.totalPlaylists).toBe(4);
     });
 
-    it('should calculate plays this week correctly', async () => {
-      const now = new Date();
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const lastWeek = new Date(now);
-      lastWeek.setDate(lastWeek.getDate() - 8);
-
+    it('should calculate total plays with mixed play counts', async () => {
       const mockTracks = [
-        { play_count: 10, created_at: yesterday.toISOString() }, // Within week
-        { play_count: 5, created_at: lastWeek.toISOString() },   // Outside week
+        { play_count: 10 },
+        { play_count: 5 },
+        { play_count: 3 },
       ];
 
       const mockFrom = jest.fn()
@@ -166,7 +161,7 @@ describe('Library API Functions', () => {
 
       const result = await getLibraryStats('user-1');
 
-      expect(result.playsThisWeek).toBe(10); // Only yesterday's plays
+      expect(result.playsAllTime).toBe(18); // 10 + 5 + 3
     });
 
     it('should calculate total plays correctly', async () => {
@@ -237,7 +232,6 @@ describe('Library API Functions', () => {
         totalTracks: 0,
         totalAlbums: 0,
         totalPlaylists: 0,
-        playsThisWeek: 0,
         playsAllTime: 0,
       });
     });
@@ -260,7 +254,6 @@ describe('Library API Functions', () => {
         totalTracks: 0,
         totalAlbums: 0,
         totalPlaylists: 0,
-        playsThisWeek: 0,
         playsAllTime: 0,
       });
     });
@@ -284,21 +277,44 @@ describe('Library API Functions', () => {
         },
       ];
 
-      const mockFrom = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({
-              data: mockTracks,
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          // First call: tracks query
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              order: jest.fn().mockResolvedValue({
+                data: mockTracks,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Second call: user_profiles query
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              single: jest.fn().mockResolvedValue({
+                data: { id: 'user-1', username: 'testuser' },
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Third call: posts query
+          select: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({
+              data: [],
               error: null,
             }),
           }),
-        }),
-      });
+        });
 
       (supabase.from as jest.Mock) = mockFrom;
 
       const result = await getUserTracksWithMembership('user-1');
 
+      expect(result).toHaveLength(1);
       expect(result[0].albumId).toBe('album-1');
       expect(result[0].albumName).toBe('Test Album');
     });
@@ -318,21 +334,41 @@ describe('Library API Functions', () => {
         },
       ];
 
-      const mockFrom = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({
-              data: mockTracks,
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              order: jest.fn().mockResolvedValue({
+                data: mockTracks,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              single: jest.fn().mockResolvedValue({
+                data: { id: 'user-1', username: 'testuser' },
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({
+              data: [],
               error: null,
             }),
           }),
-        }),
-      });
+        });
 
       (supabase.from as jest.Mock) = mockFrom;
 
       const result = await getUserTracksWithMembership('user-1');
 
+      expect(result).toHaveLength(1);
       expect(result[0].playlistIds).toEqual(['playlist-1', 'playlist-2']);
       expect(result[0].playlistNames).toEqual(['Playlist A', 'Playlist B']);
     });
@@ -349,21 +385,41 @@ describe('Library API Functions', () => {
         },
       ];
 
-      const mockFrom = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({
-              data: mockTracks,
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              order: jest.fn().mockResolvedValue({
+                data: mockTracks,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              single: jest.fn().mockResolvedValue({
+                data: { id: 'user-1', username: 'testuser' },
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({
+              data: [],
               error: null,
             }),
           }),
-        }),
-      });
+        });
 
       (supabase.from as jest.Mock) = mockFrom;
 
       const result = await getUserTracksWithMembership('user-1');
 
+      expect(result).toHaveLength(1);
       expect(result[0].albumId).toBeNull();
       expect(result[0].playlistIds).toEqual([]);
     });

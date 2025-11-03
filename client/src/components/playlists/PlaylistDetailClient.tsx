@@ -173,7 +173,7 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             />
           </svg>
-          <span>Back to Playlists</span>
+          <span>Back to Library</span>
         </button>
 
         {/* Playlist Header */}

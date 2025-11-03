@@ -45,6 +45,8 @@ export default function LibraryPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isPlaylistsCollapsed, setIsPlaylistsCollapsed] = useState(false);
+  const [playlistCount, setPlaylistCount] = useState<number | null>(null);
   
   // Handle upload success - invalidate caches and refresh sections
   const handleUploadSuccess = useCallback(() => {
@@ -72,6 +74,45 @@ export default function LibraryPage() {
       router.push('/login?redirect=/library');
     }
   }, [user, loading, router]);
+
+  // Check for missing cache on mount and listen for cache invalidation events
+  useEffect(() => {
+    if (!user) return;
+
+    // Check if cache is missing on mount (in case we missed the invalidation event)
+    const checkCacheOnMount = () => {
+      const albumsCache = cache.get(CACHE_KEYS.ALBUMS(user.id));
+      if (!albumsCache) {
+        console.log('Albums cache is empty on mount, triggering refresh...');
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+
+    // Check immediately on mount
+    checkCacheOnMount();
+
+    const handleCacheInvalidated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ key: string }>;
+      const invalidatedKey = customEvent.detail?.key;
+      
+      // Check if the invalidated key is relevant to this page
+      if (
+        invalidatedKey === CACHE_KEYS.ALBUMS(user.id) ||
+        invalidatedKey === CACHE_KEYS.TRACKS(user.id) ||
+        invalidatedKey === CACHE_KEYS.STATS(user.id)
+      ) {
+        console.log(`Cache invalidated for ${invalidatedKey}, refreshing library...`);
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+
+    // Listen for cache invalidation events from the cache utility
+    window.addEventListener('cache-invalidated', handleCacheInvalidated);
+
+    return () => {
+      window.removeEventListener('cache-invalidated', handleCacheInvalidated);
+    };
+  }, [user]);
 
   // Show loading state while checking authentication
   if (loading) {
@@ -126,7 +167,7 @@ export default function LibraryPage() {
             <AllTracksSectionErrorBoundary>
               <AllTracksSection 
                 userId={user.id}
-                initialLimit={12}
+                initialLimit={8}
                 key={`tracks-${refreshKey}`}
               />
             </AllTracksSectionErrorBoundary>
@@ -138,6 +179,7 @@ export default function LibraryPage() {
               <MyAlbumsSection 
                 userId={user.id}
                 initialLimit={8}
+                key={`albums-${refreshKey}`}
               />
             </AlbumsSectionErrorBoundary>
           </div>
@@ -145,17 +187,48 @@ export default function LibraryPage() {
           {/* My Playlists Section */}
           <div className="mb-8">
             <PlaylistsSectionErrorBoundary>
-              <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                    <span>📝</span>
-                    <span>My Playlists</span>
-                  </h2>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Create and manage your music collections
-                  </p>
+              <div className="mb-12">
+                {/* Section Header with Collapse Button */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsPlaylistsCollapsed(!isPlaylistsCollapsed)}
+                      className="p-3 md:p-2 hover:bg-gray-800 rounded-lg transition-colors"
+                      aria-label={isPlaylistsCollapsed ? 'Expand section' : 'Collapse section'}
+                    >
+                      <svg
+                        className={`w-5 h-5 text-gray-400 transition-transform ${
+                          isPlaylistsCollapsed ? 'rotate-0' : 'rotate-90'
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </button>
+                    
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                      <span>📝</span>
+                      <span>My Playlists{playlistCount !== null ? ` (${playlistCount})` : ''}</span>
+                    </h2>
+                  </div>
                 </div>
-                <PlaylistsList />
+
+                {/* Collapsible Content */}
+                {!isPlaylistsCollapsed && (
+                  <div className="transition-all duration-300">
+                    <PlaylistsList 
+                      hideMyPlaylistsHeader={true}
+                      onPlaylistCountChange={setPlaylistCount}
+                    />
+                  </div>
+                )}
               </div>
             </PlaylistsSectionErrorBoundary>
           </div>

@@ -10,6 +10,7 @@ interface TrackCardProps {
   onCopyUrl: (trackId: string) => void;
   onShare: (trackId: string) => void;
   onDelete: (trackId: string) => void;
+  onPlay?: (trackId: string) => void;
 }
 
 /**
@@ -36,6 +37,7 @@ export const TrackCard = memo(function TrackCard({
   onCopyUrl,
   onShare,
   onDelete,
+  onPlay,
 }: TrackCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
@@ -114,7 +116,7 @@ export const TrackCard = memo(function TrackCard({
       onTouchEnd={handleTouchEnd}
     >
       {/* Cover Art - Tracks don't have cover images, show music icon */}
-      <div className="relative aspect-square bg-gray-700">
+      <div className="relative aspect-square bg-gray-700 group/cover">
         <div className="w-full h-full flex items-center justify-center text-gray-500">
           <svg
             className="w-16 h-16"
@@ -130,14 +132,41 @@ export const TrackCard = memo(function TrackCard({
             />
           </svg>
         </div>
+        
+        {/* Play Button Overlay */}
+        {onPlay && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlay(track.id);
+            }}
+            className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 md:group-hover/cover:bg-opacity-50 transition-all opacity-100 md:opacity-0 md:group-hover/cover:opacity-100"
+            aria-label="Play track"
+          >
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center transition-colors shadow-lg">
+              <svg
+                className="w-6 h-6 md:w-8 md:h-8 text-white ml-1"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Track Info */}
       <div className="p-4">
         {/* Title */}
-        <h3 className="text-lg font-semibold text-white truncate mb-2">
+        <h3 className="text-lg font-semibold text-white truncate mb-1">
           {track.title}
         </h3>
+        
+        {/* Author */}
+        <p className="text-sm text-gray-400 truncate mb-2">
+          by {track.author || 'Unknown Artist'}
+        </p>
 
         {/* Membership Badges */}
         <div className="flex flex-wrap gap-2 mb-3">
@@ -157,29 +186,29 @@ export const TrackCard = memo(function TrackCard({
 
         {/* Metadata and Actions */}
         <div className="flex items-center justify-between text-sm text-gray-400">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Play Count */}
             <div className="flex items-center gap-1">
               <svg
                 className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
+                fill="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                />
+                <path d="M8 5v14l11-7z"/>
               </svg>
-              <span>{track.play_count || 0}</span>
+              <span>{track.play_count || 0} plays</span>
+            </div>
+
+            {/* Likes Count */}
+            <div className="flex items-center gap-1">
+              <svg
+                className="w-4 h-4"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+              <span>{track.like_count || 0}</span>
             </div>
 
             {/* Upload Date */}

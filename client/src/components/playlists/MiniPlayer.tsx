@@ -353,9 +353,10 @@ function ModeControls(): React.ReactElement {
   return (
     <div className="flex items-center gap-1">
       {/* Go to Playlist Button */}
-      {activePlaylist && activePlaylist.id !== 'single-track' && (
+      {activePlaylist && activePlaylist.id !== 'single-track' && activePlaylist.id !== 'temp-single-track' && (
         <Link
           href={`/playlists/${activePlaylist.id}`}
+          prefetch={false}
           className="p-2 text-gray-400 hover:text-white transition-colors"
           aria-label="Go to playlist"
           title="Go to playlist"

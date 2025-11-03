@@ -17,7 +17,6 @@ export function CreateAlbum({ onSuccess, onCancel }: CreateAlbumProps) {
     name: '',
     description: '',
     is_public: true, // Albums default to public (different from playlists)
-    cover_image_url: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +55,6 @@ export function CreateAlbum({ onSuccess, onCancel }: CreateAlbumProps) {
         name: formData.name,
         description: formData.description || undefined,
         is_public: formData.is_public,
-        cover_image_url: formData.cover_image_url || undefined,
       });
 
       if (result.success && result.album) {
@@ -71,7 +69,6 @@ export function CreateAlbum({ onSuccess, onCancel }: CreateAlbumProps) {
           name: '',
           description: '',
           is_public: true,
-          cover_image_url: '',
         });
 
         // Call success callback
@@ -129,25 +126,6 @@ export function CreateAlbum({ onSuccess, onCancel }: CreateAlbumProps) {
         />
         <p className="text-xs text-gray-500 mt-1">
           {formData.description?.length || 0}/1000 characters
-        </p>
-      </div>
-
-      {/* Cover Image URL */}
-      <div>
-        <label htmlFor="album-cover" className="block text-sm font-medium text-gray-700 mb-1">
-          Cover Image URL
-        </label>
-        <input
-          id="album-cover"
-          type="url"
-          value={formData.cover_image_url}
-          onChange={(e) => setFormData({ ...formData, cover_image_url: e.target.value })}
-          placeholder="https://example.com/cover.jpg"
-          disabled={isSubmitting}
-          className="w-full px-3 py-2 bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed placeholder-gray-400"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Optional: Provide a URL for the album cover image
         </p>
       </div>
 

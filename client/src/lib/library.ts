@@ -9,7 +9,6 @@ import type { LibraryStats, TrackWithMembership } from '@/types/library';
  * - Total tracks count
  * - Total albums count
  * - Total playlists count
- * - Plays this week (tracks created in last 7 days)
  * - Plays all time (sum of all play counts)
  * 
  * All queries are executed in parallel using Promise.all for optimal performance.
@@ -21,12 +20,11 @@ import type { LibraryStats, TrackWithMembership } from '@/types/library';
  * ```typescript
  * const stats = await getLibraryStats(user.id);
  * console.log(`Total tracks: ${stats.totalTracks}`);
- * console.log(`Plays this week: ${stats.playsThisWeek}`);
+ * console.log(`Total plays: ${stats.playsAllTime}`);
  * ```
  * 
  * @remarks
  * - uploadRemaining is set to 'infinite' for MVP phase
- * - playsThisWeek counts tracks created in the last 7 days
  * - playsAllTime sums all play_count values across all tracks
  * - All queries use count optimization for performance
  */
@@ -55,21 +53,9 @@ export async function getLibraryStats(userId: string): Promise<LibraryStats> {
       // Get play counts for user's tracks
       supabase
         .from('tracks')
-        .select('play_count, created_at')
+        .select('play_count')
         .eq('user_id', userId)
     ]);
-
-    // Calculate plays this week
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
-    const playsThisWeek = playsResult.data?.reduce((sum, track) => {
-      const trackDate = new Date(track.created_at);
-      if (trackDate >= oneWeekAgo) {
-        return sum + (track.play_count || 0);
-      }
-      return sum;
-    }, 0) || 0;
 
     // Calculate total plays
     const playsAllTime = playsResult.data?.reduce((sum, track) => {
@@ -81,7 +67,6 @@ export async function getLibraryStats(userId: string): Promise<LibraryStats> {
       totalTracks: tracksResult.count || 0,
       totalAlbums: albumsResult.count || 0,
       totalPlaylists: playlistsResult.count || 0,
-      playsThisWeek,
       playsAllTime
     };
   } catch (error) {
@@ -93,7 +78,6 @@ export async function getLibraryStats(userId: string): Promise<LibraryStats> {
       totalTracks: 0,
       totalAlbums: 0,
       totalPlaylists: 0,
-      playsThisWeek: 0,
       playsAllTime: 0
     };
   }
@@ -136,6 +120,7 @@ export async function getUserTracksWithMembership(
   limit?: number
 ): Promise<TrackWithMembership[]> {
   try {
+    // First, get tracks with basic relationships
     let query = supabase
       .from('tracks')
       .select(`
@@ -167,6 +152,31 @@ export async function getUserTracksWithMembership(
       return [];
     }
 
+    // Get like counts for all tracks
+    const trackIds = data.map(t => t.id);
+    
+    // Fetch user profile data separately
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('id, username')
+      .eq('id', userId)
+      .single();
+
+    const { data: postsData } = await supabase
+      .from('posts')
+      .select('track_id, post_likes(count)')
+      .in('track_id', trackIds);
+
+    // Create a map of track_id to like count
+    const likeCountMap = new Map<string, number>();
+    if (postsData) {
+      postsData.forEach(post => {
+        const postLikes = post.post_likes as unknown[];
+        const currentCount = likeCountMap.get(post.track_id) || 0;
+        likeCountMap.set(post.track_id, currentCount + (postLikes?.length || 0));
+      });
+    }
+
     // Transform data to include membership info
     return data.map(track => {
       const albumTracks = track.album_tracks as Array<{ album_id: string; albums: { name: string } }> | undefined;
@@ -174,10 +184,12 @@ export async function getUserTracksWithMembership(
       
       return {
         ...track,
+        user: userProfile || undefined,
         albumId: albumTracks?.[0]?.album_id || null,
         albumName: albumTracks?.[0]?.albums?.name || null,
         playlistIds: playlistTracks?.map(pt => pt.playlist_id) || [],
-        playlistNames: playlistTracks?.map(pt => pt.playlists?.name) || []
+        playlistNames: playlistTracks?.map(pt => pt.playlists?.name) || [],
+        like_count: likeCountMap.get(track.id) || 0
       };
     }) as TrackWithMembership[];
   } catch (error) {

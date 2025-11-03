@@ -34,6 +34,30 @@ interface StoredPlaybackState {
 const PLAYBACK_STATE_KEY = 'playback_state';
 
 /**
+ * Global cache for current playback state
+ * Stored on window object to survive component remounts and module reloads
+ * This is used for temporary playlists that shouldn't be persisted to sessionStorage
+ */
+declare global {
+  interface Window {
+    __playbackCache?: {
+      playlist: PlaylistWithTracks | null;
+      track: PlaylistTrackDisplay | null;
+      trackIndex: number;
+      isPlaying: boolean;
+      shuffleMode: boolean;
+      repeatMode: RepeatMode;
+      queue: PlaylistTrackDisplay[];
+    } | null;
+  }
+}
+
+// Initialize cache on window if it doesn't exist
+if (typeof window !== 'undefined' && !window.__playbackCache) {
+  window.__playbackCache = null;
+}
+
+/**
  * Staleness threshold (1 hour in milliseconds)
  */
 const STALENESS_THRESHOLD = 3600000; // 1 hour
@@ -126,22 +150,52 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   // Get user for play tracking
   const { user } = useAuth();
   
-  // Initialize state with default values
-  const [activePlaylist, setActivePlaylist] = useState<PlaylistWithTracks | null>(null);
-  const [currentTrack, setCurrentTrack] = useState<PlaylistTrackDisplay | null>(null);
-  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [queue, setQueue] = useState<PlaylistTrackDisplay[]>([]);
-  const [shuffleMode, setShuffleMode] = useState<boolean>(false);
+
+  
+  // Initialize state from cache (survives remounts) or default values
+  const [activePlaylist, setActivePlaylist] = useState<PlaylistWithTracks | null>(() => {
+    const cached = typeof window !== 'undefined' ? window.__playbackCache : null;
+    console.log('[PlaybackProvider] Initializing activePlaylist from cache:', cached?.playlist?.id, 'Full cache:', cached);
+    return cached?.playlist || null;
+  });
+  const [currentTrack, setCurrentTrack] = useState<PlaylistTrackDisplay | null>(() => {
+    const cached = typeof window !== 'undefined' ? window.__playbackCache : null;
+    console.log('[PlaybackProvider] Initializing currentTrack from cache:', cached?.track?.id);
+    return cached?.track || null;
+  });
+  
+  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(() => {
+    const cached = typeof window !== 'undefined' ? window.__playbackCache : null;
+    return cached?.trackIndex || 0;
+  });
+  const [isPlaying, setIsPlaying] = useState<boolean>(() => {
+    const cached = typeof window !== 'undefined' ? window.__playbackCache : null;
+    return cached?.isPlaying || false;
+  });
+  const [queue, setQueue] = useState<PlaylistTrackDisplay[]>(() => {
+    const cached = typeof window !== 'undefined' ? window.__playbackCache : null;
+    return cached?.queue || [];
+  });
+  const [shuffleMode, setShuffleMode] = useState<boolean>(() => {
+    const cached = typeof window !== 'undefined' ? window.__playbackCache : null;
+    return cached?.shuffleMode || false;
+  });
   const shuffleModeRef = useRef<boolean>(false);
   
   // Keep ref in sync with state
   useEffect(() => {
     shuffleModeRef.current = shuffleMode;
   }, [shuffleMode]);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => {
+    const cached = typeof window !== 'undefined' ? window.__playbackCache : null;
+    return cached?.repeatMode || 'off';
+  });
   const [progress, setProgress] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
+  
+  // Track if restoration has been attempted to prevent multiple restoration attempts
+  const restorationAttemptedRef = useRef<boolean>(false);
+  
   const [volume, setVolumeState] = useState<number>(() => {
     // Restore volume from localStorage
     try {
@@ -155,12 +209,46 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
   // AudioManager instance ref
   const checkPlayIntervalRef = useRef<NodeJS.Timeout | null>(null); // NEW: For play tracking
   const userRef = useRef(user); // NEW: Ref for user to avoid dependency issues
+  const audioManagerRef = useRef<AudioManager | null>(null);
+  
+  // Update cache whenever state changes (survives remounts)
+  // Only update if there's actual content to avoid overwriting cache with empty state
+  useEffect(() => {
+    console.log('[PlaybackProvider] Updating cache - playlist:', activePlaylist?.id, 'track:', currentTrack?.id);
+    if (typeof window !== 'undefined') {
+      // Only update cache if we have active playback, or explicitly clear it if playback stopped
+      if (activePlaylist && currentTrack) {
+        window.__playbackCache = {
+          playlist: activePlaylist,
+          track: currentTrack,
+          trackIndex: currentTrackIndex,
+          isPlaying,
+          shuffleMode,
+          repeatMode,
+          queue,
+        };
+      } else if (!activePlaylist && !currentTrack && window.__playbackCache) {
+        // Only clear cache if it was previously set (playback was stopped)
+        console.log('[PlaybackProvider] Clearing cache - playback stopped');
+        window.__playbackCache = null;
+      }
+      // Don't update cache if both are null and cache is already null (initial mount)
+    }
+  }, [activePlaylist, currentTrack, currentTrackIndex, isPlaying, shuffleMode, repeatMode, queue]);
+  
+  // Debug: Log when provider mounts/unmounts
+  useEffect(() => {
+    console.log('[PlaybackProvider] Mounted - activePlaylist:', activePlaylist?.id, 'currentTrack:', currentTrack?.id);
+    
+    return () => {
+      console.log('[PlaybackProvider] Unmounting');
+    };
+  }, [activePlaylist, currentTrack]);
   
   // Keep user ref in sync
   useEffect(() => {
     userRef.current = user;
   }, [user]);
-  const audioManagerRef = useRef<AudioManager | null>(null);
   
   // Ref to store the next function for use in event handlers
   const nextRef = useRef<(() => void) | null>(null);
@@ -1031,6 +1119,14 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
    * Effect to restore state on mount
    */
   useEffect(() => {
+    // Only run restoration once per session
+    if (restorationAttemptedRef.current) {
+      console.log('Restoration already attempted, skipping');
+      return;
+    }
+    
+    restorationAttemptedRef.current = true;
+    
     // Only run on mount
     const restoreState = async (): Promise<void> => {
       try {
@@ -1042,6 +1138,15 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
         }
         
         console.log('Restoring playback state from sessionStorage:', restored);
+        
+        // Handle temporary playlists (single track playback) differently
+        // These don't exist in the database, so we can't fetch them
+        // Just clear the stale state and let the user play a new track
+        if (restored.playlistId === 'temp-single-track' || restored.playlistId === 'single-track') {
+          console.log('Temporary playlist detected - clearing stale state');
+          clearPlaybackState();
+          return;
+        }
         
         // Import getPlaylistWithTracks dynamically to avoid circular dependencies
         const { getPlaylistWithTracks } = await import('@/lib/playlists');

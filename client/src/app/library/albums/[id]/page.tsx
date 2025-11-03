@@ -3,9 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePlayback } from '@/contexts/PlaybackContext';
 import MainLayout from '@/components/layout/MainLayout';
 import { getAlbumWithTracks, deleteAlbum, reorderAlbumTracks, updateAlbum } from '@/lib/albums';
+import { cache, CACHE_KEYS } from '@/utils/cache';
 import type { AlbumWithTracks } from '@/types/album';
+import type { PlaylistWithTracks } from '@/types/playlist';
 import Image from 'next/image';
 
 /**
@@ -42,6 +45,9 @@ export default function AlbumDetailPage() {
   // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Playback context
+  const { playPlaylist, pause, activePlaylist, currentTrack, isPlaying } = usePlayback();
 
   // Edit form state
   const [editName, setEditName] = useState('');
@@ -100,6 +106,13 @@ export default function AlbumDetailPage() {
       const result = await deleteAlbum(album.id);
 
       if (result.success) {
+        // Invalidate caches
+        // This will trigger 'cache-invalidated' events that the library page listens to
+        if (user) {
+          cache.invalidate(CACHE_KEYS.ALBUMS(user.id));
+          cache.invalidate(CACHE_KEYS.STATS(user.id));
+        }
+        
         // Redirect to library page after successful deletion
         router.push('/library');
       } else {
@@ -128,6 +141,12 @@ export default function AlbumDetailPage() {
       });
 
       if (result.success) {
+        // Invalidate caches to trigger refresh on library page
+        if (user) {
+          cache.invalidate(CACHE_KEYS.ALBUMS(user.id));
+          cache.invalidate(CACHE_KEYS.STATS(user.id));
+        }
+        
         // Refresh album data
         await fetchAlbum();
         setShowEditModal(false);
@@ -198,6 +217,74 @@ export default function AlbumDetailPage() {
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
+
+  // Playback handlers
+  
+  /**
+   * Convert album to playlist format for playback
+   */
+  const convertAlbumToPlaylist = useCallback((albumData: AlbumWithTracks): PlaylistWithTracks => {
+    return {
+      id: `album-${albumData.id}`,
+      name: albumData.name,
+      description: albumData.description,
+      cover_image_url: albumData.cover_image_url,
+      user_id: albumData.user_id,
+      is_public: albumData.is_public,
+      created_at: albumData.created_at,
+      updated_at: albumData.updated_at,
+      tracks: albumData.tracks.map((albumTrack) => ({
+        id: `album-track-${albumTrack.id}`,
+        track_id: albumTrack.track_id,
+        position: albumTrack.position,
+        added_at: albumTrack.added_at,
+        track: {
+          id: albumTrack.track.id,
+          title: albumTrack.track.title,
+          author: albumTrack.track.artist_name || albumTrack.track.author || 'Unknown Artist',
+          artist_name: albumTrack.track.artist_name || albumTrack.track.author || 'Unknown Artist',
+          description: albumTrack.track.description || null,
+          file_url: albumTrack.track.file_url || '',
+          audio_url: albumTrack.track.file_url || '',
+          duration: albumTrack.track.duration,
+          cover_image_url: albumTrack.track.cover_art_url,
+        },
+      })),
+      track_count: albumData.track_count,
+    };
+  }, []);
+
+  /**
+   * Play entire album from the beginning
+   */
+  const handlePlayAlbum = useCallback(() => {
+    if (!album || album.tracks.length === 0) return;
+    
+    const playlistFormat = convertAlbumToPlaylist(album);
+    playPlaylist(playlistFormat, 0);
+  }, [album, convertAlbumToPlaylist, playPlaylist]);
+
+  /**
+   * Play album starting from a specific track index
+   */
+  const handlePlayTrack = useCallback((index: number) => {
+    if (!album || album.tracks.length === 0) return;
+    
+    const playlistFormat = convertAlbumToPlaylist(album);
+    playPlaylist(playlistFormat, index);
+  }, [album, convertAlbumToPlaylist, playPlaylist]);
+
+  /**
+   * Check if this album is currently playing
+   */
+  const isThisAlbumPlaying = activePlaylist?.id === `album-${album?.id}`;
+
+  /**
+   * Check if a specific track is currently playing
+   */
+  const isTrackPlaying = useCallback((trackId: string): boolean => {
+    return isThisAlbumPlaying && currentTrack?.id === trackId && isPlaying;
+  }, [isThisAlbumPlaying, currentTrack, isPlaying]);
 
   // Loading state
   if (loading || authLoading) {
@@ -292,32 +379,49 @@ export default function AlbumDetailPage() {
               </div>
 
               {/* Album Info */}
-              <div className="flex-1">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h1 className="text-3xl font-bold mb-2">{album.name}</h1>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between mb-4 gap-4">
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-3xl font-bold mb-2 break-words">{album.name}</h1>
                     {album.description && (
-                      <p className="text-gray-400 mb-4">{album.description}</p>
+                      <p className="text-gray-400 mb-4 whitespace-pre-wrap break-words">{album.description}</p>
                     )}
-                    <div className="flex items-center gap-4 text-sm text-gray-400">
+                    <div className="flex items-center gap-4 text-sm text-gray-400 mb-4">
                       <span>{album.track_count} {album.track_count === 1 ? 'track' : 'tracks'}</span>
                       <span>•</span>
                       <span>{album.is_public ? 'Public' : 'Private'}</span>
                     </div>
+
+                    {/* Play Album Button */}
+                    {album.tracks.length > 0 && (
+                      <button
+                        onClick={handlePlayAlbum}
+                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                        </svg>
+                        <span>Play Album</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Owner Actions */}
                   {isOwner && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => setShowEditModal(true)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
                       >
                         Edit Album
                       </button>
                       <button
                         onClick={() => setShowDeleteModal(true)}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
                       >
                         Delete
                       </button>
@@ -343,6 +447,7 @@ export default function AlbumDetailPage() {
                   const track = albumTrack.track;
                   const isDragging = draggedIndex === index;
                   const isDragOver = dragOverIndex === index;
+                  const trackIsPlaying = isTrackPlaying(track.id);
 
                   return (
                     <div
@@ -356,7 +461,7 @@ export default function AlbumDetailPage() {
                       className={`
                         flex items-center gap-4 p-4 rounded-lg transition-all
                         ${isDragging ? 'opacity-50' : ''}
-                        ${isDragOver ? 'bg-gray-700 border-2 border-blue-500' : 'bg-gray-750 hover:bg-gray-700'}
+                        ${isDragOver ? 'bg-gray-700 border-2 border-blue-500' : trackIsPlaying ? 'bg-blue-900/20 border-l-4 border-blue-600' : 'bg-gray-750 hover:bg-gray-700'}
                         ${isOwner ? 'cursor-move' : ''}
                       `}
                     >
@@ -364,6 +469,45 @@ export default function AlbumDetailPage() {
                       <div className="flex-shrink-0 w-8 text-center text-gray-400 font-medium">
                         {index + 1}
                       </div>
+
+                      {/* Play/Pause Button */}
+                      <button
+                        onClick={() => {
+                          if (trackIsPlaying) {
+                            pause();
+                          } else {
+                            handlePlayTrack(index);
+                          }
+                        }}
+                        className="flex-shrink-0 p-2 rounded-full hover:bg-gray-600 transition-colors group"
+                        aria-label={trackIsPlaying ? 'Pause track' : 'Play track'}
+                      >
+                        {trackIsPlaying ? (
+                          <svg
+                            className="w-6 h-6 text-blue-600 dark:text-blue-400"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="w-6 h-6 text-gray-300 group-hover:text-blue-400 transition-colors"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        )}
+                      </button>
 
                       {/* Track Cover */}
                       <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden bg-gray-600">
@@ -384,9 +528,28 @@ export default function AlbumDetailPage() {
 
                       {/* Track Info */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate">{track.title}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className={`font-medium truncate ${trackIsPlaying ? 'text-blue-400' : 'text-white'}`}>
+                            {track.title}
+                          </h3>
+                          {trackIsPlaying && (
+                            <div className="flex items-center gap-1">
+                              <span className="flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-400 truncate">{track.artist_name || track.author || 'Unknown Artist'}</p>
                       </div>
+
+                      {/* Duration */}
+                      {track.duration && (
+                        <div className="flex-shrink-0 text-sm text-gray-400">
+                          {Math.floor(track.duration / 60)}:{String(Math.floor(track.duration % 60)).padStart(2, '0')}
+                        </div>
+                      )}
 
                       {/* Drag Handle (Owner Only) */}
                       {isOwner && (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { getUserPlaylists, addTrackToPlaylist, isTrackInPlaylist } from '@/lib/playlists';
+import { getUserPlaylists, addTrackToPlaylist, removeTrackFromPlaylist, isTrackInPlaylist } from '@/lib/playlists';
 import type { Playlist } from '@/types/playlist';
 
 interface AddToPlaylistModalProps {
@@ -26,6 +26,9 @@ export function AddToPlaylistModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(
+    new Set(currentPlaylistIds)
+  );
+  const [initialPlaylistIds, setInitialPlaylistIds] = useState<Set<string>>(
     new Set(currentPlaylistIds)
   );
   const [loading, setLoading] = useState(true);
@@ -66,7 +69,10 @@ export function AddToPlaylistModal({
           .filter(check => check.inPlaylist)
           .map(check => check.playlistId);
 
-        setSelectedPlaylistIds(new Set(playlistsWithTrack));
+        // Set both initial and selected state
+        const initialSet = new Set(playlistsWithTrack);
+        setInitialPlaylistIds(initialSet);
+        setSelectedPlaylistIds(initialSet);
       } catch (err) {
         console.error('Error fetching playlists:', err);
         const errorMessage = 'Failed to load playlists';
@@ -130,21 +136,20 @@ export function AddToPlaylistModal({
   // Handle save
   const handleSave = async (): Promise<void> => {
     // Store previous state for rollback
-    const previousPlaylistIds = [...currentPlaylistIds];
+    const previousPlaylistIds = Array.from(initialPlaylistIds);
     
     try {
       setSaving(true);
       setError(null);
       setSuccessMessage(null);
 
-      // Determine which playlists to add to
-      const originalPlaylistIds = new Set(currentPlaylistIds);
+      // Determine which playlists to add to and remove from
       const playlistsToAdd = Array.from(selectedPlaylistIds).filter(
-        id => !originalPlaylistIds.has(id)
+        id => !initialPlaylistIds.has(id)
       );
-
-      // Note: We don't remove tracks in this modal - user can do that from playlist view
-      // This is intentional to prevent accidental removals
+      const playlistsToRemove = Array.from(initialPlaylistIds).filter(
+        id => !selectedPlaylistIds.has(id)
+      );
 
       // Optimistic update
       const newPlaylistIds = Array.from(selectedPlaylistIds);
@@ -156,7 +161,15 @@ export function AddToPlaylistModal({
         onSuccess(newPlaylistIds, newPlaylistNames);
       }
 
-      // Add track to new playlists
+      // Remove track from unchecked playlists
+      const removePromises = playlistsToRemove.map(playlistId =>
+        removeTrackFromPlaylist({
+          playlist_id: playlistId,
+          track_id: trackId,
+        })
+      );
+
+      // Add track to newly checked playlists
       const addPromises = playlistsToAdd.map(playlistId =>
         addTrackToPlaylist({
           playlist_id: playlistId,
@@ -164,12 +177,22 @@ export function AddToPlaylistModal({
         })
       );
 
-      const results = await Promise.all(addPromises);
+      // Execute all operations
+      const [removeResults, addResults] = await Promise.all([
+        Promise.all(removePromises),
+        Promise.all(addPromises),
+      ]);
 
       // Check for errors
-      const failedAdds = results.filter(r => !r.success);
-      if (failedAdds.length > 0) {
-        const errorMessage = failedAdds[0].error || 'Failed to add track to some playlists';
+      const failedRemoves = removeResults.filter(r => !r.success);
+      const failedAdds = addResults.filter(r => !r.success);
+      
+      if (failedRemoves.length > 0 || failedAdds.length > 0) {
+        const errorMessage = 
+          failedRemoves.length > 0 
+            ? failedRemoves[0].error || 'Failed to remove track from some playlists'
+            : failedAdds[0].error || 'Failed to add track to some playlists';
+        
         setError(errorMessage);
         
         // Rollback optimistic update
@@ -186,14 +209,28 @@ export function AddToPlaylistModal({
         return;
       }
 
+      // Build success message
       const addedCount = playlistsToAdd.length;
-      if (addedCount > 0) {
+      const removedCount = playlistsToRemove.length;
+      
+      if (addedCount > 0 && removedCount > 0) {
+        setSuccessMessage(
+          `Track added to ${addedCount} playlist${addedCount > 1 ? 's' : ''} and removed from ${removedCount} playlist${removedCount > 1 ? 's' : ''}`
+        );
+      } else if (addedCount > 0) {
         setSuccessMessage(
           `Track added to ${addedCount} playlist${addedCount > 1 ? 's' : ''}`
+        );
+      } else if (removedCount > 0) {
+        setSuccessMessage(
+          `Track removed from ${removedCount} playlist${removedCount > 1 ? 's' : ''}`
         );
       } else {
         setSuccessMessage('No changes made');
       }
+
+      // Update initial state to match current state for future saves
+      setInitialPlaylistIds(new Set(selectedPlaylistIds));
 
       // Close modal after short delay to show success message
       setTimeout(() => {

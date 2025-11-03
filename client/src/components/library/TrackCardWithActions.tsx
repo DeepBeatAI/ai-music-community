@@ -8,7 +8,9 @@ import { ShareModal } from './ShareModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { deleteTrack } from '@/lib/tracks';
 import { cache, CACHE_KEYS } from '@/utils/cache';
+import { usePlayback } from '@/contexts/PlaybackContext';
 import type { TrackWithMembership } from '@/types/library';
+import type { PlaylistWithTracks, PlaylistTrackDisplay } from '@/types/playlist';
 
 interface TrackCardWithActionsProps {
   track: TrackWithMembership;
@@ -43,6 +45,7 @@ export function TrackCardWithActions({
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const { playPlaylist } = usePlayback();
 
   // Handle add to album
   const handleAddToAlbum = () => {
@@ -153,6 +156,52 @@ export function TrackCardWithActions({
     onShowToast(message, 'error');
   };
 
+  // Handle play track
+  const handlePlay = async () => {
+    try {
+      // Convert track to PlaylistTrackDisplay format
+      const playlistTrack: PlaylistTrackDisplay = {
+        id: track.id,
+        title: track.title,
+        author: track.author,
+        description: track.description,
+        audio_url: track.audio_url,
+        file_url: track.file_url,
+        duration: track.duration,
+        cover_image_url: track.cover_image_url,
+        genre: track.genre,
+      };
+
+      // Create a temporary single-track playlist
+      const tempPlaylist: PlaylistWithTracks = {
+        id: 'temp-single-track',
+        name: 'Now Playing',
+        description: null,
+        user_id: userId,
+        is_public: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tracks: [
+          {
+            id: 'temp-track-1',
+            track_id: track.id,
+            position: 1,
+            added_at: new Date().toISOString(),
+            track: playlistTrack,
+          },
+        ],
+        track_count: 1,
+      };
+
+      // Play the single track
+      await playPlaylist(tempPlaylist, 0);
+      onShowToast(`Now playing: ${track.title}`, 'info');
+    } catch (error) {
+      console.error('Failed to play track:', error);
+      onShowToast('Failed to play track', 'error');
+    }
+  };
+
   return (
     <>
       <TrackCard
@@ -162,6 +211,7 @@ export function TrackCardWithActions({
         onCopyUrl={handleCopyUrl}
         onShare={handleShare}
         onDelete={handleDelete}
+        onPlay={handlePlay}
       />
 
       {/* Modals */}

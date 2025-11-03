@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrackCard } from '@/components/library/TrackCard';
+import MainLayout from '@/components/layout/MainLayout';
+import { TrackCardWithActions } from '@/components/library/TrackCardWithActions';
 import { supabase } from '@/lib/supabase';
+import { cache, CACHE_KEYS } from '@/utils/cache';
 import type { TrackWithMembership } from '@/types/library';
 
-type SortOption = 'recent' | 'oldest' | 'most_played';
+type SortOption = 'recent' | 'oldest' | 'most_played' | 'most_liked';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -35,6 +37,7 @@ export default function AllTracksPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Check authentication
   useEffect(() => {
@@ -69,15 +72,11 @@ export default function AllTracksPage() {
             album_tracks (
               album_id,
               albums (name)
-            ),
-            playlist_tracks (
-              playlist_id,
-              playlists (name)
             )
           `)
           .eq('user_id', userId);
 
-        // Apply sorting
+        // Apply sorting (except for most_liked which is done client-side after fetching like counts)
         switch (sortBy) {
           case 'recent':
             query = query.order('created_at', { ascending: false });
@@ -87,6 +86,10 @@ export default function AllTracksPage() {
             break;
           case 'most_played':
             query = query.order('play_count', { ascending: false });
+            break;
+          case 'most_liked':
+            // Will be sorted client-side after fetching like counts
+            query = query.order('created_at', { ascending: false });
             break;
         }
 
@@ -109,19 +112,74 @@ export default function AllTracksPage() {
           return;
         }
 
-        // Transform data to include membership info
+        // Get track IDs for subsequent queries
+        const trackIds = data.map(t => t.id);
+
+        // Fetch user profile data
+        const { data: userProfile } = await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .eq('id', userId)
+          .single();
+
+        // Get like counts for all tracks from posts
+        const { data: postsData } = await supabase
+          .from('posts')
+          .select('track_id, post_likes(count)')
+          .in('track_id', trackIds);
+
+        // Create a map of track_id to like count
+        const likeCountMap = new Map<string, number>();
+        if (postsData) {
+          postsData.forEach(post => {
+            const postLikes = post.post_likes as unknown[];
+            const currentCount = likeCountMap.get(post.track_id) || 0;
+            likeCountMap.set(post.track_id, currentCount + (postLikes?.length || 0));
+          });
+        }
+
+        // Fetch playlist membership separately to avoid join issues
+        const { data: playlistTracksData } = await supabase
+          .from('playlist_tracks')
+          .select('track_id, playlist_id, playlists!inner(name)')
+          .in('track_id', trackIds);
+
+        // Create a map of track_id to playlist info
+        const playlistMap = new Map<string, { ids: string[]; names: string[] }>();
+        if (playlistTracksData) {
+          playlistTracksData.forEach(pt => {
+            const existing = playlistMap.get(pt.track_id) || { ids: [], names: [] };
+            existing.ids.push(pt.playlist_id);
+            // Handle the playlists data which could be an object or array
+            const playlistData = pt.playlists;
+            if (playlistData && typeof playlistData === 'object' && 'name' in playlistData) {
+              existing.names.push((playlistData as { name: string }).name);
+            }
+            playlistMap.set(pt.track_id, existing);
+          });
+        }
+
+        // Transform data to include membership info and like counts
         const transformedTracks = data.map(track => {
           const albumTracks = track.album_tracks as Array<{ album_id: string; albums: { name: string } }> | undefined;
-          const playlistTracks = track.playlist_tracks as Array<{ playlist_id: string; playlists: { name: string } }> | undefined;
+          const playlistInfo = playlistMap.get(track.id) || { ids: [], names: [] };
           
           return {
             ...track,
+            user: userProfile || undefined,
             albumId: albumTracks?.[0]?.album_id || null,
             albumName: albumTracks?.[0]?.albums?.name || null,
-            playlistIds: playlistTracks?.map(pt => pt.playlist_id) || [],
-            playlistNames: playlistTracks?.map(pt => pt.playlists?.name) || []
+            playlistIds: playlistInfo.ids,
+            playlistNames: playlistInfo.names,
+            like_count: likeCountMap.get(track.id) || 0
           };
         }) as TrackWithMembership[];
+
+        // If sorting by most_liked, sort the transformed tracks client-side
+        // (since we can't sort by like_count in the database query)
+        if (sortBy === 'most_liked') {
+          transformedTracks.sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
+        }
 
         // Check if there are more tracks
         setHasMore(transformedTracks.length === ITEMS_PER_PAGE);
@@ -157,44 +215,52 @@ export default function AllTracksPage() {
     setCurrentPage(prev => prev + 1);
   };
 
-  // Track action handlers (placeholder implementations)
-  const handleAddToAlbum = (trackId: string) => {
-    console.log('Add to album:', trackId);
-    // TODO: Implement in task 16
-  };
+  // Handle track update (optimistic)
+  const handleTrackUpdate = useCallback((trackId: string, updates: Partial<TrackWithMembership>) => {
+    setTracks(prevTracks =>
+      prevTracks.map(track =>
+        track.id === trackId ? { ...track, ...updates } : track
+      )
+    );
+  }, []);
 
-  const handleAddToPlaylist = (trackId: string) => {
-    console.log('Add to playlist:', trackId);
-    // TODO: Implement in task 16
-  };
+  // Handle track delete (optimistic)
+  const handleTrackDelete = useCallback((trackId: string) => {
+    setTracks(prevTracks => prevTracks.filter(track => track.id !== trackId));
+    
+    // Invalidate cache on mutation
+    if (userId) {
+      cache.invalidate(CACHE_KEYS.TRACKS(userId));
+      cache.invalidate(CACHE_KEYS.STATS(userId));
+      cache.invalidate(CACHE_KEYS.ALBUMS(userId));
+      cache.invalidate(CACHE_KEYS.PLAYLISTS(userId));
+    }
+  }, [userId]);
 
-  const handleCopyUrl = (trackId: string) => {
-    const url = `${window.location.origin}/tracks/${trackId}`;
-    navigator.clipboard.writeText(url);
-    // TODO: Show success toast
-  };
-
-  const handleShare = (trackId: string) => {
-    console.log('Share track:', trackId);
-    // TODO: Implement in task 17
-  };
-
-  const handleDelete = (trackId: string) => {
-    console.log('Delete track:', trackId);
-    // TODO: Implement in task 18
-  };
+  // Handle toast notifications
+  const handleShowToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
+    setToast({ message, type });
+    
+    // Auto-dismiss after 3 seconds
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  }, []);
 
   if (!userId) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Checking authentication...</div>
-      </div>
+      <MainLayout>
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white">Checking authentication...</div>
+        </div>
+      </MainLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+    <MainLayout>
+      <div className="min-h-screen bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <button
@@ -257,6 +323,16 @@ export default function AllTracksPage() {
             >
               Most Played
             </button>
+            <button
+              onClick={() => handleSortChange('most_liked')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                sortBy === 'most_liked'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              Most Liked
+            </button>
           </div>
         </div>
 
@@ -296,14 +372,13 @@ export default function AllTracksPage() {
           <>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {tracks.map(track => (
-                <TrackCard
+                <TrackCardWithActions
                   key={track.id}
                   track={track}
-                  onAddToAlbum={handleAddToAlbum}
-                  onAddToPlaylist={handleAddToPlaylist}
-                  onCopyUrl={handleCopyUrl}
-                  onShare={handleShare}
-                  onDelete={handleDelete}
+                  userId={userId}
+                  onTrackUpdate={handleTrackUpdate}
+                  onTrackDelete={handleTrackDelete}
+                  onShowToast={handleShowToast}
                 />
               ))}
             </div>
@@ -353,7 +428,30 @@ export default function AllTracksPage() {
             </button>
           </div>
         )}
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
+            <div
+              className={`px-6 py-3 rounded-lg shadow-lg border ${
+                toast.type === 'success'
+                  ? 'bg-green-600 border-green-500 text-white'
+                  : toast.type === 'error'
+                  ? 'bg-red-600 border-red-500 text-white'
+                  : 'bg-blue-600 border-blue-500 text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {toast.type === 'success' && <span>✓</span>}
+                {toast.type === 'error' && <span>✗</span>}
+                {toast.type === 'info' && <span>ℹ</span>}
+                <span>{toast.message}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
+    </MainLayout>
   );
 }

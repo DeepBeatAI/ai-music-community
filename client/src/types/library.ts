@@ -6,7 +6,6 @@ export interface LibraryStats {
   totalTracks: number;
   totalAlbums: number;
   totalPlaylists: number;
-  playsThisWeek: number;
   playsAllTime: number;
 }
 
@@ -16,4 +15,5 @@ export interface TrackWithMembership extends Track {
   albumName: string | null;
   playlistIds: string[];
   playlistNames: string[];
+  like_count?: number;
 }

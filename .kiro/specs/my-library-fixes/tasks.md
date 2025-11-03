@@ -67,7 +67,12 @@ This implementation plan breaks down the bug fixes and enhancements into discret
 
 ### Phase 2: Functional Fixes (P1)
 
-- [ ] 4. Fix stats section play count calculation
+- [x] 4. Fix stats section play count calculation
+
+
+
+
+
   - Modify `client/src/types/library.ts` to remove `playsThisWeek` from `LibraryStats` interface
   - Update `client/src/lib/library.ts` `getLibraryStats` function to remove calculation
   - Update `client/src/components/library/StatsSection.tsx` to display only 5 stats
@@ -75,13 +80,20 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Verify stats display correctly without "Plays This Week"
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ] 5. Find or create AddToPlaylistModal component
+- [x] 5. Find or create AddToPlaylistModal component
+
+
+
+
+
   - Search for existing `AddToPlaylistModal.tsx` component
   - If not found, create `client/src/components/library/AddToPlaylistModal.tsx`
   - Model after `AddToAlbumModal.tsx` structure
   - _Requirements: 6.1_
 
-- [ ] 5.1 Implement playlist track removal functionality
+- [x] 5.1 Implement playlist track removal functionality
+
+
   - Track initial playlist membership state in component
   - Compare initial state with final state on save
   - Identify playlists to add (newly checked) and remove (newly unchecked)
@@ -91,7 +103,12 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Add and remove tracks from multiple playlists
   - _Requirements: 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 6. Create album edit page
+- [x] 6. Create album edit page
+
+
+
+
+
   - Create `client/src/app/library/albums/[id]/edit/page.tsx`
   - Fetch album data using `getAlbumWithTracks`
   - Create edit form with name, description, and is_public fields
@@ -107,7 +124,12 @@ This implementation plan breaks down the bug fixes and enhancements into discret
 
 ### Phase 3: UX Improvements (P2)
 
-- [ ] 7. Enhance track card visual clarity - Replace eye icon
+- [x] 7. Enhance track card visual clarity - Replace eye icon
+
+
+
+
+
   - Modify `client/src/components/library/TrackCard.tsx`
   - Replace eye icon SVG with play icon SVG
   - Add "plays" text label after the count
@@ -115,7 +137,9 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Verify play count displays clearly
   - _Requirements: 4.1_
 
-- [ ] 7.1 Add likes counter to track card
+- [x] 7.1 Add likes counter to track card
+
+
   - Check if `like_count` field exists in tracks table (query database)
   - If not, check for `likes` table and count relationship
   - Update `TrackWithMembership` type to include like count
@@ -124,7 +148,9 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Verify likes display correctly
   - _Requirements: 4.2_
 
-- [ ] 7.2 Add track author to track card
+- [x] 7.2 Add track author to track card
+
+
   - Update `getUserTracksWithMembership` query to join with `user_profiles`
   - Include username in returned data
   - Update `TrackWithMembership` type to include user info
@@ -133,13 +159,17 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Verify author displays correctly
   - _Requirements: 4.3_
 
-- [ ] 7.3 Reduce initial tracks display to 8
+- [x] 7.3 Reduce initial tracks display to 8
+
+
   - Modify `client/src/app/library/page.tsx`
   - Change `initialLimit` prop from 12 to 8 in AllTracksSection
   - Test: Verify only 8 tracks display initially
   - _Requirements: 4.4_
 
-- [ ] 7.4 Add play button to track card
+- [x] 7.4 Add play button to track card
+
+
   - Add `onPlay` prop to TrackCard component interface
   - Create play button overlay on cover art
   - Style button to appear on hover (desktop) or always visible (mobile)
@@ -148,34 +178,53 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Click play button and verify mini player starts
   - _Requirements: 4.5, 4.6_
 
-- [ ] 7.5 Integrate track card play button with AllTracksSection
+- [x] 7.5 Integrate track card play button with AllTracksSection
+
+
   - Import `usePlayback` hook in AllTracksSection
   - Create `handlePlay` function that calls playback context
   - Pass `handlePlay` as `onPlay` prop to TrackCard
   - Test: Play tracks from library page
   - _Requirements: 4.5, 4.6_
 
-- [ ] 8. Fix album description overflow
+- [x] 8. Fix album description overflow
+
+
+
+
   - Modify album details page (find `client/src/app/library/albums/[id]/page.tsx`)
   - Add CSS classes to description container: `whitespace-pre-wrap break-words max-w-full`
   - Test: Create album with very long description and verify no overflow
   - _Requirements: 9.3_
 
-- [ ] 9. Fix album card not updating after edit
+- [x] 9. Fix album card not updating after edit
+
+
+
+
+
+
+
   - Modify `client/src/app/library/albums/[id]/edit/page.tsx`
   - Invalidate albums cache before navigating back: `cache.invalidate(CACHE_KEYS.ALBUMS(userId))`
   - Alternatively, modify MyAlbumsSection to re-fetch on mount
   - Test: Edit album, return to library, verify card shows updated info
   - _Requirements: 9.4_
 
-- [ ] 10. Improve My Playlists section layout - Remove wrapper box
+- [x] 10. Improve My Playlists section layout - Remove wrapper box
+
+
+
+
+
   - Modify `client/src/app/library/page.tsx`
   - Remove `bg-gray-800 border border-gray-700 rounded-lg p-6` wrapper div
   - Let PlaylistsList component handle its own styling
   - Test: Verify playlists section displays correctly
   - _Requirements: 10.1_
 
-- [ ] 10.1 Add collapse/expand button to My Playlists section
+- [x] 10.1 Add collapse/expand button to My Playlists section
+
   - Add `isPlaylistsCollapsed` state to LibraryPage
   - Create section header with collapse button (match Albums/Tracks pattern)
   - Add collapse toggle button with arrow icon
@@ -184,7 +233,9 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Collapse and expand playlists section
   - _Requirements: 10.2_
 
-- [ ] 10.2 Update playlist details page back button
+- [x] 10.2 Update playlist details page back button
+
+
   - Find playlist details page (likely `client/src/app/playlists/[id]/page.tsx`)
   - Change "Back to Playlists" text to "Back to Library"
   - Update href from `/playlists` to `/library`
@@ -195,21 +246,34 @@ This implementation plan breaks down the bug fixes and enhancements into discret
 
 ### Phase 4: Enhancements (P3)
 
-- [ ] 11. Remove cover image URL field from album creation
+- [x] 11. Remove cover image URL field from album creation
+
+
+
+
+
   - Modify `client/src/components/library/CreateAlbumModal.tsx`
   - Remove or hide the `cover_image_url` input field
   - Remove from form state if not needed
   - Test: Create new album and verify field is not shown
   - _Requirements: 9.1_
 
-- [ ] 12. Enhance /tracks page - Fix action menu functionality
+- [x] 12. Enhance /tracks page - Fix action menu functionality
+
+
+
+
+
+
   - Find tracks page component (likely `client/src/app/tracks/page.tsx`)
   - Identify why 3 dots menu buttons don't work
   - Ensure event handlers are properly connected
   - Test all menu actions: Add to Album, Add to Playlist, Copy URL, Share, Delete
   - _Requirements: 8.1_
 
-- [ ] 12.1 Update /tracks page track cards - Visual improvements
+- [x] 12.1 Update /tracks page track cards - Visual improvements
+
+
   - Apply same visual improvements as library track cards
   - Replace eye icon with play icon + "plays" text
   - Add likes counter
@@ -218,7 +282,9 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Verify all visual elements display correctly
   - _Requirements: 8.2, 8.3, 8.4, 8.5_
 
-- [ ] 12.2 Add "Most Liked" filter to /tracks page
+- [x] 12.2 Add "Most Liked" filter to /tracks page
+
+
   - Modify tracks page filters section
   - Add "Most Liked" option to sorting dropdown
   - Implement sort by like_count descending
@@ -226,7 +292,12 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Select "Most Liked" and verify tracks sort correctly
   - _Requirements: 8.6, 8.7_
 
-- [ ] 13. Add album playback controls - Play Album button
+- [x] 13. Add album playback controls - Play Album button
+
+
+
+
+
   - Modify album details page (`client/src/app/library/albums/[id]/page.tsx`)
   - Import `usePlayback` hook from PlaybackContext
   - Create `handlePlayAlbum` function
@@ -237,7 +308,9 @@ This implementation plan breaks down the bug fixes and enhancements into discret
   - Test: Click "Play Album" and verify all tracks queue in mini player
   - _Requirements: 9.5, 9.6, 9.7_
 
-- [ ] 13.1 Add individual track play buttons to album details
+- [x] 13.1 Add individual track play buttons to album details
+
+
   - Create `handlePlayTrack` function that accepts track index
   - Call `playPlaylist` with all album tracks starting at specified index
   - Add play button next to each track in the list

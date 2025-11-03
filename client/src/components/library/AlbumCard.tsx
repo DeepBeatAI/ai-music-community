@@ -172,17 +172,17 @@ export const AlbumCard = memo(function AlbumCard({ album, onDelete, isOwner }: A
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-white mb-2">
               Delete Album
             </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Are you sure you want to delete &quot;{album.name}&quot;? This action cannot be undone.
+            <p className="text-sm text-gray-400 mb-4">
+              Are you sure you want to delete &quot;{album.name}&quot;? This action cannot be undone. Tracks will not be deleted, only removed from this album.
             </p>
 
             {deleteError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-sm text-red-600">{deleteError}</p>
+              <div className="mb-4 p-3 bg-red-900 bg-opacity-50 border border-red-700 rounded-md">
+                <p className="text-sm text-red-400">{deleteError}</p>
               </div>
             )}
 
@@ -193,14 +193,14 @@ export const AlbumCard = memo(function AlbumCard({ album, onDelete, isOwner }: A
                   setDeleteError(null);
                 }}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:cursor-not-allowed transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
               >
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </button>

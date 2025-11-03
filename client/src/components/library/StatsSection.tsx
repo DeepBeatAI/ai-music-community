@@ -56,8 +56,8 @@ function StatCardSkeleton() {
  * StatsSection Component
  * 
  * Displays library statistics in a responsive grid layout.
- * - Desktop: 1 row x 6 columns
- * - Mobile: 2 rows x 3 columns
+ * - Desktop: 1 row x 5 columns
+ * - Mobile: 2 rows (3 + 2 columns)
  * 
  * Features:
  * - Fetches stats from getLibraryStats API
@@ -141,12 +141,12 @@ export default function StatsSection({ userId }: StatsSectionProps) {
     };
   }, [effectiveUserId, fetchStats]);
 
-  // Loading state - show 6 skeleton cards
+  // Loading state - show 5 skeleton cards
   if (loading) {
     return (
       <div className="mb-8">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-          {Array.from({ length: 6 }).map((_, index) => (
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, index) => (
             <StatCardSkeleton key={index} />
           ))}
         </div>
@@ -179,8 +179,8 @@ export default function StatsSection({ userId }: StatsSectionProps) {
 
   return (
     <div className="mb-8">
-      {/* Stats Grid - 3 columns on mobile, 6 columns on desktop */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+      {/* Stats Grid - 3 columns on mobile, 5 columns on desktop */}
+      <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
         <StatCard
           icon="📤"
           value={uploadRemainingDisplay}
@@ -204,12 +204,6 @@ export default function StatsSection({ userId }: StatsSectionProps) {
           value={stats.totalPlaylists}
           label="Total Playlists"
           colorClass="text-pink-400"
-        />
-        <StatCard
-          icon="📊"
-          value={stats.playsThisWeek}
-          label="Plays This Week"
-          colorClass="text-yellow-400"
         />
         <StatCard
           icon="🎧"

@@ -118,6 +118,29 @@ export default function StatsSection({ userId }: StatsSectionProps) {
     fetchStats();
   }, [fetchStats]);
 
+  // Listen for cache invalidation events
+  useEffect(() => {
+    if (!effectiveUserId) return;
+
+    const handleCacheInvalidated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ key: string }>;
+      const invalidatedKey = customEvent.detail.key;
+      const statsKey = CACHE_KEYS.STATS(effectiveUserId);
+
+      // If the stats cache was invalidated, refetch
+      if (invalidatedKey === statsKey) {
+        console.log('📊 Stats cache invalidated, refetching...');
+        fetchStats();
+      }
+    };
+
+    window.addEventListener('cache-invalidated', handleCacheInvalidated);
+
+    return () => {
+      window.removeEventListener('cache-invalidated', handleCacheInvalidated);
+    };
+  }, [effectiveUserId, fetchStats]);
+
   // Loading state - show 6 skeleton cards
   if (loading) {
     return (

@@ -168,12 +168,12 @@ export function validateTrackUpload(
     };
   }
 
-  if (title.length > 255) {
+  if (title.length > 100) {
     return {
       success: false,
       error: createTrackError(TrackUploadError.VALIDATION_ERROR, {
         field: 'title',
-        message: 'Title must be 255 characters or less',
+        message: 'Title must be 100 characters or less',
       }),
     };
   }

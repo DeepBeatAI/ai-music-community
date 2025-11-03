@@ -72,6 +72,14 @@ class Cache {
    */
   invalidate(key: string): void {
     this.cache.delete(key);
+    
+    // Dispatch custom event for cache invalidation
+    // This allows components to listen for cache changes and refetch data
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cache-invalidated', { 
+        detail: { key } 
+      }));
+    }
   }
 
   /**

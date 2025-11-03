@@ -28,33 +28,44 @@ export default function TrackUploadSection({ onUploadSuccess }: TrackUploadSecti
     console.log('Track uploaded successfully:', trackId, track);
     setUploadedTrack(track);
     setShowAssignment(true);
-    
-    // Notify parent component
-    if (onUploadSuccess) {
-      onUploadSuccess(track);
-    }
-  }, [onUploadSuccess]);
+    // Don't call onUploadSuccess here - wait until assignment is done
+  }, []);
 
   // Handle assignment completion (Done button)
   const handleAssignmentDone = useCallback(() => {
     setShowAssignment(false);
     setUploadedTrack(null);
     setIsExpanded(false); // Collapse section
-  }, []);
+    
+    // Notify parent component AFTER assignment is complete
+    if (onUploadSuccess && uploadedTrack) {
+      onUploadSuccess(uploadedTrack);
+    }
+  }, [onUploadSuccess, uploadedTrack]);
 
   // Handle upload another (Upload Another button)
   const handleUploadAnother = useCallback(() => {
     setShowAssignment(false);
     setUploadedTrack(null);
     // Keep section expanded
-  }, []);
+    
+    // Notify parent component AFTER assignment is complete
+    if (onUploadSuccess && uploadedTrack) {
+      onUploadSuccess(uploadedTrack);
+    }
+  }, [onUploadSuccess, uploadedTrack]);
 
   // Handle skip assignment
   const handleSkipAssignment = useCallback(() => {
     setShowAssignment(false);
     setUploadedTrack(null);
     setIsExpanded(false); // Collapse section
-  }, []);
+    
+    // Notify parent component even when skipping assignment
+    if (onUploadSuccess && uploadedTrack) {
+      onUploadSuccess(uploadedTrack);
+    }
+  }, [onUploadSuccess, uploadedTrack]);
 
   // Toggle expand/collapse
   const toggleExpanded = useCallback(() => {

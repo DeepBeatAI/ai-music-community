@@ -163,8 +163,10 @@ export async function uploadTrack(
 
     // Extract duration from audio file
     console.log('⏱️ Extracting audio duration...');
-    const extractedDuration = await extractAudioDuration(uploadData.file);
+    let extractedDuration = await extractAudioDuration(uploadData.file);
     if (extractedDuration) {
+      // Ensure duration is an integer (database expects integer, not float)
+      extractedDuration = Math.round(extractedDuration);
       console.log(`✅ Duration extracted: ${extractedDuration}s`);
     } else {
       console.warn('⚠️ Could not extract duration, will be null in database');
@@ -296,6 +298,15 @@ export async function uploadTrack(
 
     // 4. Create track record in database with compression metadata
     console.log('💾 Creating track record in database...');
+    
+    // Ensure duration is an integer (database expects integer type)
+    let finalDuration: number | null = null;
+    if (uploadData.compressionResult?.duration) {
+      finalDuration = Math.round(uploadData.compressionResult.duration);
+    } else if (extractedDuration) {
+      finalDuration = extractedDuration; // Already rounded above
+    }
+    
     const { data: track, error: dbError} = await supabase
       .from('tracks')
       .insert({
@@ -312,17 +323,53 @@ export async function uploadTrack(
         genre: uploadData.genre || null,
         tags: uploadData.tags || null,
         is_public: uploadData.is_public,
-        duration: uploadData.compressionResult?.duration || extractedDuration || null,
+        duration: finalDuration,
       })
       .select()
       .single();
 
     if (dbError) {
       console.error('❌ Database insert error:', dbError);
-      const errorDetails = createTrackError(TrackUploadError.DATABASE_FAILED, dbError);
+      console.error('📋 Insert data was:', {
+        user_id: userId,
+        title: uploadData.title,
+        author: uploadData.author,
+        description: uploadData.description || null,
+        file_url: publicUrl,
+        file_size: finalFileSize,
+        original_file_size: originalFileSize,
+        compression_ratio: compressionApplied ? compressionRatio : null,
+        compression_applied: compressionApplied,
+        mime_type: uploadData.file.type,
+        genre: uploadData.genre || null,
+        tags: uploadData.tags || null,
+        is_public: uploadData.is_public,
+        duration: uploadData.compressionResult?.duration || extractedDuration || null,
+      });
+      
+      // Extract detailed error information from Supabase error
+      const dbErrorMessage = dbError.message || 'Unknown database error';
+      const dbErrorDetails = dbError.details || '';
+      const dbErrorHint = dbError.hint || '';
+      const dbErrorCode = dbError.code || '';
+      
+      // Create a detailed error message
+      let detailedError = `Database error: ${dbErrorMessage}`;
+      if (dbErrorDetails) detailedError += ` | Details: ${dbErrorDetails}`;
+      if (dbErrorHint) detailedError += ` | Hint: ${dbErrorHint}`;
+      if (dbErrorCode) detailedError += ` | Code: ${dbErrorCode}`;
+      
+      console.error('📝 Detailed error:', detailedError);
+      
+      const errorDetails = createTrackError(TrackUploadError.DATABASE_FAILED, detailedError);
       logTrackError('uploadTrack:database', dbError, {
         userId,
         trackTitle: uploadData.title,
+        trackAuthor: uploadData.author,
+        errorMessage: dbErrorMessage,
+        errorDetails: dbErrorDetails,
+        errorHint: dbErrorHint,
+        errorCode: dbErrorCode,
       });
       
       // Try to clean up uploaded file (only if we uploaded it)
@@ -341,7 +388,7 @@ export async function uploadTrack(
         success: false,
         error: errorDetails.userMessage,
         errorCode: errorDetails.code,
-        details: errorDetails.technicalDetails,
+        details: detailedError, // Use the detailed error string instead of object
       };
     }
 
@@ -531,7 +578,7 @@ export async function updateTrack(
  * 
  * Deletes a track from the database.
  * This will also remove the track from any playlists (CASCADE).
- * Posts referencing this track will have their track_id set to NULL.
+ * Posts referencing this track will be deleted to avoid constraint violations.
  * Only the track owner can delete their tracks (enforced by RLS).
  * 
  * @param trackId - The UUID of the track to delete
@@ -548,22 +595,60 @@ export async function updateTrack(
  * @remarks
  * This function does NOT delete the audio file from storage.
  * Consider implementing storage cleanup separately if needed.
+ * 
+ * Related posts are deleted before the track to prevent constraint violations.
+ * The posts table has a check constraint that requires audio posts to have
+ * either a track_id OR both audio_url and audio_filename. Since the foreign key
+ * would set track_id to NULL on delete, posts without audio_url/audio_filename
+ * would violate the constraint. Deleting posts first avoids this issue.
  */
 export async function deleteTrack(trackId: string): Promise<boolean> {
   try {
-    const { error } = await supabase
+    console.log(`🗑️ Starting track deletion for: ${trackId}`);
+    
+    // Step 1: Delete related posts first to avoid constraint violations
+    // The posts table has a check constraint (posts_audio_fields_check) that requires:
+    // - For text posts: audio_url, audio_filename, and track_id must all be NULL
+    // - For audio posts: either track_id IS NOT NULL OR (audio_url IS NOT NULL AND audio_filename IS NOT NULL)
+    // 
+    // The foreign key (posts_track_id_fkey) has ON DELETE SET NULL, which would set track_id to NULL
+    // when the track is deleted. However, if a post only has track_id (no audio_url/audio_filename),
+    // setting track_id to NULL would violate the check constraint.
+    // 
+    // Solution: Delete posts referencing this track before deleting the track itself.
+    console.log('🗑️ Deleting related posts...');
+    const { error: postsError, count: deletedPostsCount } = await supabase
+      .from('posts')
+      .delete({ count: 'exact' })
+      .eq('track_id', trackId);
+    
+    if (postsError) {
+      console.error('❌ Error deleting related posts:', postsError);
+      // Log the error but continue - posts might not exist or user might not have permission
+      // The track deletion might still succeed if there are no posts or if the foreign key
+      // constraint can handle it
+      console.warn('⚠️ Continuing with track deletion despite posts deletion error');
+    } else {
+      console.log(`✅ Deleted ${deletedPostsCount || 0} related post(s)`);
+    }
+    
+    // Step 2: Delete the track
+    // This will also remove the track from playlists due to CASCADE delete on playlist_tracks
+    console.log('🗑️ Deleting track...');
+    const { error: trackError } = await supabase
       .from('tracks')
       .delete()
       .eq('id', trackId);
 
-    if (error) {
-      console.error('Error deleting track:', error);
+    if (trackError) {
+      console.error('❌ Error deleting track:', trackError);
       return false;
     }
     
+    console.log('✅ Track deleted successfully');
     return true;
   } catch (error) {
-    console.error('Error deleting track:', error);
+    console.error('❌ Unexpected error deleting track:', error);
     return false;
   }
 }

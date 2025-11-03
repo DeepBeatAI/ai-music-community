@@ -154,9 +154,11 @@ export default function AudioUpload({
         // Auto-populate title from filename
         const defaultTitle = finalFile.name.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, '');
         setTrackTitle(defaultTitle);
-        // Pre-fill author with username from profile
-        if (profile?.username && !trackAuthor) {
-          setTrackAuthor(profile.username);
+        // Pre-fill author with username from profile (mandatory field)
+        if (!trackAuthor) {
+          // Use profile username if available, otherwise use a placeholder
+          const defaultAuthor = profile?.username || user?.email?.split('@')[0] || '';
+          setTrackAuthor(defaultAuthor);
         }
       } else {
         // LEGACY: Notify parent component directly
@@ -173,11 +175,35 @@ export default function AudioUpload({
       setIsValidating(false);
       setIsCompressing(false);
     }
-  }, [enableCompression, uploadMode, compressionQuality, profile?.username, trackAuthor, onFileSelect]);
+  }, [enableCompression, uploadMode, compressionQuality, profile?.username, trackAuthor, user?.email, onFileSelect]);
 
   // NEW: Handle track upload
   const handleTrackUpload = useCallback(async () => {
     if (!user || !selectedFile || !validation?.file) {
+      return;
+    }
+
+    // Validate required fields before upload
+    const trimmedTitle = trackTitle.trim();
+    const trimmedAuthor = trackAuthor.trim();
+
+    if (!trimmedTitle) {
+      setUploadError('Track title is required');
+      return;
+    }
+
+    if (trimmedTitle.length > 100) {
+      setUploadError('Track title must be 100 characters or less');
+      return;
+    }
+
+    if (!trimmedAuthor) {
+      setUploadError('Track author is required. Please enter an artist name.');
+      return;
+    }
+
+    if (trimmedAuthor.length > 100) {
+      setUploadError('Author name must be 100 characters or less');
       return;
     }
 
@@ -195,9 +221,9 @@ export default function AudioUpload({
       // The compression result contains the Supabase URL of the already-uploaded compressed file
       const uploadData: TrackUploadData = {
         file: validation.file, // Original file (uploadTrack will handle compression internally)
-        title: trackTitle || selectedFile.name.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, ''),
-        author: trackAuthor.trim() || profile?.username || 'Unknown Artist', // Mandatory author field
-        description: trackDescription || undefined,
+        title: trimmedTitle,
+        author: trimmedAuthor, // Mandatory author field (already validated)
+        description: trackDescription.trim() || undefined,
         is_public: true, // Default to public
         // Pass compression result so uploadTrack knows compression already happened
         compressionResult: compressionResult || undefined,
@@ -222,7 +248,10 @@ export default function AudioUpload({
         // Also call legacy callback for backward compatibility
         onFileSelect(validation.file, validation.duration, compressionResult || undefined);
       } else {
-        setUploadError(result.error || 'Failed to upload track');
+        // Provide more specific error messages
+        const errorMessage = result.error || 'Failed to upload track';
+        const details = result.details ? ` (${result.details})` : '';
+        setUploadError(errorMessage + details);
       }
     } catch (error) {
       console.error('Track upload error:', error);
@@ -230,7 +259,7 @@ export default function AudioUpload({
     } finally {
       setIsUploadingTrack(false);
     }
-  }, [user, selectedFile, validation, trackTitle, trackAuthor, profile?.username, trackDescription, compressionResult, onTrackUploaded, onFileSelect]);
+  }, [user, selectedFile, validation, trackTitle, trackAuthor, trackDescription, compressionResult, onTrackUploaded, onFileSelect]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -326,8 +355,7 @@ export default function AudioUpload({
         ) : isCompressing ? (
           <div className="space-y-2">
             <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto"></div>
-            <p className="text-purple-400">Compressing for bandwidth savings...</p>
-            <p className="text-xs text-gray-500">Reducing file size to minimize egress costs</p>
+            <p className="text-purple-400">Compressing audio...</p>
           </div>
         ) : selectedFile ? (
           <div className="space-y-3">
@@ -343,10 +371,11 @@ export default function AudioUpload({
             
             <div className="text-sm text-gray-300 space-y-1">
               <p className="font-medium">{selectedFile.name}</p>
-              <p className="text-gray-400">
-                {formatFileSize(selectedFile.size)}
-                {validation?.duration && ` • ${formatDuration(validation.duration)}`}
-              </p>
+              {validation?.duration && (
+                <p className="text-gray-400">
+                  {formatDuration(validation.duration)}
+                </p>
+              )}
             </div>
 
             {/* Compression Success Info */}
@@ -448,11 +477,26 @@ export default function AudioUpload({
                 id="track-title"
                 type="text"
                 value={trackTitle}
-                onChange={(e) => setTrackTitle(e.target.value)}
-                placeholder="Enter track title"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => {
+                  setTrackTitle(e.target.value);
+                  // Clear error when user starts typing
+                  if (uploadError && uploadError.includes('title')) {
+                    setUploadError(null);
+                  }
+                }}
+                placeholder="Enter track title (required)"
+                maxLength={100}
+                required
+                className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  uploadError && uploadError.toLowerCase().includes('title') 
+                    ? 'border-red-500 focus:ring-red-500' 
+                    : 'border-gray-600'
+                }`}
                 disabled={isUploadingTrack}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                {trackTitle.length}/100 characters
+              </p>
             </div>
 
             <div>
@@ -469,11 +513,21 @@ export default function AudioUpload({
                 id="track-author"
                 type="text"
                 value={trackAuthor}
-                onChange={(e) => setTrackAuthor(e.target.value)}
-                placeholder="Enter artist/author name"
+                onChange={(e) => {
+                  setTrackAuthor(e.target.value);
+                  // Clear error when user starts typing
+                  if (uploadError && uploadError.includes('author')) {
+                    setUploadError(null);
+                  }
+                }}
+                placeholder="Enter artist/author name (required)"
                 maxLength={100}
                 required
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  uploadError && uploadError.toLowerCase().includes('author') 
+                    ? 'border-red-500 focus:ring-red-500' 
+                    : 'border-gray-600'
+                }`}
                 disabled={isUploadingTrack}
               />
               <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">

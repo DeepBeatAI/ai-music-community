@@ -79,16 +79,16 @@ export function TrackCardWithActions({
 
   // Handle playlist assignment success
   const handlePlaylistSuccess = (playlistIds: string[], playlistNames: string[]) => {
-    // Optimistic update
+    // Invalidate cache on mutation FIRST
+    cache.invalidate(CACHE_KEYS.TRACKS(userId));
+    cache.invalidate(CACHE_KEYS.PLAYLISTS(userId));
+    cache.invalidate(CACHE_KEYS.STATS(userId));
+    
+    // Then do optimistic update
     onTrackUpdate(track.id, {
       playlistIds,
       playlistNames,
     });
-    
-    // Invalidate cache on mutation
-    cache.invalidate(CACHE_KEYS.TRACKS(userId));
-    cache.invalidate(CACHE_KEYS.PLAYLISTS(userId));
-    cache.invalidate(CACHE_KEYS.STATS(userId));
     
     if (playlistIds.length > 0) {
       onShowToast(`Updated playlist membership`, 'success');

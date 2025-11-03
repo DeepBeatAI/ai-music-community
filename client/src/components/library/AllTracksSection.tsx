@@ -124,6 +124,29 @@ export default function AllTracksSection({
     fetchTracks();
   }, [fetchTracks]);
 
+  // Listen for cache invalidation events
+  useEffect(() => {
+    if (!effectiveUserId) return;
+
+    const handleCacheInvalidated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ key: string }>;
+      const invalidatedKey = customEvent.detail?.key;
+      
+      // Check if the invalidated key is relevant to this component
+      if (invalidatedKey === CACHE_KEYS.TRACKS(effectiveUserId)) {
+        console.log(`Tracks cache invalidated, refetching...`);
+        fetchTracks();
+      }
+    };
+
+    // Listen for cache invalidation events from the cache utility
+    window.addEventListener('cache-invalidated', handleCacheInvalidated);
+
+    return () => {
+      window.removeEventListener('cache-invalidated', handleCacheInvalidated);
+    };
+  }, [effectiveUserId, fetchTracks]);
+
   // Handle track update (optimistic)
   const handleTrackUpdate = (trackId: string, updates: Partial<TrackWithMembership>) => {
     setTracks(prevTracks =>

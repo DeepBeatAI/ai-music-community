@@ -55,7 +55,8 @@ export function AddToAlbumModal({
     };
 
     fetchAlbums();
-  }, [isOpen, userId, onError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, userId]);
 
   // Handle escape key press
   useEffect(() => {

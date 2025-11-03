@@ -86,7 +86,8 @@ export function AddToPlaylistModal({
     };
 
     fetchPlaylists();
-  }, [isOpen, trackId, userId, onError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, trackId, userId]);
 
   // Handle escape key press
   useEffect(() => {
@@ -151,16 +152,6 @@ export function AddToPlaylistModal({
         id => !selectedPlaylistIds.has(id)
       );
 
-      // Optimistic update
-      const newPlaylistIds = Array.from(selectedPlaylistIds);
-      const newPlaylistNames = newPlaylistIds
-        .map(id => playlists.find(p => p.id === id)?.name || '')
-        .filter(name => name !== '');
-      
-      if (onSuccess) {
-        onSuccess(newPlaylistIds, newPlaylistNames);
-      }
-
       // Remove track from unchecked playlists
       const removePromises = playlistsToRemove.map(playlistId =>
         removeTrackFromPlaylist({
@@ -195,14 +186,7 @@ export function AddToPlaylistModal({
         
         setError(errorMessage);
         
-        // Rollback optimistic update
-        if (onSuccess) {
-          const previousNames = previousPlaylistIds
-            .map(id => playlists.find(p => p.id === id)?.name || '')
-            .filter(name => name !== '');
-          onSuccess(previousPlaylistIds, previousNames);
-        }
-        
+        // Don't update UI on error
         if (onError) {
           onError(errorMessage);
         }
@@ -231,6 +215,16 @@ export function AddToPlaylistModal({
 
       // Update initial state to match current state for future saves
       setInitialPlaylistIds(new Set(selectedPlaylistIds));
+
+      // Success! Update UI with new playlist membership
+      const newPlaylistIds = Array.from(selectedPlaylistIds);
+      const newPlaylistNames = newPlaylistIds
+        .map(id => playlists.find(p => p.id === id)?.name || '')
+        .filter(name => name !== '');
+      
+      if (onSuccess) {
+        onSuccess(newPlaylistIds, newPlaylistNames);
+      }
 
       // Close modal after short delay to show success message
       setTimeout(() => {

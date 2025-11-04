@@ -5,8 +5,12 @@ import { useEffect, useRef, useState } from 'react';
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  trackId: string;
-  trackTitle: string;
+  shareType?: 'post' | 'track'; // NEW: Type of content being shared
+  itemId?: string; // NEW: Generic ID for post or track
+  itemTitle?: string; // NEW: Generic title for post or track
+  // Legacy props for backward compatibility
+  trackId?: string;
+  trackTitle?: string;
   trackAuthor?: string;
   onCopySuccess?: () => void;
 }
@@ -14,6 +18,10 @@ interface ShareModalProps {
 export function ShareModal({
   isOpen,
   onClose,
+  shareType,
+  itemId,
+  itemTitle,
+  // Legacy props
   trackId,
   trackTitle,
   trackAuthor,
@@ -22,14 +30,26 @@ export function ShareModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
+  const firstFocusableRef = useRef<HTMLButtonElement>(null);
+  const lastFocusableRef = useRef<HTMLButtonElement>(null);
 
-  // Generate shareable URL
+  // Determine actual values (new props take precedence, fall back to legacy)
+  const actualShareType = shareType || 'track';
+  const actualItemId = itemId || trackId || '';
+  const actualItemTitle = itemTitle || trackTitle || '';
+
+  // Generate shareable URL based on shareType
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
-      const url = `${window.location.origin}/tracks/${trackId}`;
+      let url: string;
+      if (actualShareType === 'track') {
+        url = `${window.location.origin}/tracks/${actualItemId}`;
+      } else {
+        url = `${window.location.origin}/posts/${actualItemId}`;
+      }
       setShareUrl(url);
     }
-  }, [isOpen, trackId]);
+  }, [isOpen, actualShareType, actualItemId]);
 
   // Handle escape key press
   useEffect(() => {
@@ -43,10 +63,14 @@ export function ShareModal({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  // Prevent body scroll when modal is open
+  // Prevent body scroll when modal is open and set initial focus
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      // Focus the close button when modal opens
+      setTimeout(() => {
+        firstFocusableRef.current?.focus();
+      }, 100);
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -54,6 +78,41 @@ export function ShareModal({
     return () => {
       document.body.style.overflow = 'unset';
     };
+  }, [isOpen]);
+
+  // Focus trap within modal
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleTabKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Tab') return;
+
+      const focusableElements = modalRef.current?.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+
+      if (!focusableElements || focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0] as HTMLElement;
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+      if (e.shiftKey) {
+        // Shift + Tab
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        // Tab
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleTabKey);
+    return () => document.removeEventListener('keydown', handleTabKey);
   }, [isOpen]);
 
   // Reset copied state when modal closes
@@ -87,12 +146,53 @@ export function ShareModal({
       }, 3000);
     } catch (err) {
       console.error('Failed to copy URL:', err);
+      
+      // Fallback: Try using document.execCommand as a backup
+      try {
+        const input = document.querySelector('input[readonly]') as HTMLInputElement;
+        if (input) {
+          input.select();
+          const success = document.execCommand('copy');
+          if (success) {
+            setCopied(true);
+            if (onCopySuccess) {
+              onCopySuccess();
+            }
+            setTimeout(() => {
+              setCopied(false);
+            }, 3000);
+            return;
+          }
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback copy also failed:', fallbackErr);
+      }
+      
+      // If all methods fail, show error message
+      alert('Failed to copy URL. Please select and copy the URL manually.');
     }
+  };
+
+  // Get modal title based on shareType
+  const getModalTitle = (): string => {
+    return actualShareType === 'track' ? 'Share Track' : 'Share Post';
+  };
+
+  // Get share description based on shareType
+  const getShareDescription = (): string => {
+    return actualShareType === 'track' ? 'Share this track:' : 'Share this post:';
+  };
+
+  // Get URL label based on shareType
+  const getUrlLabel = (): string => {
+    return actualShareType === 'track' ? 'Track URL' : 'Post URL';
   };
 
   // Share to social media platforms
   const handleShareToTwitter = (): void => {
-    const text = `Check out "${trackTitle}"${trackAuthor ? ` by ${trackAuthor}` : ''} on AI Music Community`;
+    const text = actualShareType === 'track'
+      ? `Check out "${actualItemTitle}"${trackAuthor ? ` by ${trackAuthor}` : ''} on AI Music Community`
+      : `Check out this post on AI Music Community`;
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
     window.open(url, '_blank', 'noopener,noreferrer,width=550,height=420');
   };
@@ -108,7 +208,9 @@ export function ShareModal({
   };
 
   const handleShareToReddit = (): void => {
-    const title = `${trackTitle}${trackAuthor ? ` by ${trackAuthor}` : ''}`;
+    const title = actualShareType === 'track'
+      ? `${actualItemTitle}${trackAuthor ? ` by ${trackAuthor}` : ''}`
+      : actualItemTitle;
     const url = `https://reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(title)}`;
     window.open(url, '_blank', 'noopener,noreferrer,width=550,height=420');
   };
@@ -133,9 +235,10 @@ export function ShareModal({
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 id="modal-title" className="text-xl font-semibold text-gray-900 dark:text-white">
-            Share Track
+            {getModalTitle()}
           </h2>
           <button
+            ref={firstFocusableRef}
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full p-1 transition-colors"
             aria-label="Close modal"
@@ -158,15 +261,15 @@ export function ShareModal({
 
         {/* Modal Body */}
         <div className="p-6">
-          {/* Track Info */}
+          {/* Content Info */}
           <div className="mb-6">
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Share this track:
+              {getShareDescription()}
             </p>
             <p className="text-lg font-semibold text-gray-900 dark:text-white">
-              {trackTitle}
+              {actualItemTitle}
             </p>
-            {trackAuthor && (
+            {trackAuthor && actualShareType === 'track' && (
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 by {trackAuthor}
               </p>
@@ -176,7 +279,7 @@ export function ShareModal({
           {/* Copy URL Section */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Track URL
+              {getUrlLabel()}
             </label>
             <div className="flex gap-2">
               <input
@@ -287,6 +390,7 @@ export function ShareModal({
         {/* Modal Footer */}
         <div className="flex justify-end p-6 border-t border-gray-200 dark:border-gray-700">
           <button
+            ref={lastFocusableRef}
             onClick={onClose}
             className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
           >

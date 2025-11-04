@@ -8,8 +8,10 @@ import FollowButton from './FollowButton';
 import UserStatsCard from './UserStatsCard';
 import CommentList from './CommentList';
 import { AddToPlaylist } from './playlists/AddToPlaylist';
+import { ShareModal } from './library/ShareModal';
 import { supabase } from '@/lib/supabase';
 import { queryCache } from '@/utils/queryCache';
+import { useToast } from '@/contexts/ToastContext';
 
 interface PostItemProps {
   post: Post;
@@ -123,6 +125,10 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
   const username = post.user_profiles?.username || 'Anonymous';
   const [commentCount, setCommentCount] = useState<number>(0);
   const [showComments, setShowComments] = useState<boolean>(false);
+  const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [showManualCopyModal, setShowManualCopyModal] = useState<boolean>(false);
+  const [manualCopyUrl, setManualCopyUrl] = useState<string>('');
+  const { showToast } = useToast();
 
   // Fetch comment count on mount and when comments visibility changes
   useEffect(() => {
@@ -202,6 +208,50 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
       queryCache.invalidatePattern(`comments-${post.id}`);
     }
   };
+
+  const handleCopyTrackUrl = async () => {
+    if (!post.track_id) return;
+    
+    const trackUrl = `${window.location.origin}/tracks/${post.track_id}`;
+    
+    try {
+      await navigator.clipboard.writeText(trackUrl);
+      showToast('Track URL copied to clipboard', 'success');
+    } catch (error) {
+      console.error('Failed to copy track URL:', error);
+      
+      // Show fallback modal for manual copy
+      setManualCopyUrl(trackUrl);
+      setShowManualCopyModal(true);
+      showToast('Clipboard access denied. Please copy manually.', 'error');
+    }
+  };
+
+  const handleShareTrack = () => {
+    setShowShareModal(true);
+  };
+
+  const handleCloseShareModal = () => {
+    setShowShareModal(false);
+  };
+
+  const handleShareSuccess = () => {
+    showToast('Track URL copied to clipboard', 'success');
+  };
+
+  // Handle Escape key for manual copy modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showManualCopyModal) {
+        setShowManualCopyModal(false);
+      }
+    };
+
+    if (showManualCopyModal) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [showManualCopyModal]);
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-md border border-gray-700">
@@ -302,6 +352,59 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
         {/* Track Metadata (author and description - separate from post caption) */}
         {post.post_type === 'audio' && post.track && (post.track.author || post.track.description) && (
           <div className="mt-3 p-3 bg-gray-700/50 rounded-lg border border-gray-600">
+            {/* Track Action Buttons - Moved above "About this track" */}
+            {currentUserId && post.track_id && (
+              <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                <AddToPlaylist 
+                  trackId={post.track_id}
+                  onSuccess={() => {
+                    console.log('✅ Track added to playlist successfully');
+                  }}
+                />
+                <button
+                  onClick={handleCopyTrackUrl}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+                  aria-label="Copy track URL to clipboard"
+                  title="Copy track URL"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <span className="whitespace-nowrap">Copy URL</span>
+                </button>
+                <button
+                  onClick={handleShareTrack}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+                  aria-label="Share this track"
+                  title="Share track"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                    />
+                  </svg>
+                  <span className="whitespace-nowrap">Share</span>
+                </button>
+              </div>
+            )}
             <p className="text-sm font-semibold text-gray-300 mb-2">About this track:</p>
             <div className="space-y-1">
               {post.track.author && (
@@ -355,27 +458,13 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
               )}
             </button>
             
-            {/* Add to Playlist Button - Only for audio posts and authenticated users */}
-            {post.post_type === 'audio' && currentUserId && post.track_id && (
-              <AddToPlaylist 
-                trackId={post.track_id}
-                onSuccess={() => {
-                  console.log('✅ Track added to playlist successfully');
-                }}
-              />
-            )}
-            
-            {/* Debug: Show if button should appear but doesn't */}
-            {post.post_type === 'audio' && currentUserId && !post.track_id && (
-              <div className="text-xs text-red-400">
-                ⚠️ No track_id
-              </div>
-            )}
-            
-            {/* Future: Share Button */}
-            <button className="flex items-center space-x-2 text-gray-400 hover:text-green-400 transition-colors text-sm px-2 py-1 rounded hover:bg-green-900/10">
+            {/* Share Post Button */}
+            <button 
+              className="flex items-center space-x-2 text-gray-400 hover:text-green-400 transition-colors text-sm px-2 py-1 rounded hover:bg-green-900/10"
+              aria-label="Share this post"
+            >
               <span>🔗</span>
-              <span>Share</span>
+              <span>Share post</span>
             </button>
           </div>
           
@@ -399,6 +488,91 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
             currentUserId={currentUserId}
             onCommentCountChange={handleCommentCountChange}
           />
+        </div>
+      )}
+
+      {/* Share Track Modal */}
+      {post.track_id && post.track && (
+        <ShareModal
+          isOpen={showShareModal}
+          onClose={handleCloseShareModal}
+          trackId={post.track_id}
+          trackTitle={post.track.title}
+          trackAuthor={post.track.author}
+          onCopySuccess={handleShareSuccess}
+        />
+      )}
+
+      {/* Manual Copy Fallback Modal */}
+      {showManualCopyModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
+          onClick={() => setShowManualCopyModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="manual-copy-title"
+        >
+          <div
+            className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 id="manual-copy-title" className="text-lg font-semibold text-white">
+                Copy Track URL
+              </h3>
+              <button
+                onClick={() => setShowManualCopyModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+                aria-label="Close modal"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <p className="text-gray-300 text-sm mb-4">
+              Automatic clipboard access is not available. Please copy the URL manually:
+            </p>
+            
+            <div className="bg-gray-700 rounded p-3 mb-4">
+              <input
+                type="text"
+                value={manualCopyUrl}
+                readOnly
+                className="w-full bg-transparent text-white text-sm focus:outline-none"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowManualCopyModal(false)}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  const input = document.querySelector('input[readonly]') as HTMLInputElement;
+                  if (input) {
+                    input.select();
+                    try {
+                      document.execCommand('copy');
+                      showToast('URL copied to clipboard', 'success');
+                      setShowManualCopyModal(false);
+                    } catch (err) {
+                      console.error('Failed to copy:', err);
+                    }
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+              >
+                Select & Copy
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

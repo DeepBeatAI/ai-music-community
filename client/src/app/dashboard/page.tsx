@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import MainLayout from "@/components/layout/MainLayout";
 import EditablePost from "@/components/EditablePost";
-import AudioUpload from "@/components/AudioUpload";
 import SearchBar from "@/components/SearchBar";
 import FollowButton from "@/components/FollowButton";
 import CreatorFilterButton from "@/components/CreatorFilterButton";
@@ -13,7 +12,9 @@ import CreatorFilterNoResults from "@/components/CreatorFilterNoResults";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PerformanceMonitoringPanel from "@/components/PerformanceMonitoringPanel";
 import LoadMoreButton from "@/components/LoadMoreButton";
+import { TrackPicker } from "@/components/dashboard/TrackPicker";
 import type { SearchFilters } from "@/utils/search";
+import type { Track } from "@/types/track";
 import {
   fetchPosts,
   fetchPostsByCreator,
@@ -21,7 +22,6 @@ import {
   createAudioPost,
   deletePost,
 } from "@/utils/posts";
-import { uploadTrack } from "@/lib/tracks";
 import { searchContent } from "@/utils/search";
 import { createUnifiedPaginationState } from "@/utils/unifiedPaginationState";
 import { 
@@ -32,31 +32,6 @@ import type { PaginationState } from "@/types/pagination";
 import type { UserProfile, Post } from "@/types";
 
 // Error Boundary Components
-const AudioUploadErrorBoundary = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => (
-  <ErrorBoundary
-    fallback={
-      <div className="bg-red-900/20 border border-red-700 rounded p-4 text-center">
-        <p className="text-red-400 text-sm mb-2">
-          Audio upload temporarily unavailable
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
-        >
-          Refresh Page
-        </button>
-      </div>
-    }
-    onError={(error) => console.error("AudioUpload Error:", error)}
-  >
-    {children}
-  </ErrorBoundary>
-);
-
 const SearchErrorBoundary = ({ children }: { children: React.ReactNode }) => (
   <ErrorBoundary
     fallback={
@@ -140,19 +115,21 @@ const LoadMoreErrorBoundary = ({ children }: { children: React.ReactNode }) => (
 const POSTS_PER_PAGE = 15;
 
 export default function Dashboard() {
-  const { user, profile, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   // Component state
   const [activeTab, setActiveTab] = useState<"text" | "audio">("text");
   const [textContent, setTextContent] = useState("");
-  const [trackAuthor, setTrackAuthor] = useState(""); // Track author (mandatory, immutable)
-  const [trackDescription, setTrackDescription] = useState(""); // Track metadata description
-  const [audioDescription, setAudioDescription] = useState(""); // Post caption
-  const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null); // Selected track from picker
+  const [caption, setCaption] = useState(""); // Post caption (social commentary)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPerformancePanel, setShowPerformancePanel] = useState(false);
   const [isPostFormExpanded, setIsPostFormExpanded] = useState(false); // New state for expandable form
+  
+  // Refs for focus management
+  const trackPickerRef = useRef<HTMLDivElement>(null);
+  const audioTabButtonRef = useRef<HTMLButtonElement>(null);
 
   // Unified pagination state
   const [paginationManager] = useState(() => createUnifiedPaginationState());
@@ -470,6 +447,17 @@ export default function Dashboard() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
+  // Focus management: Focus TrackPicker when audio tab opens
+  useEffect(() => {
+    if (isPostFormExpanded && activeTab === 'audio' && trackPickerRef.current) {
+      // Small delay to ensure the component is fully rendered
+      const timer = setTimeout(() => {
+        trackPickerRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isPostFormExpanded, activeTab]);
+
   // REMOVED: This useEffect was causing issues with filter updates
   // Filters are now managed entirely within handleFiltersChange
 
@@ -525,15 +513,7 @@ export default function Dashboard() {
     }
   }, [user, loadPosts]);
 
-  // Pre-fill track author with username when form opens
-  const hasInitializedAuthor = useRef(false);
-  useEffect(() => {
-    // Pre-fill when form is expanded and author is empty and we haven't initialized yet
-    if (isPostFormExpanded && profile?.username && !trackAuthor && !hasInitializedAuthor.current) {
-      setTrackAuthor(profile.username);
-      hasInitializedAuthor.current = true;
-    }
-  }, [isPostFormExpanded, profile?.username, trackAuthor]);
+  // No longer need to pre-fill track author since we're selecting existing tracks
 
   // Handle search
   const handleSearch = useCallback(
@@ -1000,20 +980,11 @@ export default function Dashboard() {
     // Client-side pagination is handled automatically by the pagination manager
   }, [filteredPosts.length, handleFilteredLoadMore, paginationManager, paginationState.currentPage, loadPosts]);
 
-  // Handle audio file selection
-  const handleAudioFileSelect = useCallback((file: File) => {
-    setSelectedAudioFile(file);
+  // Handle track selection
+  const handleTrackSelect = useCallback((track: Track) => {
+    setSelectedTrack(track);
     setError(null);
   }, []);
-
-  // Handle audio file removal
-  const handleAudioFileRemove = useCallback(() => {
-    setSelectedAudioFile(null);
-    // Also clear the audio description when switching tabs to avoid confusion
-    if (activeTab !== "audio") {
-      setAudioDescription("");
-    }
-  }, [activeTab]);
   // Handle text post submission
   const handleTextPostSubmit = useCallback(async () => {
     if (!user || !textContent.trim()) return;
@@ -1041,53 +1012,38 @@ export default function Dashboard() {
 
   // Handle audio post submission
   const handleAudioPostSubmit = useCallback(async () => {
-    if (!user || !selectedAudioFile) return;
+    if (!user || !selectedTrack) return;
 
     try {
       setIsSubmitting(true);
       setError(null);
 
-      const originalFileName = selectedAudioFile.name;
-      console.log('Creating audio post with file:', originalFileName, 'Size:', selectedAudioFile.size);
-      
-      // Ensure author is not empty
-      const authorValue = trackAuthor.trim() || profile?.username || 'Unknown Artist';
-      console.log('📝 Track author:', authorValue);
-      
-      // Upload track (handles file upload AND compression internally)
-      const uploadResult = await uploadTrack(user.id, {
-        file: selectedAudioFile,
-        title: originalFileName.replace(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i, ''),
-        author: authorValue, // Mandatory author field
-        description: trackDescription || undefined, // Track metadata description
-        is_public: true,
-      });
-
-      if (!uploadResult.success || !uploadResult.track) {
-        console.error('Track upload error:', uploadResult.error);
-        throw new Error(uploadResult.error || 'Failed to upload track');
+      // Validate track is selected
+      if (!selectedTrack) {
+        setError("Please select a track to create an audio post");
+        return;
       }
 
-      const track = uploadResult.track;
-      console.log('✅ Track uploaded successfully:', track.id);
-      if (uploadResult.compressionInfo) {
-        console.log('✅ Compression applied:', uploadResult.compressionInfo);
+      // Validate track is public
+      if (!selectedTrack.is_public) {
+        setError("Selected track must be public to create a post");
+        return;
       }
+
+      console.log('Creating audio post with track:', selectedTrack.id);
 
       // Create post with track reference (post caption)
       await createAudioPost(
         user.id,
-        track.id,
-        audioDescription || undefined // Post caption/social commentary
+        selectedTrack.id,
+        caption || undefined // Post caption/social commentary
       );
 
       console.log('✅ Audio post created successfully');
       
-      setTrackAuthor(profile?.username || ""); // Reset to default
-      hasInitializedAuthor.current = false; // Allow re-initialization for next upload
-      setTrackDescription("");
-      setAudioDescription("");
-      setSelectedAudioFile(null);
+      // Reset form
+      setSelectedTrack(null);
+      setCaption("");
 
       // Collapse the form after successful submission
       setIsPostFormExpanded(false);
@@ -1097,12 +1053,12 @@ export default function Dashboard() {
       await loadPosts(1, false);
     } catch (error) {
       console.error("Error creating audio post:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to upload audio post. Please try again.";
+      const errorMessage = error instanceof Error ? error.message : "Failed to create audio post. Please try again.";
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, selectedAudioFile, trackAuthor, profile?.username, trackDescription, audioDescription, paginationManager, loadPosts]);
+  }, [user, selectedTrack, caption, paginationManager, loadPosts]);
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -1212,7 +1168,7 @@ export default function Dashboard() {
                     {/* Indicator badge for unsaved content */}
                     {!isPostFormExpanded && (
                       (activeTab === "text" && textContent) || 
-                      (activeTab === "audio" && (selectedAudioFile || audioDescription))
+                      (activeTab === "audio" && (selectedTrack || caption))
                     ) && (
                       <span className="bg-yellow-600 text-white text-xs px-2 py-0.5 rounded-full">
                         Draft
@@ -1223,7 +1179,7 @@ export default function Dashboard() {
                     {isPostFormExpanded 
                       ? "Share your thoughts or music with the community" 
                       : ((activeTab === "text" && textContent) || 
-                         (activeTab === "audio" && (selectedAudioFile || audioDescription))) 
+                         (activeTab === "audio" && (selectedTrack || caption))) 
                         ? "You have unsaved content - click to continue"
                         : "Click to share text or audio content"}
                     {!isPostFormExpanded && (
@@ -1254,11 +1210,11 @@ export default function Dashboard() {
 
           {/* Expandable Content with smooth animation */}
           <div
-            className={`transition-all duration-300 ease-in-out overflow-hidden ${
-              isPostFormExpanded ? "max-h-[1000px] opacity-100 mt-4" : "max-h-0 opacity-0"
+            className={`transition-all duration-300 ease-in-out ${
+              isPostFormExpanded ? "opacity-100 mt-4" : "max-h-0 opacity-0 overflow-hidden"
             }`}
             style={{
-              transitionProperty: "max-height, opacity, margin-top"
+              transitionProperty: "opacity, margin-top"
             }}
           >
             <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
@@ -1270,8 +1226,8 @@ export default function Dashboard() {
                     setActiveTab("text");
                     // Clear audio-specific content when switching to text
                     if (activeTab === "audio") {
-                      setSelectedAudioFile(null);
-                      setAudioDescription("");
+                      setSelectedTrack(null);
+                      setCaption("");
                     }
                   }}
                   className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
@@ -1283,6 +1239,7 @@ export default function Dashboard() {
                   📝 Text Post
                 </button>
                 <button
+                  ref={audioTabButtonRef}
                   type="button"
                   onClick={() => {
                     setActiveTab("audio");
@@ -1336,111 +1293,130 @@ export default function Dashboard() {
                 <div className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-3">
-                      Select Audio File
+                      Select a Track from Your Library
+                      <span className="text-red-400 ml-1">*</span>
                     </label>
-                    <AudioUploadErrorBoundary>
-                      <AudioUpload
-                        onFileSelect={handleAudioFileSelect}
-                        onFileRemove={handleAudioFileRemove}
-                        disabled={isSubmitting}
-                        enableCompression={true}
-                        compressionQuality="medium"
-                        maxFileSize={50 * 1024 * 1024} // 50MB limit
-                      />
-                    </AudioUploadErrorBoundary>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="trackAuthor"
-                      className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2"
-                    >
-                      Track Author *
-                      <span 
-                        className="text-amber-500 cursor-help" 
-                        title="Author cannot be changed after upload. To change, you must delete and re-upload the track."
-                      >
-                        ⚠️
-                      </span>
-                    </label>
-                    <input
-                      id="trackAuthor"
-                      type="text"
-                      className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white
-                        focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter artist/author name"
-                      value={trackAuthor}
-                      onChange={(e) => setTrackAuthor(e.target.value)}
-                      maxLength={100}
-                      required
+                    <TrackPicker
+                      ref={trackPickerRef}
+                      userId={user.id}
+                      onTrackSelect={handleTrackSelect}
+                      selectedTrackId={selectedTrack?.id}
                       disabled={isSubmitting}
                     />
-                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                      <span>⚠️</span>
-                      <span>Warning: Author cannot be changed after upload</span>
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Default is your username. Edit for covers, remixes, or collaborations.
-                    </p>
+                    {/* Validation error for no track selected */}
+                    {error && error.includes('select a track') && (
+                      <div className="mt-2 p-2 bg-red-900/20 border border-red-700 rounded">
+                        <p className="text-red-400 text-sm flex items-center gap-2">
+                          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
+                          <span>{error}</span>
+                        </p>
+                      </div>
+                    )}
+                    {/* Validation error for non-public track */}
+                    {error && error.includes('must be public') && (
+                      <div className="mt-2 p-2 bg-red-900/20 border border-red-700 rounded">
+                        <p className="text-red-400 text-sm flex items-center gap-2">
+                          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
+                          <span>{error}</span>
+                        </p>
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <label
-                      htmlFor="trackDescription"
-                      className="block text-sm font-medium text-gray-300 mb-2"
-                    >
-                      Track Description{" "}
-                      <span className="text-gray-500">(optional)</span>
-                    </label>
-                    <textarea
-                      id="trackDescription"
-                      className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white
-                        focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      rows={2}
-                      placeholder="Describe your music, genre, inspiration..."
-                      value={trackDescription}
-                      onChange={(e) => setTrackDescription(e.target.value)}
-                      maxLength={500}
-                      disabled={isSubmitting}
-                    />
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs text-gray-400">
-                        {trackDescription.length}/500 characters
-                      </span>
+                  {/* Show selected track metadata as read-only */}
+                  {selectedTrack && (
+                    <div className={`p-4 rounded-lg border ${
+                      selectedTrack.is_public 
+                        ? 'bg-gray-700/50 border-gray-600' 
+                        : 'bg-red-900/20 border-red-700'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-gray-300">Selected Track:</p>
+                        {selectedTrack.is_public ? (
+                          <span className="text-xs bg-green-900/30 text-green-400 px-2 py-1 rounded-full flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Public
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-red-900/30 text-red-400 px-2 py-1 rounded-full flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                            Private
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <p className="text-white break-words">
+                          <span className="text-gray-400">Title:</span>{' '}
+                          <span className="break-words">{selectedTrack.title}</span>
+                        </p>
+                        <p className="text-white break-words">
+                          <span className="text-gray-400">Author:</span>{' '}
+                          <span className="break-words">{selectedTrack.author}</span>
+                        </p>
+                        {selectedTrack.description && (
+                          <p className="text-white break-words">
+                            <span className="text-gray-400">Description:</span>{' '}
+                            <span className="break-words">{selectedTrack.description}</span>
+                          </p>
+                        )}
+                      </div>
+                      {!selectedTrack.is_public && (
+                        <div className="mt-3 p-2 bg-red-900/30 rounded">
+                          <p className="text-red-400 text-xs flex items-center gap-2">
+                            <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <span>This track is private. Please make it public in your Library to create a post.</span>
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
 
                   <div>
                     <label
-                      htmlFor="audioDescription"
+                      htmlFor="caption"
                       className="block text-sm font-medium text-gray-300 mb-2"
                     >
                       What&apos;s on your mind?{" "}
                       <span className="text-gray-500">(optional)</span>
                     </label>
                     <textarea
-                      id="audioDescription"
+                      id="caption"
                       className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white
                         focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       rows={3}
                       placeholder="Share your thoughts about this track..."
-                      value={audioDescription}
-                      onChange={(e) => setAudioDescription(e.target.value)}
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
                       maxLength={2000}
                       disabled={isSubmitting}
                     />
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-xs text-gray-400">
-                        {audioDescription.length}/2000 characters
+                        {caption.length}/2000 characters
                       </span>
                     </div>
                   </div>
                     </div>
                   )}
-                  {/* Error Display */}
-                  {error && (
+                  {/* Error Display - Only show for non-validation errors */}
+                  {error && !error.includes('select a track') && !error.includes('must be public') && (
                     <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded">
-                      <p className="text-red-400 text-sm">{error}</p>
+                      <p className="text-red-400 text-sm flex items-center gap-2">
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        <span>{error}</span>
+                      </p>
                     </div>
                   )}
 
@@ -1449,10 +1425,6 @@ export default function Dashboard() {
                       type="button"
                       onClick={() => {
                         setIsPostFormExpanded(false);
-                        // Reset initialization flag so author will be pre-filled next time
-                        hasInitializedAuthor.current = false;
-                        // Clear the author field
-                        setTrackAuthor("");
                       }}
                       className="px-4 py-2 text-gray-400 hover:text-gray-200 transition-colors text-sm"
                     >
@@ -1464,14 +1436,14 @@ export default function Dashboard() {
                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       disabled={
                         isSubmitting ||
-                        (activeTab === "audio" && (!selectedAudioFile || !trackAuthor.trim()))
+                        (activeTab === "audio" && !selectedTrack)
                       }
                     >
                       {isSubmitting ? (
                         <span className="flex items-center space-x-2">
                           <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
                           <span>
-                            {activeTab === "audio" ? "Uploading..." : "Posting..."}
+                            {activeTab === "audio" ? "Creating..." : "Posting..."}
                           </span>
                         </span>
                       ) : (

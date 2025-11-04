@@ -226,23 +226,98 @@ Before implementing any solution, consider:
 
 ## Testing Integration Framework
 
+### Automated vs Manual Testing Strategy
+
+**CRITICAL: Always prioritize automated testing over manual testing.**
+
+**Testing Hierarchy:**
+1. **Automated Tests** (Primary) - Run first, fix issues before manual testing
+2. **Manual Tests** (Secondary) - Only after automated tests pass
+
+**When creating test tasks in specs:**
+
+**Automated Tests:**
+- Write automated tests for ALL functionality that can be automated
+- Include unit tests, integration tests, and E2E tests
+- Automated tests MUST be clearly labeled as "Automated Tests"
+- Automated tests should run before any manual testing
+- Fix all automated test failures before proceeding to manual tests
+
+**Manual Tests:**
+- Only include manual tests for functionality that CANNOT be automated
+- Examples: Visual design validation, UX flow assessment, accessibility checks
+- Manual tests MUST be clearly separated from automated tests
+- Manual tests should be written as:
+  - **Checklists** for simple tests (preferred for straightforward validation)
+  - **Step-by-step instructions** for complex tests only
+
+**Task Structure Example:**
+```markdown
+- [ ] 3. Testing
+- [ ] 3.1 Automated Tests
+  - Write unit tests for utility functions
+  - Write integration tests for API endpoints
+  - Write E2E tests for user workflows
+  - Run all automated tests and fix failures
+  - _Requirements: 1.1, 2.3_
+
+- [ ] 3.2 Manual Testing (After automated tests pass)
+  - **Checklist for simple validation:**
+    - [ ] Verify button colors match design
+    - [ ] Check responsive layout on mobile
+    - [ ] Validate loading states appear correctly
+  - **Step-by-step for complex flows:**
+    1. Navigate to feature page
+    2. Perform action X and observe behavior Y
+    3. Validate that Z occurs as expected
+  - _Requirements: 1.2, 2.1_
+```
+
+**Anti-patterns to avoid:**
+```
+❌ Mixing automated and manual tests without clear separation
+❌ Writing manual tests for functionality that can be automated
+❌ Unclear whether a test is automated or manual
+❌ Writing detailed step-by-step instructions for simple checks
+❌ Performing manual tests before automated tests pass
+```
+
+**Correct approach:**
+```
+✅ Clearly separate "Automated Tests" and "Manual Testing" sections
+✅ Automate everything that can be automated
+✅ Use checklists for simple manual validation
+✅ Use step-by-step only for complex manual testing
+✅ Run automated tests first, fix issues, then manual test
+✅ Label each test type explicitly
+```
+
 ### Comprehensive Testing Approach
 Every significant development milestone includes:
 
-1. **Unit Testing** (Immediate)
+1. **Automated Unit Testing** (Immediate)
    - Test individual functions and components
    - Verify business logic correctness
    - Ensure proper error handling
+   - Run automatically in CI/CD pipeline
 
-2. **Integration Testing** (After feature completion)
+2. **Automated Integration Testing** (After feature completion)
    - Test component interactions
    - Verify API integrations
    - Validate data flow
+   - Run automatically before deployment
 
-3. **End-to-End Testing** (After major milestone)
+3. **Automated End-to-End Testing** (After major milestone)
    - Test complete user workflows
    - Verify system behavior under realistic conditions
-   - Validate user experience
+   - Validate user experience programmatically
+   - Run automatically for critical paths
+
+4. **Manual Testing** (After all automated tests pass)
+   - Visual design validation
+   - UX flow assessment
+   - Accessibility checks
+   - Cross-browser compatibility (if not automated)
 
 ### Testing Phase Template
 ```markdown
@@ -253,28 +328,41 @@ Every significant development milestone includes:
 2. [Test data preparation]
 3. [Environment configuration]
 
-### Testing Scenarios
-**Scenario 1: [Happy Path]**
-- Steps: [Detailed test steps]
-- Expected Result: [What should happen]
-- Validation: [How to confirm success]
+### Automated Tests
+**Unit Tests:**
+- Test [specific functionality]
+- Verify [business logic]
+- Expected: [automated validation criteria]
 
-**Scenario 2: [Error Handling]**
-- Steps: [Steps to trigger error condition]
-- Expected Result: [How errors should be handled]
-- Validation: [Confirm proper error handling]
+**Integration Tests:**
+- Test [component interactions]
+- Verify [API integrations]
+- Expected: [automated validation criteria]
 
-**Scenario 3: [Edge Cases]**
-- Steps: [Test unusual but valid scenarios]
-- Expected Result: [Expected behavior]
-- Validation: [Confirm correct handling]
+**E2E Tests:**
+- Test [user workflow]
+- Verify [end-to-end behavior]
+- Expected: [automated validation criteria]
+
+### Manual Testing (After automated tests pass)
+**Simple Validation Checklist:**
+- [ ] Visual element appears correctly
+- [ ] Layout is responsive on mobile
+- [ ] Loading states display properly
+- [ ] Error messages are user-friendly
+
+**Complex Flow Testing (if needed):**
+1. Navigate to [specific page]
+2. Perform [specific action]
+3. Observe [expected behavior]
+4. Validate [specific outcome]
 
 ### Success Criteria
-- [ ] All test scenarios pass
+- [ ] All automated tests pass
 - [ ] No console errors or warnings
 - [ ] Performance meets benchmarks
-- [ ] User experience is smooth
-- [ ] Error handling is appropriate
+- [ ] Manual validation checklist complete
+- [ ] Complex flows validated (if applicable)
 ```
 
 ## Documentation Standards

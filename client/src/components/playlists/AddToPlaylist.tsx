@@ -108,6 +108,46 @@ export function AddToPlaylist({ trackId, onSuccess }: AddToPlaylistProps) {
     }
   };
 
+  const handleRemoveFromPlaylist = async (playlistId: string) => {
+    setAddingToPlaylist(playlistId);
+    setError(null);
+
+    try {
+      const { removeTrackFromPlaylist } = await import('@/lib/playlists');
+      const result = await removeTrackFromPlaylist({
+        playlist_id: playlistId,
+        track_id: trackId,
+      });
+
+      if (result.success) {
+        // Update local state to remove checkmark
+        setPlaylistsWithTrack((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(playlistId);
+          return newSet;
+        });
+        
+        // Call success callback
+        onSuccess?.();
+      } else {
+        setError(result.error || 'Failed to remove track from playlist');
+      }
+    } catch (err) {
+      console.error('Error removing track from playlist:', err);
+      setError('Failed to remove track from playlist');
+    } finally {
+      setAddingToPlaylist(null);
+    }
+  };
+
+  const handleTogglePlaylist = async (playlistId: string, hasTrack: boolean) => {
+    if (hasTrack) {
+      await handleRemoveFromPlaylist(playlistId);
+    } else {
+      await handleAddToPlaylist(playlistId);
+    }
+  };
+
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
   };
@@ -121,11 +161,12 @@ export function AddToPlaylist({ trackId, onSuccess }: AddToPlaylistProps) {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={toggleDropdown}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        className="px-2 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1 text-xs"
         aria-label="Add to playlist"
+        title="Add to playlist"
       >
         <svg
-          className="w-5 h-5"
+          className="w-3.5 h-3.5 flex-shrink-0"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -137,7 +178,7 @@ export function AddToPlaylist({ trackId, onSuccess }: AddToPlaylistProps) {
             d="M12 4v16m8-8H4"
           />
         </svg>
-        Add to Playlist
+        <span className="whitespace-nowrap">Add to Playlist</span>
       </button>
 
       {isOpen && (
@@ -177,10 +218,10 @@ export function AddToPlaylist({ trackId, onSuccess }: AddToPlaylistProps) {
                 return (
                   <button
                     key={playlist.id}
-                    onClick={() => !hasTrack && !isAdding && handleAddToPlaylist(playlist.id)}
-                    disabled={hasTrack || isAdding}
-                    className={`w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                      hasTrack || isAdding
+                    onClick={() => !isAdding && handleTogglePlaylist(playlist.id, hasTrack)}
+                    disabled={isAdding}
+                    className={`w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between min-h-[44px] ${
+                      isAdding
                         ? 'opacity-50 cursor-not-allowed'
                         : 'cursor-pointer'
                     }`}

@@ -442,7 +442,8 @@ This implementation plan breaks down the My Library feature into discrete, manag
   - Test stats caching behavior
   - _Requirements: 1.6, 1.7, 3.12_
 
-- [ ] 23. Write component tests
+- [x] 23. Write component tests
+
   - Test StatsSection renders all 6 stats
   - Test TrackCard actions menu interactions
   - Test AlbumCard displays track numbers
@@ -450,7 +451,9 @@ This implementation plan breaks down the My Library feature into discrete, manag
   - Test lazy loading triggers correctly
   - _Requirements: 1.1, 3.6, 4.7, 6.3, 6.5_
 
-- [ ] 24. Write integration tests
+- [x] 24. Write integration tests
+
+
   - Test upload track → assign to album → verify in All Tracks
   - Test create album → add tracks → reorder → verify order
   - Test delete track → verify removed from albums/playlists

@@ -97,6 +97,31 @@ export interface TrackOperationResult<T = unknown> {
   error?: TrackErrorDetails;
 }
 
+// TrackPicker interfaces
+export interface TrackPickerCardProps {
+  id?: string;
+  track: Track;
+  isSelected: boolean;
+  isFocused?: boolean;
+  onSelect: (track: Track) => void;
+  disabled?: boolean;
+}
+
+export interface TrackPickerProps {
+  userId: string;
+  onTrackSelect: (track: Track) => void;
+  selectedTrackId?: string | null;
+  disabled?: boolean;
+}
+
+export interface TrackPickerState {
+  tracks: Track[];
+  loading: boolean;
+  error: string | null;
+  page: number;
+  hasMore: boolean;
+}
+
 // Error message mappings
 export const TRACK_ERROR_MESSAGES: Record<TrackUploadError, {
   userMessage: string;

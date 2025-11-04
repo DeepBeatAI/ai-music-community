@@ -120,6 +120,56 @@
 
 ## Documentation Standards
 
+### Documentation Minimalism Principle
+
+**CRITICAL: Write documentation ONLY when absolutely necessary.**
+
+**Before creating any documentation file, ask:**
+1. **Is this information already documented elsewhere?**
+   - Check existing files for duplicate or similar content
+   - Update existing files rather than creating new ones
+   - Consolidate related information in a single location
+
+2. **Is this documentation necessary for future reference?**
+   - Will this be needed for maintenance or onboarding?
+   - Does it document a critical decision or pattern?
+   - Is it required by SDLC best practices?
+
+3. **Can this information live in code comments instead?**
+   - Implementation details belong in code comments
+   - Only architectural decisions need separate docs
+
+**Anti-patterns to avoid:**
+```
+❌ Creating both README.md and summary.md with similar content
+❌ Writing separate docs for each minor feature detail
+❌ Duplicating information across multiple files
+❌ Creating documentation "just in case"
+❌ Writing guides for self-explanatory code
+```
+
+**Correct approach:**
+```
+✅ Single source of truth for each piece of information
+✅ Update existing docs rather than creating new ones
+✅ Consolidate related information
+✅ Use code comments for implementation details
+✅ Document only what's necessary for SDLC best practices
+```
+
+**Minimum required documentation:**
+- Feature README.md (hub for the feature)
+- Critical architectural decisions
+- Complex setup or deployment procedures
+- Non-obvious business logic or algorithms
+- API contracts and interfaces
+
+**Documentation that should be avoided:**
+- Summaries that duplicate README content
+- Step-by-step guides for straightforward implementations
+- Redundant task tracking (use tasks.md in specs only)
+- Duplicate information across multiple files
+
 ### File Organization Compliance
 
 **ALL documentation MUST follow the file-organization.md standards:**
@@ -152,6 +202,8 @@
    ```
 
 4. **Before creating documentation:**
+   - **First, check if similar documentation already exists**
+   - Determine if documentation is truly necessary
    - Determine the feature it belongs to
    - Determine the type (guide, task, test, review, etc.)
    - Use correct naming convention
@@ -166,13 +218,16 @@
 1. **Remote database only** - Use Supabase MCP tools, never assume local database
 2. **Investigate first** - Understand existing code before changing anything
 3. **Quality gates** - Fix all errors before marking tasks complete
-4. **Documentation standards** - Follow file-organization.md conventions
+4. **Documentation minimalism** - Write only necessary docs, avoid duplication
+5. **Automated testing first** - Automate tests where possible, clearly separate manual tests
+6. **Documentation standards** - Follow file-organization.md conventions
 
 **When in doubt:**
 - Ask the user for clarification
 - Check existing code patterns
 - Verify assumptions explicitly
 - Don't assume or guess
+- Check if documentation already exists before creating new files
 
 ---
 

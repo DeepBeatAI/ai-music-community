@@ -12,7 +12,6 @@ import type { TrackWithMembership } from "@/types/library";
 // Lazy load heavy components for code splitting
 const WavesurferPlayer = lazy(() => import("@/components/WavesurferPlayer"));
 const TrackCardWithActions = lazy(() => import("@/components/library/TrackCardWithActions").then(mod => ({ default: mod.TrackCardWithActions })));
-const LikeButton = lazy(() => import("@/components/LikeButton"));
 const FollowButton = lazy(() => import("@/components/FollowButton"));
 
 // Import error boundary and logging
@@ -30,12 +29,6 @@ interface ExtendedTrackWithMembership extends TrackWithMembership {
   
   // Post ID for like functionality
   post_id?: string;
-}
-
-// User-specific data
-interface UserTrackData {
-  isLiked: boolean;
-  isFollowing: boolean;
 }
 
 // Toast notification type
@@ -63,7 +56,6 @@ export default function SingleTrackPageClient() {
   
   // User-specific state for social features
   const [likeCount, setLikeCount] = useState(0);
-  const [isLiked, setIsLiked] = useState(false);
   
   // Audio URL state
   const [cachedAudioUrl, setCachedAudioUrl] = useState<string | null>(null);
@@ -280,42 +272,7 @@ export default function SingleTrackPageClient() {
       }
     };
 
-    // Fetch user-specific data (like status, follow status)
-    const fetchUserSpecificData = async (trackData: ExtendedTrackWithMembership): Promise<UserTrackData> => {
-      if (!user || !trackData.post_id) {
-        return { isLiked: false, isFollowing: false };
-      }
 
-      try {
-        // Check if user has liked the track
-        const { data: likeData } = await supabase
-          .from('post_likes')
-          .select('id')
-          .eq('post_id', trackData.post_id)
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        const isLikedValue = !!likeData;
-
-        // Check if user is following the track uploader
-        const { data: followData } = await supabase
-          .from('user_follows')
-          .select('id')
-          .eq('following_id', trackData.user_id)
-          .eq('follower_id', user.id)
-          .maybeSingle();
-
-        const isFollowingValue = !!followData;
-
-        return {
-          isLiked: isLikedValue,
-          isFollowing: isFollowingValue,
-        };
-      } catch (err) {
-        console.error("Error fetching user-specific data:", err);
-        return { isLiked: false, isFollowing: false };
-      }
-    };
 
     const loadTrackData = async () => {
       if (!trackId) {
@@ -346,12 +303,7 @@ export default function SingleTrackPageClient() {
         performanceMetrics.current.metadataLoadTime = performance.now() - performanceMetrics.current.pageLoadStart;
         console.log('[Performance] Metadata loaded in', performanceMetrics.current.metadataLoadTime.toFixed(2), 'ms');
 
-        // Fetch user-specific data if authenticated
-        if (user) {
-          const userData = await fetchUserSpecificData(trackData);
-          setIsLiked(userData.isLiked);
-          // Note: isFollowing is managed by FollowButton component via FollowContext
-        }
+        // Note: User-specific data (following status) is managed by FollowButton component via FollowContext
         
         // Don't load audio immediately - wait for user interaction
         // This improves initial page load performance
@@ -610,18 +562,7 @@ export default function SingleTrackPageClient() {
     };
   }, []);
 
-  // Handle like change callback
-  const handleLikeChange = (liked: boolean, count: number) => {
-    const interactionStart = performance.now();
-    
-    setIsLiked(liked);
-    setLikeCount(count);
-    
-    // Track interaction response time
-    const responseTime = performance.now() - interactionStart;
-    performanceMetrics.current.interactionTimes.push(responseTime);
-    console.log('[Performance] Like button response time:', responseTime.toFixed(2), 'ms');
-  };
+
 
   return (
     <MainLayout>
@@ -1102,50 +1043,7 @@ export default function SingleTrackPageClient() {
                   </div>
                 )}
 
-                {/* Social Interaction Section */}
-                {track.post_id && (
-                  <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <ErrorBoundary
-                          fallback={
-                            <div className="text-gray-500 text-sm">
-                              Like button unavailable
-                            </div>
-                          }
-                          onError={(error, errorInfo) => {
-                            logSingleTrackPageError(
-                              error,
-                              track.id,
-                              user?.id,
-                              'component',
-                              'Like button component error',
-                              {
-                                componentStack: errorInfo.componentStack,
-                                postId: track.post_id
-                              }
-                            );
-                          }}
-                        >
-                          <Suspense fallback={
-                            <div className="animate-pulse flex items-center space-x-2">
-                              <div className="w-10 h-10 bg-gray-700 rounded-full"></div>
-                              <div className="h-4 w-12 bg-gray-700 rounded"></div>
-                            </div>
-                          }>
-                            <LikeButton
-                              postId={track.post_id}
-                              initialLikeCount={likeCount}
-                              initialLiked={isLiked}
-                              size="lg"
-                              onLikeChange={handleLikeChange}
-                            />
-                          </Suspense>
-                        </ErrorBoundary>
-                      </div>
-                    </div>
-                  </div>
-                )}
+
               </div>
 
               {/* Right Column: Additional Info (Desktop only, hidden on mobile) */}

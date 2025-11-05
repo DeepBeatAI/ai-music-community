@@ -115,11 +115,12 @@ export const TrackCard = memo(function TrackCard({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Cover Art - Tracks don't have cover images, show music icon */}
-      <div className="relative aspect-square bg-gray-700 group/cover">
-        <div className="w-full h-full flex items-center justify-center text-gray-500">
+      {/* Track Info - Flex layout with cover art and details side by side */}
+      <div className="p-4 flex items-start gap-4">
+        {/* Cover Art - Tracks don't have cover images, show music icon (non-clickable, half size) */}
+        <div className="w-24 h-24 bg-gray-700 rounded-lg flex-shrink-0 flex items-center justify-center text-gray-500">
           <svg
-            className="w-16 h-16"
+            className="w-12 h-12"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -132,32 +133,9 @@ export const TrackCard = memo(function TrackCard({
             />
           </svg>
         </div>
-        
-        {/* Play Button Overlay */}
-        {onPlay && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onPlay(track.id);
-            }}
-            className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 md:group-hover/cover:bg-opacity-50 transition-all opacity-100 md:opacity-0 md:group-hover/cover:opacity-100"
-            aria-label="Play track"
-          >
-            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center transition-colors shadow-lg">
-              <svg
-                className="w-6 h-6 md:w-8 md:h-8 text-white ml-1"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-            </div>
-          </button>
-        )}
-      </div>
 
-      {/* Track Info */}
-      <div className="p-4">
+        {/* Track Details */}
+        <div className="flex-1 min-w-0">
         {/* Title */}
         <h3 className="text-lg font-semibold text-white truncate mb-1">
           {track.title}
@@ -327,6 +305,7 @@ export const TrackCard = memo(function TrackCard({
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>

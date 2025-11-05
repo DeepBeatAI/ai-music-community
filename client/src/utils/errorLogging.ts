@@ -386,3 +386,47 @@ export function logErrorBoundaryError(
     });
   }
 }
+
+/**
+ * Logs single track page errors securely
+ */
+export function logSingleTrackPageError(
+  error: Error,
+  trackId: string,
+  userId?: string,
+  errorType?: 'track_load' | 'audio_load' | 'network' | 'permission' | 'component',
+  userAction?: string,
+  additionalContext?: Record<string, any>
+): ErrorLogEntry {
+  const sanitizedError = sanitizeError(error);
+  
+  const logEntry: ErrorLogEntry = {
+    timestamp: sanitizedError.timestamp,
+    errorType: errorType || 'track_load',
+    component: 'SingleTrackPage',
+    message: sanitizedError.message,
+    userAction: userAction || 'Loading track page',
+    severity: determineSeverity(error, 'SingleTrackPage'),
+    sessionId: generateSessionId(),
+    userId: userId ? userId.substring(0, 8) + '...' : undefined // Only log partial user ID
+  };
+
+  if (process.env.NODE_ENV === 'development') {
+    console.error('🎵 Single Track Page Error Log:', {
+      ...logEntry,
+      trackId: trackId.substring(0, 8) + '...', // Only log partial track ID
+      sanitizedStack: sanitizedError.stack,
+      context: sanitizeContext(additionalContext)
+    });
+  } else {
+    console.error('Single Track Page Error:', {
+      timestamp: logEntry.timestamp,
+      component: logEntry.component,
+      errorType: logEntry.errorType,
+      severity: logEntry.severity,
+      sessionId: logEntry.sessionId
+    });
+  }
+
+  return logEntry;
+}

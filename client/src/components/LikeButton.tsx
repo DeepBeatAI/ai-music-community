@@ -9,6 +9,7 @@ interface LikeButtonProps {
   initialLiked?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  onLikeChange?: (liked: boolean, likeCount: number) => void;
 }
 
 export default function LikeButton({ 
@@ -16,7 +17,8 @@ export default function LikeButton({
   initialLikeCount = 0, 
   initialLiked = false,
   size = 'md',
-  className = '' 
+  className = '',
+  onLikeChange
 }: LikeButtonProps) {
   const { user } = useAuth();
   const [liked, setLiked] = useState(initialLiked);
@@ -67,6 +69,10 @@ export default function LikeButton({
         // Confirm with server response
         setLiked(data.liked);
         setLikeCount(data.likeCount);
+        // Notify parent component of the change
+        if (onLikeChange) {
+          onLikeChange(data.liked, data.likeCount);
+        }
       }
     } catch (err) {
       // Revert optimistic update

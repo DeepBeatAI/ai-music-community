@@ -257,26 +257,33 @@ export default function SingleTrackPageClient() {
           userProfile = profileData;
         }
 
-        // Fetch post associated with track to get like count
-        const { data: postData } = await supabase
+        // Fetch ALL posts associated with track and get like count
+        // Note: Using .in() instead of .eq() to match library page behavior
+        const { data: postsData } = await supabase
           .from('posts')
-          .select('id')
-          .eq('track_id', trackId)
-          .maybeSingle();
+          .select('id, post_likes(count)')
+          .in('track_id', [trackId]);
 
         let likeCountValue = 0;
         let postId: string | undefined;
 
-        if (postData) {
-          postId = postData.id;
+        console.log('[Like Count Debug] Posts data for track:', trackId, postsData);
+
+        if (postsData && postsData.length > 0) {
+          // Use the first post's ID (there should typically only be one post per track)
+          postId = postsData[0].id;
           
-          // Count likes for this post
-          const { count } = await supabase
-            .from('post_likes')
-            .select('*', { count: 'exact', head: true })
-            .eq('post_id', postData.id);
+          // Sum up likes from all posts (in case there are multiple posts for the same track)
+          postsData.forEach(post => {
+            const postLikes = post.post_likes as unknown[];
+            likeCountValue += postLikes?.length || 0;
+          });
           
-          likeCountValue = count || 0;
+          console.log('[Like Count Debug] Calculated like count from posts:', likeCountValue);
+        } else {
+          // If no post exists, fall back to the like_count column in tracks table
+          likeCountValue = trackData.like_count || 0;
+          console.log('[Like Count Debug] No posts found, using track.like_count:', likeCountValue);
         }
 
         // Extract playlist information

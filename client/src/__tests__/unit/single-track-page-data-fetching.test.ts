@@ -200,10 +200,18 @@ describe('Single Track Page - Data Fetching', () => {
         is_public: true,
         user_id: 'owner-123',
       };
-      type User = { id: string } | null;
-      const user: User = null;
+      interface User {
+        id: string;
+      }
+      const user: User | null = null;
 
-      const hasPermission = track.is_public || (user ? user.id === track.user_id : false);
+      const checkPermission = (t: typeof track, u: User | null): boolean => {
+        if (t.is_public) return true;
+        if (u && u.id === t.user_id) return true;
+        return false;
+      };
+
+      const hasPermission = checkPermission(track, user);
 
       expect(hasPermission).toBe(true);
     });
@@ -214,10 +222,18 @@ describe('Single Track Page - Data Fetching', () => {
         is_public: false,
         user_id: 'owner-123',
       };
-      type User = { id: string } | null;
-      const user: User = null;
+      interface User {
+        id: string;
+      }
+      const user: User | null = null;
 
-      const hasPermission = track.is_public || (user ? user.id === track.user_id : false);
+      const checkPermission = (t: typeof track, u: User | null): boolean => {
+        if (t.is_public) return true;
+        if (u && u.id === t.user_id) return true;
+        return false;
+      };
+
+      const hasPermission = checkPermission(track, user);
 
       expect(hasPermission).toBe(false);
     });

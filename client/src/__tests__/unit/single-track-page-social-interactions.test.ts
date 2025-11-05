@@ -166,11 +166,17 @@ describe('Single Track Page - Social Interactions', () => {
     });
 
     it('should not show follow button for unauthenticated users', () => {
-      type User = { id: string } | null;
-      const user: User = null;
+      interface User {
+        id: string;
+      }
+      const user: User | null = null;
       const trackUserId = 'user-123';
 
-      const shouldShowFollowButton = user ? (trackUserId && user.id !== trackUserId) : false;
+      const checkShowFollowButton = (u: User | null, tUserId: string): boolean => {
+        return !!(u && tUserId && u.id !== tUserId);
+      };
+
+      const shouldShowFollowButton = checkShowFollowButton(user, trackUserId);
 
       expect(shouldShowFollowButton).toBe(false);
     });

@@ -1,6 +1,5 @@
 import { Metadata } from "next";
 import { createClient } from "@supabase/supabase-js";
-// @ts-expect-error - TypeScript has issues with dynamic route segments in imports
 import SingleTrackPageClient from "./SingleTrackPageClient";
 
 // Create a server-side Supabase client for metadata generation

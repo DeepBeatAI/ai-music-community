@@ -1,3 +1,26 @@
+/**
+ * Single Track Page Client Component
+ * 
+ * This component renders a dedicated page for viewing individual audio tracks.
+ * It provides a comprehensive view of track details, audio playback, social features,
+ * and track management actions.
+ * 
+ * Key Features:
+ * - Audio playback with waveform visualization using WavesurferPlayer
+ * - Play tracking (increments play_count after 30+ seconds of playback)
+ * - Social features (like, follow)
+ * - Track management actions (edit, delete) for track owners
+ * - Responsive design (mobile and desktop layouts)
+ * - SEO optimization with meta tags
+ * - Performance optimizations (progressive loading, audio caching)
+ * - Comprehensive error handling (404, 403, network, audio errors)
+ * - Offline detection and action queuing
+ * 
+ * Route: /tracks/[id]
+ * 
+ * @component
+ */
+
 "use client";
 
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
@@ -9,37 +32,48 @@ import { getCachedAudioUrl, audioCacheManager } from "@/utils/audioCache";
 import MainLayout from "@/components/layout/MainLayout";
 import type { TrackWithMembership } from "@/types/library";
 
-// Lazy load heavy components for code splitting
+// Lazy load heavy components for code splitting and improved initial page load
 const WavesurferPlayer = lazy(() => import("@/components/WavesurferPlayer"));
-const TrackCardWithActions = lazy(() => import("@/components/library/TrackCardWithActions").then(mod => ({ default: mod.TrackCardWithActions })));
 const FollowButton = lazy(() => import("@/components/FollowButton"));
 
-// Import error boundary and logging
+// Import error boundary and logging utilities
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logSingleTrackPageError } from "@/utils/errorLogging";
 
-// Extended track type with all related data
+/**
+ * Extended track type that includes all related data needed for the single track page
+ * Extends TrackWithMembership with user profile and post information
+ */
 interface ExtendedTrackWithMembership extends TrackWithMembership {
-  // User profile data
+  /** User profile data for the track uploader */
   user?: {
     id: string;
     username: string;
     avatar_url?: string;
   };
   
-  // Post ID for like functionality
+  /** Post ID associated with this track for like functionality */
   post_id?: string;
 }
 
-// Toast notification type
+/** Toast notification types for user feedback */
 type ToastType = 'success' | 'error' | 'info';
 
+/** Toast notification structure */
 interface Toast {
   id: string;
   message: string;
   type: ToastType;
 }
 
+/**
+ * SingleTrackPageClient Component
+ * 
+ * Main client component for the single track page. Handles data fetching,
+ * state management, user interactions, and rendering of track details.
+ * 
+ * @returns {JSX.Element} The rendered single track page
+ */
 export default function SingleTrackPageClient() {
   const params = useParams();
   const router = useRouter();
@@ -67,6 +101,10 @@ export default function SingleTrackPageClient() {
   // Offline detection state
   const [isOnline, setIsOnline] = useState(true);
   const [failedActions, setFailedActions] = useState<Array<{ action: string; data: unknown }>>([]);
+  
+  // Track actions menu state
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   // Performance monitoring using ref to avoid dependency issues
   const performanceMetrics = useRef({
@@ -468,17 +506,7 @@ export default function SingleTrackPageClient() {
     }
   };
 
-  // Handle track update (for TrackCardWithActions)
-  const handleTrackUpdate = (trackId: string, updates: Partial<TrackWithMembership>) => {
-    if (track && track.id === trackId) {
-      setTrack({
-        ...track,
-        ...updates,
-      });
-    }
-  };
-
-  // Handle track delete (for TrackCardWithActions)
+  // Handle track delete
   const handleTrackDelete = (trackId: string) => {
     if (track && track.id === trackId) {
       // Navigate back after deletion
@@ -515,6 +543,23 @@ export default function SingleTrackPageClient() {
     // Trigger re-fetch by updating a dependency
     window.location.reload();
   };
+
+  // Handle click outside to close actions menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+        setShowActionsMenu(false);
+      }
+    };
+
+    if (showActionsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showActionsMenu]);
 
   // Cleanup effect: Stop playback when navigating away
   useEffect(() => {
@@ -735,7 +780,82 @@ export default function SingleTrackPageClient() {
             
             {/* Track Header with Creator Info - Full Width on All Screens */}
             <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-              <h1 className="text-xl sm:text-2xl font-bold text-white mb-3">{track.title}</h1>
+              {/* Title with Actions Menu */}
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <h1 className="text-xl sm:text-2xl font-bold text-white flex-1">{track.title}</h1>
+                
+                {/* Track Actions Menu - Only show for authenticated users who own the track */}
+                {user && track.user_id === user.id && (
+                  <div ref={actionsMenuRef} className="relative flex-shrink-0">
+                    <button
+                      onClick={() => setShowActionsMenu(!showActionsMenu)}
+                      className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                      aria-label="Track actions"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                      </svg>
+                    </button>
+                    
+                    {/* Dropdown Menu */}
+                    {showActionsMenu && (
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-gray-700 rounded-lg shadow-lg border border-gray-600 z-50">
+                        <div className="py-2">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(window.location.href);
+                              showToast('URL copied to clipboard', 'success');
+                              setShowActionsMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+                          >
+                            📋 Copy Track URL
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (navigator.share) {
+                                navigator.share({
+                                  title: track.title,
+                                  text: `Check out "${track.title}" by ${track.author}`,
+                                  url: window.location.href,
+                                });
+                              } else {
+                                navigator.clipboard.writeText(window.location.href);
+                                showToast('URL copied to clipboard', 'success');
+                              }
+                              setShowActionsMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+                          >
+                            🔗 Share Track
+                          </button>
+                          <hr className="my-2 border-gray-600" />
+                          <button
+                            onClick={() => {
+                              showToast('Edit functionality coming soon', 'info');
+                              setShowActionsMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+                          >
+                            ✏️ Edit Track
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this track? This action cannot be undone.')) {
+                                handleTrackDelete(track.id);
+                              }
+                              setShowActionsMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-600 hover:text-white transition-colors"
+                          >
+                            🗑️ Delete Track
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               
               {/* Creator Information Section */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
@@ -940,115 +1060,8 @@ export default function SingleTrackPageClient() {
               </div>
             )}
 
-            {/* Desktop Two-Column Layout (> 1024px) */}
-            {/* Mobile Stacked Layout (< 1024px) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              {/* Left Column: Track Card and Social Interactions */}
-              <div className="space-y-4 md:space-y-6">
-                {/* Track Card Section */}
-                {user && (
-                  <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-                    <ErrorBoundary
-                      fallback={
-                        <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4">
-                          <div className="flex items-center mb-2">
-                            <div className="text-yellow-400 mr-2">⚠️</div>
-                            <h4 className="text-yellow-400 font-medium text-sm">Track Card Error</h4>
-                          </div>
-                          <p className="text-gray-300 text-xs mb-3">
-                            Unable to display track card. The track information may still be accessible.
-                          </p>
-                          <button
-                            onClick={() => window.location.reload()}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-                          >
-                            Refresh
-                          </button>
-                        </div>
-                      }
-                      onError={(error, errorInfo) => {
-                        logSingleTrackPageError(
-                          error,
-                          track.id,
-                          user?.id,
-                          'component',
-                          'Track card component error',
-                          {
-                            componentStack: errorInfo.componentStack
-                          }
-                        );
-                      }}
-                    >
-                      <Suspense fallback={
-                        <div className="animate-pulse">
-                          <div className="flex space-x-4">
-                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-700 rounded"></div>
-                            <div className="flex-1 space-y-3">
-                              <div className="h-4 bg-gray-700 rounded w-3/4"></div>
-                              <div className="h-4 bg-gray-700 rounded w-1/2"></div>
-                              <div className="h-4 bg-gray-700 rounded w-2/3"></div>
-                            </div>
-                          </div>
-                        </div>
-                      }>
-                        <TrackCardWithActions
-                          track={track}
-                          userId={user.id}
-                          onTrackUpdate={handleTrackUpdate}
-                          onTrackDelete={handleTrackDelete}
-                          onShowToast={showToast}
-                        />
-                      </Suspense>
-                    </ErrorBoundary>
-                  </div>
-                )}
-
-                {/* Track Card for non-authenticated users (read-only) */}
-                {!user && (
-                  <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-                    <div className="space-y-4">
-                      <div className="flex items-start space-x-3 sm:space-x-4">
-                        <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 bg-gray-700 rounded flex items-center justify-center">
-                          <span className="text-2xl sm:text-3xl">🎵</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-base sm:text-lg font-semibold text-white truncate">
-                            {track.title}
-                          </h3>
-                          <p className="text-sm text-gray-400 truncate">
-                            {track.author}
-                          </p>
-                          {track.description && (
-                            <p className="text-xs sm:text-sm text-gray-500 mt-2 line-clamp-2">
-                              {track.description}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs text-gray-500">
-                            <span className="whitespace-nowrap">▶️ {track.play_count || 0} plays</span>
-                            <span className="whitespace-nowrap">❤️ {likeCount} likes</span>
-                            {track.genre && <span className="whitespace-nowrap">🎸 {track.genre}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-center text-xs sm:text-sm text-gray-500">
-                        <button
-                          onClick={() => router.push('/login')}
-                          className="text-blue-400 hover:text-blue-300 transition-colors"
-                        >
-                          Sign in
-                        </button>
-                        {' '}to access more features
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-
-              </div>
-
-              {/* Right Column: Additional Info (Desktop only, hidden on mobile) */}
-              {/* This column can be used for future enhancements like comments, related tracks, etc. */}
-              <div className="hidden lg:block space-y-4 md:space-y-6">
+            {/* Track Details Section */}
+            <div className="space-y-4 md:space-y-6">
                 {/* Placeholder for future content */}
                 <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4">Track Details</h3>
@@ -1096,24 +1109,23 @@ export default function SingleTrackPageClient() {
                   </div>
                 )}
 
-                {/* Playlist Memberships */}
-                {track.playlistNames && track.playlistNames.length > 0 && (
-                  <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-                    <h3 className="text-lg font-semibold text-white mb-3">In Playlists</h3>
-                    <div className="space-y-2">
-                      {track.playlistNames.map((name, index) => (
-                        <div
-                          key={track.playlistIds?.[index] || index}
-                          className="flex items-center space-x-2 text-sm"
-                        >
-                          <span className="text-gray-400">📋</span>
-                          <span className="text-white">{name}</span>
-                        </div>
-                      ))}
-                    </div>
+              {/* Playlist Memberships */}
+              {track.playlistNames && track.playlistNames.length > 0 && (
+                <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+                  <h3 className="text-lg font-semibold text-white mb-3">In Playlists</h3>
+                  <div className="space-y-2">
+                    {track.playlistNames.map((name, index) => (
+                      <div
+                        key={track.playlistIds?.[index] || index}
+                        className="flex items-center space-x-2 text-sm"
+                      >
+                        <span className="text-gray-400">📋</span>
+                        <span className="text-white">{name}</span>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         )}

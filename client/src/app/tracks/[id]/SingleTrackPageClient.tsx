@@ -784,77 +784,84 @@ export default function SingleTrackPageClient() {
               <div className="flex items-start justify-between gap-4 mb-3">
                 <h1 className="text-xl sm:text-2xl font-bold text-white flex-1">{track.title}</h1>
                 
-                {/* Track Actions Menu - Only show for authenticated users who own the track */}
-                {user && track.user_id === user.id && (
-                  <div ref={actionsMenuRef} className="relative flex-shrink-0">
-                    <button
-                      onClick={() => setShowActionsMenu(!showActionsMenu)}
-                      className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                      aria-label="Track actions"
-                    >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                      </svg>
-                    </button>
-                    
-                    {/* Dropdown Menu */}
-                    {showActionsMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-48 bg-gray-700 rounded-lg shadow-lg border border-gray-600 z-50">
-                        <div className="py-2">
-                          <button
-                            onClick={() => {
+                {/* Track Actions Menu - Available to all users (limited actions for non-owners) */}
+                <div ref={actionsMenuRef} className="relative flex-shrink-0">
+                  <button
+                    onClick={() => setShowActionsMenu(!showActionsMenu)}
+                    className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                    aria-label="Track actions"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                    </svg>
+                  </button>
+                  
+                  {/* Dropdown Menu */}
+                  {showActionsMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-gray-700 rounded-lg shadow-lg border border-gray-600 z-50">
+                      <div className="py-2">
+                        {/* Copy URL - Available to all users */}
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(window.location.href);
+                            showToast('URL copied to clipboard', 'success');
+                            setShowActionsMenu(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+                        >
+                          📋 Copy Track URL
+                        </button>
+                        
+                        {/* Share - Available to all users */}
+                        <button
+                          onClick={() => {
+                            if (navigator.share) {
+                              navigator.share({
+                                title: track.title,
+                                text: `Check out "${track.title}" by ${track.author}`,
+                                url: window.location.href,
+                              });
+                            } else {
                               navigator.clipboard.writeText(window.location.href);
                               showToast('URL copied to clipboard', 'success');
-                              setShowActionsMenu(false);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
-                          >
-                            📋 Copy Track URL
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (navigator.share) {
-                                navigator.share({
-                                  title: track.title,
-                                  text: `Check out "${track.title}" by ${track.author}`,
-                                  url: window.location.href,
-                                });
-                              } else {
-                                navigator.clipboard.writeText(window.location.href);
-                                showToast('URL copied to clipboard', 'success');
-                              }
-                              setShowActionsMenu(false);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
-                          >
-                            🔗 Share Track
-                          </button>
-                          <hr className="my-2 border-gray-600" />
-                          <button
-                            onClick={() => {
-                              showToast('Edit functionality coming soon', 'info');
-                              setShowActionsMenu(false);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
-                          >
-                            ✏️ Edit Track
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this track? This action cannot be undone.')) {
-                                handleTrackDelete(track.id);
-                              }
-                              setShowActionsMenu(false);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-600 hover:text-white transition-colors"
-                          >
-                            🗑️ Delete Track
-                          </button>
-                        </div>
+                            }
+                            setShowActionsMenu(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+                        >
+                          🔗 Share Track
+                        </button>
+                        
+                        {/* Owner-only actions */}
+                        {user && track.user_id === user.id && (
+                          <>
+                            <hr className="my-2 border-gray-600" />
+                            <button
+                              onClick={() => {
+                                showToast('Edit functionality coming soon', 'info');
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+                            >
+                              ✏️ Edit Track
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this track? This action cannot be undone.')) {
+                                  handleTrackDelete(track.id);
+                                }
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-600 hover:text-white transition-colors"
+                            >
+                              🗑️ Delete Track
+                            </button>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
               
               {/* Creator Information Section */}

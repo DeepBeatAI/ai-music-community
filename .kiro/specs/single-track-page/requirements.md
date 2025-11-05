@@ -1,5 +1,12 @@
 # Requirements Document
 
+## Document Status
+
+**Last Updated:** December 2024  
+**Status:** Reflects actual implementation (updated post-development)
+
+> **Note:** This requirements document has been updated to reflect the actual implementation. During development, several design decisions were made to simplify the feature and improve user experience. The original spec included features like interactive like buttons and TrackCard component reuse, but the final implementation uses a custom inline UI with read-only social metrics for a cleaner, more focused experience.
+
 ## Introduction
 
 This document defines the requirements for the Single Track Page feature, which provides a dedicated page for individual tracks accessible via shareable URLs. When users click "Copy Track URL" from track cards or audio posts, they receive a URL in the format `/tracks/{track_id}`. This feature creates a landing page for those URLs, displaying the track with playback capabilities and metadata.
@@ -34,11 +41,11 @@ This document defines the requirements for the Single Track Page feature, which 
 
 #### Acceptance Criteria
 
-1. THE Single Track Page SHALL reuse the existing TrackCard component to display cover art, title, author, and metadata
-2. THE Single Track Page SHALL display the track's play count, like count, and upload date using the same format as library track cards
-3. THE Single Track Page SHALL display album membership badges if the track belongs to an album
-4. THE Single Track Page SHALL display playlist membership badges if the track belongs to playlists
-5. THE Single Track Page SHALL display the track description if available
+1. THE Single Track Page SHALL display track title, author, and metadata in a custom inline layout
+2. THE Single Track Page SHALL display the track's play count, like count, and upload date
+3. THE Single Track Page SHALL display playlist membership information if the track belongs to playlists
+4. THE Single Track Page SHALL display the track description if available
+5. THE Single Track Page SHALL display track details including genre, duration, visibility, and upload date
 
 ### Requirement 3: Waveform Playback Integration
 
@@ -54,27 +61,27 @@ This document defines the requirements for the Single Track Page feature, which 
 
 ### Requirement 4: Track Actions Menu
 
-**User Story:** As an authenticated user viewing my own track, I want access to track management actions, so that I can manage the track from its dedicated page.
+**User Story:** As a user viewing a track, I want access to sharing and management actions, so that I can share the track or manage it if I own it.
 
 #### Acceptance Criteria
 
-1. WHEN the authenticated user is the track owner, THE Single Track Page SHALL display the actions menu with all available options
-2. THE actions menu SHALL include options to add to album, add to playlist, copy URL, share, and delete
-3. WHEN the user is not the track owner, THE Single Track Page SHALL display limited actions (copy URL and share only)
-4. WHEN the user is not authenticated, THE Single Track Page SHALL display no actions menu
-5. WHEN the user performs an action, THE Single Track Page SHALL provide appropriate feedback via toast notifications
+1. THE Single Track Page SHALL display an actions menu accessible to all users
+2. THE actions menu SHALL include options to copy URL and share for all users
+3. WHEN the authenticated user is the track owner, THE actions menu SHALL additionally include a delete option
+4. WHEN the user performs an action, THE Single Track Page SHALL provide appropriate feedback via toast notifications
+5. THE actions menu SHALL support native Web Share API when available, with clipboard fallback
 
 ### Requirement 5: Social Features Integration
 
-**User Story:** As a user, I want to see social engagement metrics and interact with the track, so that I can engage with the content.
+**User Story:** As a user, I want to see social engagement metrics and follow track creators, so that I can engage with the content and creators.
 
 #### Acceptance Criteria
 
-1. THE Single Track Page SHALL display the current like count for the track
-2. WHEN the user is authenticated, THE Single Track Page SHALL display a like button
-3. WHEN the user clicks the like button, THE Single Track Page SHALL toggle the like state and update the count
-4. THE Single Track Page SHALL display the track uploader's username (from user_profiles table) with a link to their profile
-5. WHEN the user is authenticated and not the track owner, THE Single Track Page SHALL display a follow button for the track uploader
+1. THE Single Track Page SHALL display the current like count for the track (read-only)
+2. THE Single Track Page SHALL display the current play count for the track
+3. THE Single Track Page SHALL display the track uploader's username (from profiles table) with a link to their profile
+4. WHEN the user is authenticated and not the track owner, THE Single Track Page SHALL display a follow button for the track uploader
+5. THE follow button SHALL integrate with the FollowContext for state management
 
 ### Requirement 6: Responsive Design and Mobile Support
 

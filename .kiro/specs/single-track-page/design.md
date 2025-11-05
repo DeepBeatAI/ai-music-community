@@ -1,8 +1,15 @@
 # Design Document
 
+## Document Status
+
+**Last Updated:** December 2024  
+**Status:** Reflects actual implementation (updated post-development)
+
+> **Note:** This design document has been updated to reflect the actual implementation. The final implementation uses a custom inline UI rather than reusing the TrackCard component, implements progressive loading for performance, and focuses on essential features for a cleaner user experience.
+
 ## Overview
 
-The Single Track Page feature provides a dedicated landing page for individual tracks, accessible via shareable URLs in the format `/tracks/{track_id}`. This page displays comprehensive track information with an integrated waveform player, reusing existing components from the library and dashboard pages to maintain consistency and minimize code duplication.
+The Single Track Page feature provides a dedicated landing page for individual tracks, accessible via shareable URLs in the format `/tracks/{track_id}`. This page displays comprehensive track information with an integrated waveform player, implementing progressive loading and lazy component loading for optimal performance.
 
 ## Architecture
 
@@ -20,17 +27,24 @@ The page uses Next.js 15 App Router dynamic routing with the `[id]` parameter to
 SingleTrackPage (page.tsx)
 ├── MainLayout
 │   └── Single Track Container
+│       ├── Offline Indicator (conditional)
 │       ├── Back Button
-│       ├── Track Header Section
-│       │   ├── Track Metadata
-│       │   └── Creator Info with Follow Button
-│       ├── Waveform Player Section
-│       │   └── WavesurferPlayer (reused from dashboard)
-│       ├── Track Card Section
-│       │   └── TrackCardWithActions (reused from library)
-│       └── Social Interaction Section
-│           ├── LikeButton
-│           └── Share/Copy URL Actions
+│       ├── Loading Skeletons (conditional)
+│       ├── Error States (conditional - 404, 403, network)
+│       └── Track Content (when loaded)
+│           ├── Track Header Section
+│           │   ├── Title with Actions Menu
+│           │   ├── Creator Info with Avatar
+│           │   ├── Follow Button (for non-owners)
+│           │   └── Track Stats (plays, likes, date)
+│           ├── Waveform Player Section
+│           │   └── WavesurferPlayer (lazy loaded)
+│           ├── Track Details Section
+│           │   ├── Track Metadata (genre, duration, visibility)
+│           │   ├── Description (if available)
+│           │   └── Playlist Memberships (if any)
+│           ├── Toast Notifications
+│           └── Delete Confirmation Modal (lazy loaded)
 ```
 
 ### Data Flow
@@ -62,20 +76,29 @@ Update State & Database
 **State:**
 ```typescript
 interface SingleTrackPageState {
-  track: TrackWithMembership | null;
+  track: ExtendedTrackWithMembership | null;
   loading: boolean;
   error: string | null;
-  isLiked: boolean;
-  likeCount: number;
-  isFollowing: boolean;
+  errorType: '404' | '403' | 'network' | 'audio' | null;
+  audioError: string | null;
+  likeCount: number;  // Read-only display
+  cachedAudioUrl: string | null;
+  shouldLoadAudio: boolean;  // Progressive loading
+  toasts: Toast[];
+  isOnline: boolean;
+  failedActions: Array<{ action: string; data: unknown }>;
+  showActionsMenu: boolean;
+  showDeleteModal: boolean;
 }
 ```
 
 **Key Functions:**
 - `fetchTrackData(trackId: string)`: Fetches track data with all related information
-- `handleLike()`: Toggles like state and updates database
-- `handleFollow()`: Toggles follow state for track creator
-- `handleBack()`: Navigates back with appropriate fallback logic
+- `handleLoadAudio()`: Triggers progressive audio loading on user interaction
+- `handleDeleteConfirm()`: Deletes track and navigates back
+- `handleBack()`: Navigates back with smart fallback logic
+- `showToast(message, type)`: Displays toast notification
+- `dismissToast(id)`: Dismisses a specific toast
 
 ### 2. Reused Components
 
@@ -99,6 +122,14 @@ interface SingleTrackPageState {
 - Play/pause controls
 - Seek functionality
 - Volume control
+- Play tracking (increments play_count after 30+ seconds)
+
+**Loading Strategy:**
+- Lazy loaded with React.lazy() for code splitting
+- Progressive loading (deferred until user interaction)
+- Wrapped in ErrorBoundary for graceful error handling
+- Suspense fallback with loading skeleton
+- Volume control
 - Time display
 - **Play count tracking integration** (via `playTracker` from `@/lib/playTracking`)
 
@@ -116,51 +147,47 @@ The WavesurferPlayer component integrates with the play tracking system that:
 - ✅ Dashboard audio posts already pass `trackId` to WavesurferPlayer
 - ⚠️ Single track page must pass `trackId` to WavesurferPlayer for tracking to work
 
-#### TrackCardWithActions
-**Source:** `client/src/components/library/TrackCardWithActions.tsx`
-
-**Usage:**
-```typescript
-<TrackCardWithActions
-  track={track}
-  userId={user?.id}
-  onTrackUpdate={handleTrackUpdate}
-  onTrackDelete={handleTrackDelete}
-  onShowToast={handleShowToast}
-/>
-```
-
-**Features:**
-- Track metadata display
-- Album/playlist badges
-- Actions menu (conditional based on ownership)
-- Play count and like count display
-
-#### LikeButton
-**Source:** `client/src/components/LikeButton.tsx`
-
-**Usage:**
-```typescript
-<LikeButton
-  postId={postId}  // Derived from track's post
-  initialLiked={isLiked}
-  initialLikeCount={likeCount}
-  currentUserId={user?.id}
-  onLikeChange={handleLikeChange}
-/>
-```
-
 #### FollowButton
 **Source:** `client/src/components/FollowButton.tsx`
 
 **Usage:**
 ```typescript
 <FollowButton
-  targetUserId={track.user_id}
-  currentUserId={user?.id}
-  initialFollowing={isFollowing}
+  userId={track.user_id}
+  username={track.user?.username || track.author || 'User'}
+  size="md"
+  variant="primary"
 />
 ```
+
+**Features:**
+- Integrates with FollowContext for state management
+- Displays "Follow" or "Following" based on state
+- Handles follow/unfollow actions
+- Only shown to authenticated non-owners
+
+**Loading Strategy:**
+- Lazy loaded with React.lazy() for code splitting
+- Wrapped in ErrorBoundary for graceful error handling
+- Suspense fallback with loading skeleton
+
+#### DeleteConfirmationModal
+**Source:** `client/src/components/library/DeleteConfirmationModal.tsx`
+
+**Usage:**
+```typescript
+<DeleteConfirmationModal
+  isOpen={showDeleteModal}
+  trackTitle={track.title}
+  onClose={() => setShowDeleteModal(false)}
+  onConfirm={handleDeleteConfirm}
+/>
+```
+
+**Features:**
+- Confirmation dialog for track deletion
+- Only accessible to track owners
+- Lazy loaded for performance
 
 ## Data Models
 
@@ -267,18 +294,70 @@ try {
   const track = await fetchTrackData(trackId);
   if (!track) {
     setError('Track not found');
+    setErrorType('404');
     return;
   }
   setTrack(track);
 } catch (error) {
-  if (error.code === 'PGRST116') {
+  if (error.message.includes('not found')) {
     setError('Track not found');
-  } else if (error.code === '42501') {
-    setError('Permission denied');
+    setErrorType('404');
+  } else if (error.message.includes('permission')) {
+    setError("You don't have permission to view this track");
+    setErrorType('403');
   } else {
     setError('Failed to load track. Please try again.');
+    setErrorType('network');
   }
+  // Log errors using centralized logging utility
+  logSingleTrackPageError(error, trackId, user?.id, errorType, context);
 }
+```
+
+### Offline Detection
+
+The page implements offline detection to handle network connectivity issues:
+
+```typescript
+useEffect(() => {
+  const handleOnline = () => {
+    setIsOnline(true);
+    showToast('Connection restored', 'success');
+    // Retry failed actions
+  };
+  
+  const handleOffline = () => {
+    setIsOnline(false);
+    showToast('No internet connection', 'error');
+  };
+  
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+}, []);
+```
+
+### Audio Error Handling
+
+Audio loading implements retry logic with exponential backoff:
+
+```typescript
+const loadAudioUrl = async () => {
+  let retryCount = 0;
+  const maxRetries = 3;
+  
+  try {
+    const url = await getCachedAudioUrl(track.file_url);
+    setCachedAudioUrl(url);
+  } catch (error) {
+    if (retryCount < maxRetries) {
+      retryCount++;
+      setTimeout(() => loadAudioUrl(), 1000 * retryCount);
+    } else {
+      setAudioError('Failed to load audio file');
+      showToast('Audio load failed', 'error');
+    }
+  }
+};
 ```
 
 ## Testing Strategy
@@ -291,13 +370,7 @@ try {
    - Test permission denied scenario
    - Test network error handling
 
-2. **Like Functionality**
-   - Test like toggle
-   - Test like count update
-   - Test optimistic updates
-   - Test error rollback
-
-3. **Follow Functionality**
+2. **Follow Functionality**
    - Test follow toggle
    - Test follow state persistence
    - Test error handling
@@ -321,10 +394,10 @@ try {
    - Test play count tracking
 
 3. **Social Interactions**
-   - Test like button interaction
    - Test follow button interaction
-   - Test share functionality
+   - Test share functionality (Web Share API and clipboard fallback)
    - Test copy URL functionality
+   - Test delete track functionality (owner only)
 
 ### End-to-End Tests
 

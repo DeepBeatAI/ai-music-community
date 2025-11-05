@@ -24,6 +24,7 @@ async function fetchTrackForMetadata(trackId: string): Promise<TrackMetadata | n
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
   
   try {
+    // Use maybeSingle() instead of single() to avoid 406 errors for non-existent tracks
     const { data: trackData, error } = await supabase
       .from('tracks')
       .select(`
@@ -36,7 +37,7 @@ async function fetchTrackForMetadata(trackId: string): Promise<TrackMetadata | n
         user_id
       `)
       .eq('id', trackId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error("Error fetching track for metadata:", error);
@@ -63,8 +64,8 @@ async function fetchTrackForMetadata(trackId: string): Promise<TrackMetadata | n
       ...trackData,
       user: user || null,
     } as TrackMetadata;
-  } catch (error) {
-    console.error("Error fetching track for metadata:", error);
+  } catch {
+    // Silently handle errors for non-existent tracks
     return null;
   }
 }

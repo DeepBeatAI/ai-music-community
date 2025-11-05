@@ -35,10 +35,12 @@ import type { TrackWithMembership } from "@/types/library";
 // Lazy load heavy components for code splitting and improved initial page load
 const WavesurferPlayer = lazy(() => import("@/components/WavesurferPlayer"));
 const FollowButton = lazy(() => import("@/components/FollowButton"));
+const DeleteConfirmationModal = lazy(() => import("@/components/library/DeleteConfirmationModal").then(mod => ({ default: mod.DeleteConfirmationModal })));
 
 // Import error boundary and logging utilities
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logSingleTrackPageError } from "@/utils/errorLogging";
+import { deleteTrack } from "@/lib/tracks";
 
 /**
  * Extended track type that includes all related data needed for the single track page
@@ -105,6 +107,9 @@ export default function SingleTrackPageClient() {
   // Track actions menu state
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Performance monitoring using ref to avoid dependency issues
   const performanceMetrics = useRef({
@@ -209,6 +214,7 @@ export default function SingleTrackPageClient() {
 
       try {
         // Fetch track with playlist memberships
+        // Use maybeSingle() instead of single() to avoid 406 errors for non-existent tracks
         const { data: trackData, error: trackError } = await supabase
           .from('tracks')
           .select(`
@@ -222,17 +228,16 @@ export default function SingleTrackPageClient() {
             )
           `)
           .eq('id', trackId)
-          .single();
+          .maybeSingle();
 
         if (trackError) {
-          if (trackError.code === 'PGRST116') {
-            throw new Error("not found");
-          }
           throw trackError;
         }
 
         if (!trackData) {
-          throw new Error("not found");
+          // Return null for non-existent tracks instead of throwing
+          // This prevents console errors for expected 404 cases
+          return null;
         }
 
         // Check if user has permission to view private tracks
@@ -349,17 +354,10 @@ export default function SingleTrackPageClient() {
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Unknown error');
         
-        // Log error using centralized logging utility
+        // Log error using centralized logging utility (but not for expected 404s)
         if (err instanceof Error) {
           if (err.message.includes("not found")) {
-            logSingleTrackPageError(
-              error,
-              trackId,
-              user?.id,
-              'track_load',
-              'Loading track page',
-              { errorType: '404', message: 'Track not found' }
-            );
+            // Don't log 404 errors - they're expected for deleted tracks
             setError("Track not found");
             setErrorType('404');
           } else if (err.message.includes("permission") || err.message.includes("unauthorized")) {
@@ -506,11 +504,25 @@ export default function SingleTrackPageClient() {
     }
   };
 
-  // Handle track delete
-  const handleTrackDelete = (trackId: string) => {
-    if (track && track.id === trackId) {
-      // Navigate back after deletion
-      handleBack();
+  // Handle track delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!track) return;
+    
+    try {
+      const success = await deleteTrack(track.id);
+      
+      if (success) {
+        showToast('Track deleted successfully', 'success');
+        // Navigate back after successful deletion
+        setTimeout(() => {
+          handleBack();
+        }, 500);
+      } else {
+        showToast('Failed to delete track', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting track:', error);
+      showToast('Failed to delete track', 'error');
     }
   };
 
@@ -705,14 +717,12 @@ export default function SingleTrackPageClient() {
                   >
                     Go Back
                   </button>
-                  {user && (
-                    <button
-                      onClick={() => router.push('/dashboard')}
-                      className="px-6 py-3 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm sm:text-base"
-                    >
-                      Go to Dashboard
-                    </button>
-                  )}
+                  <button
+                    onClick={() => router.push('/')}
+                    className="px-6 py-3 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm sm:text-base"
+                  >
+                    Go to Home Page
+                  </button>
                 </div>
               </div>
             )}
@@ -838,18 +848,7 @@ export default function SingleTrackPageClient() {
                             <hr className="my-2 border-gray-600" />
                             <button
                               onClick={() => {
-                                showToast('Edit functionality coming soon', 'info');
-                                setShowActionsMenu(false);
-                              }}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
-                            >
-                              ✏️ Edit Track
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this track? This action cannot be undone.')) {
-                                  handleTrackDelete(track.id);
-                                }
+                                setShowDeleteModal(true);
                                 setShowActionsMenu(false);
                               }}
                               className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-600 hover:text-white transition-colors"
@@ -1204,6 +1203,18 @@ export default function SingleTrackPageClient() {
           ))}
         </div>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {track && (
+        <Suspense fallback={null}>
+          <DeleteConfirmationModal
+            isOpen={showDeleteModal}
+            trackTitle={track.title}
+            onClose={() => setShowDeleteModal(false)}
+            onConfirm={handleDeleteConfirm}
+          />
+        </Suspense>
+      )}
     </MainLayout>
   );
 }

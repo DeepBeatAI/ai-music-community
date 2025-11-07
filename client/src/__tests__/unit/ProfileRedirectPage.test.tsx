@@ -32,7 +32,14 @@ const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 describe('ProfileRedirectPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseRouter.mockReturnValue({ push: mockPush } as ReturnType<typeof useAuth>);
+    mockUseRouter.mockReturnValue({
+      push: mockPush,
+      back: jest.fn(),
+      forward: jest.fn(),
+      refresh: jest.fn(),
+      replace: jest.fn(),
+      prefetch: jest.fn(),
+    } as ReturnType<typeof useRouter>);
   });
 
   describe('Loading State', () => {

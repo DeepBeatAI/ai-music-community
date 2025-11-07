@@ -262,7 +262,7 @@ export default function CreatorTracksSection({
     if (!track) return;
 
     try {
-      await playTrack(track as any); // Cast to PlaylistTrackDisplay
+      await playTrack(track as unknown as Parameters<typeof playTrack>[0]);
     } catch (err) {
       console.error('Error playing track:', err);
       showToast('Failed to play track', 'error');

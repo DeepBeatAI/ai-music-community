@@ -149,7 +149,17 @@ export async function getCreatorStats(userId: string): Promise<CreatorStats> {
     if (error) throw error;
 
     // Find the creator in the results
-    const creatorData = data?.find((creator: any) => creator.user_id === userId);
+    type PopularCreator = {
+      user_id: string;
+      username: string;
+      avatar_url: string | null;
+      track_count: number;
+      total_plays: number;
+      total_likes: number;
+      follower_count: number;
+      creator_score: number;
+    };
+    const creatorData = data?.find((creator: PopularCreator) => creator.user_id === userId);
 
     if (!creatorData) {
       // If not found in popular creators, they have no stats yet

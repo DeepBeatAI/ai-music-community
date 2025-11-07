@@ -95,7 +95,14 @@ describe('CreatorTracksPage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseRouter.mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    mockUseRouter.mockReturnValue({
+      push: mockPush,
+      back: jest.fn(),
+      forward: jest.fn(),
+      refresh: jest.fn(),
+      replace: jest.fn(),
+      prefetch: jest.fn(),
+    } as ReturnType<typeof useRouter>);
     mockUseParams.mockReturnValue({ username: 'testuser' });
     mockUseAuth.mockReturnValue({
       user: null,
@@ -163,15 +170,15 @@ describe('CreatorTracksPage', () => {
       const mockIn2 = jest.fn().mockResolvedValue({ data: [], error: null });
       const mockSelect3 = jest.fn().mockReturnValue({ in: mockIn2 });
       
-      mockSupabaseFrom.mockImplementation((table: string) => {
+      mockSupabaseFrom.mockImplementation((table) => {
         if (table === 'tracks') {
-          return { select: mockSelect } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'posts') {
-          return { select: mockSelect2 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect2 } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'playlist_tracks') {
-          return { select: mockSelect3 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect3 } as unknown as ReturnType<typeof supabase.from>;
         }
-        return { select: jest.fn() } as ReturnType<typeof supabase.from>;
+        return { select: jest.fn() } as unknown as ReturnType<typeof supabase.from>;
       });
     });
 
@@ -220,15 +227,15 @@ describe('CreatorTracksPage', () => {
       const mockIn2 = jest.fn().mockResolvedValue({ data: [], error: null });
       const mockSelect3 = jest.fn().mockReturnValue({ in: mockIn2 });
       
-      mockSupabaseFrom.mockImplementation((table: string) => {
+      mockSupabaseFrom.mockImplementation((table) => {
         if (table === 'tracks') {
-          return { select: mockSelect } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'posts') {
-          return { select: mockSelect2 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect2 } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'playlist_tracks') {
-          return { select: mockSelect3 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect3 } as unknown as ReturnType<typeof supabase.from>;
         }
-        return { select: jest.fn() } as ReturnType<typeof supabase.from>;
+        return { select: jest.fn() } as unknown as ReturnType<typeof supabase.from>;
       });
     });
 
@@ -297,15 +304,15 @@ describe('CreatorTracksPage', () => {
       const mockIn2 = jest.fn().mockResolvedValue({ data: [], error: null });
       const mockSelect3 = jest.fn().mockReturnValue({ in: mockIn2 });
       
-      mockSupabaseFrom.mockImplementation((table: string) => {
+      mockSupabaseFrom.mockImplementation((table) => {
         if (table === 'tracks') {
-          return { select: mockSelect } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'posts') {
-          return { select: mockSelect2 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect2 } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'playlist_tracks') {
-          return { select: mockSelect3 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect3 } as unknown as ReturnType<typeof supabase.from>;
         }
-        return { select: jest.fn() } as ReturnType<typeof supabase.from>;
+        return { select: jest.fn() } as unknown as ReturnType<typeof supabase.from>;
       });
     });
 
@@ -345,7 +352,7 @@ describe('CreatorTracksPage', () => {
       const mockEq2 = jest.fn().mockReturnValue({ order: mockOrder });
       const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
       const mockSelect = jest.fn().mockReturnValue({ eq: mockEq1 });
-      mockSupabaseFrom.mockReturnValue({ select: mockSelect } as ReturnType<typeof supabase.from>);
+      mockSupabaseFrom.mockReturnValue({ select: mockSelect } as unknown as ReturnType<typeof supabase.from>);
     });
 
     it('should show empty state when no tracks exist', async () => {
@@ -384,15 +391,15 @@ describe('CreatorTracksPage', () => {
       const mockIn2 = jest.fn().mockResolvedValue({ data: [], error: null });
       const mockSelect3 = jest.fn().mockReturnValue({ in: mockIn2 });
       
-      mockSupabaseFrom.mockImplementation((table: string) => {
+      mockSupabaseFrom.mockImplementation((table) => {
         if (table === 'tracks') {
-          return { select: mockSelect } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'posts') {
-          return { select: mockSelect2 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect2 } as unknown as ReturnType<typeof supabase.from>;
         } else if (table === 'playlist_tracks') {
-          return { select: mockSelect3 } as ReturnType<typeof supabase.from>;
+          return { select: mockSelect3 } as unknown as ReturnType<typeof supabase.from>;
         }
-        return { select: jest.fn() } as ReturnType<typeof supabase.from>;
+        return { select: jest.fn() } as unknown as ReturnType<typeof supabase.from>;
       });
     });
 

@@ -2,17 +2,30 @@
   "mcpServers": {
     "fetch": {
       "command": "uvx",
-      "args": ["mcp-server-fetch"],
+      "args": [
+        "mcp-server-fetch"
+      ],
       "env": {},
       "disabled": false,
       "autoApprove": []
     },
     "supabase": {
       "command": "npx",
-      "args": ["-y", "@supabase/mcp-server-supabase", "--access-token", "sbp_704a45be87a5e12e8463da4b658c98fb460d12cc"],
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase",
+        "--access-token",
+        "sbp_704a45be87a5e12e8463da4b658c98fb460d12cc"
+      ],
       "env": {},
       "disabled": false,
-      "autoApprove": []
+      "autoApprove": [
+        "list_tables",
+        "list_migrations",
+        "execute_sql",
+        "apply_migration",
+        "generate_typescript_types"
+      ]
     }
   }
 }

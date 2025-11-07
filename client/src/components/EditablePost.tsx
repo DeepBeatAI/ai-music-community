@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { Post } from '@/types';
 import PostItem from './PostItem';
 import EditedBadge from './EditedBadge';
@@ -266,7 +267,17 @@ export default function EditablePost({
           {/* User Info */}
           <div className="flex-1">
             <div className="flex items-center space-x-2 mb-1">
-              <p className="text-gray-200 font-medium">{username}</p>
+              {/* Username - clickable if not current user */}
+              {isOwner ? (
+                <p className="text-gray-200 font-medium">{username}</p>
+              ) : (
+                <Link 
+                  href={`/profile/${username}`}
+                  className="text-gray-200 font-medium hover:text-blue-400 hover:underline transition-colors"
+                >
+                  {username}
+                </Link>
+              )}
               <span className="text-yellow-400 text-xs bg-yellow-900/30 px-2 py-1 rounded-full">
                 ✏️ Editing
               </span>

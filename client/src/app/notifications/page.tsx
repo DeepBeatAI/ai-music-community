@@ -17,6 +17,34 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
+  // Helper function to render username link
+  const renderUsernameLink = (notification: Notification) => {
+    if (!notification.related_username) return null;
+    
+    // Check if username is current user
+    const isOwnProfile = notification.related_username === user?.user_metadata?.username;
+    
+    if (isOwnProfile) {
+      return (
+        <span className="font-semibold text-white">
+          {notification.related_username}
+        </span>
+      );
+    }
+    
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          router.push(`/profile/${notification.related_username}`);
+        }}
+        className="font-semibold text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+      >
+        {notification.related_username}
+      </button>
+    );
+  };
+
   useEffect(() => {
     // Only redirect if auth is not loading AND user is null
     if (!authLoading && !user) {
@@ -79,9 +107,9 @@ export default function NotificationsPage() {
     // Navigate based on notification data
     if (notification.related_post_id) {
       router.push(`/dashboard`); // Since you don't have individual post pages yet
-    } else if (notification.related_user_id) {
-      // Find the username for the related user
-      router.push(`/discover`); // Go to discover where they can search for the user
+    } else if (notification.related_username) {
+      // Navigate to the creator's profile
+      router.push(`/profile/${notification.related_username}`);
     }
   };
 
@@ -158,18 +186,12 @@ export default function NotificationsPage() {
                   : 'Notifications will appear here when people interact with your posts, follow you, or when there\'s community activity.'
                 }
               </p>
-              <div className="flex justify-center space-x-4">
+              <div className="flex justify-center">
                 <button
                   onClick={() => router.push('/dashboard')}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-500 transition-colors"
                 >
                   Create a Post
-                </button>
-                <button
-                  onClick={() => router.push('/discover')}
-                  className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  Discover Music and Creators
                 </button>
               </div>
             </div>
@@ -204,6 +226,11 @@ export default function NotificationsPage() {
                       {notification.message && (
                         <p className="text-gray-400 text-sm mt-1 line-clamp-2">
                           {notification.message}
+                          {notification.related_username && (
+                            <span className="ml-1">
+                              by {renderUsernameLink(notification)}
+                            </span>
+                          )}
                         </p>
                       )}
                       
@@ -244,20 +271,13 @@ export default function NotificationsPage() {
         {/* Quick Actions */}
         <div className="bg-gray-800 rounded-lg p-4">
           <h3 className="text-lg font-semibold text-white mb-3">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex justify-center">
             <button
               onClick={() => router.push('/feed')}
               className="flex items-center justify-center space-x-2 bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-lg transition-colors"
             >
               <span>📱</span>
               <span className="text-sm">View Activity Feed</span>
-            </button>
-            <button
-              onClick={() => router.push('/discover')}
-              className="flex items-center justify-center space-x-2 bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-lg transition-colors"
-            >
-              <span>🔍</span>
-              <span className="text-sm">Discover Music and Creators</span>
             </button>
           </div>
         </div>

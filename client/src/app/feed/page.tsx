@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import ActivityFeedFilters, { ActivityFilters } from '@/components/ActivityFeedFilters';
@@ -9,7 +9,7 @@ import { getActivityFeed, ActivityFeedItem, formatActivityMessage, getActivityIc
 import { formatTimeAgo } from '@/utils/format';
 
 export default function FeedPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const router = useRouter();
   const [activities, setActivities] = useState<ActivityFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,19 +17,12 @@ export default function FeedPage() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  useEffect(() => {
-    if (!user) {
-      // Only redirect if we're sure the user is not authenticated
-      // Don't redirect during initial loading
-      return;
-    }
-    loadActivities(0, true);
-  }, [user, router, filters]);
-
-  const loadActivities = async (pageNum: number = 0, reset: boolean = false) => {
+  const loadActivities = useCallback(async (pageNum: number = 0, reset: boolean = false) => {
+    if (!user) return;
+    
     setLoading(true);
     try {
-      const newActivities = await getActivityFeed(user!.id, filters, pageNum, 10);
+      const newActivities = await getActivityFeed(user.id, filters, pageNum, 10);
       if (reset) {
         setActivities(newActivities);
       } else {
@@ -42,7 +35,16 @@ export default function FeedPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, filters]);
+
+  useEffect(() => {
+    if (!user) {
+      // Only redirect if we're sure the user is not authenticated
+      // Don't redirect during initial loading
+      return;
+    }
+    loadActivities(0, true);
+  }, [user, loadActivities]);
 
   const handleFiltersChange = (newFilters: ActivityFilters) => {
     setFilters(newFilters);
@@ -56,13 +58,31 @@ export default function FeedPage() {
   };
 
   const handleActivityClick = (activity: ActivityFeedItem) => {
-    if (activity.target_post_id) {
-      router.push(`/post/${activity.target_post_id}`);
-    } else if (activity.target_user_profile?.username) {
+    // For follow events: redirect to the followed creator's profile
+    if (activity.activity_type === 'user_followed' && activity.target_user_profile?.username) {
       router.push(`/profile/${activity.target_user_profile.username}`);
-    } else {
-      router.push(`/profile/${activity.user_profile.username}`);
+      return;
     }
+    
+    // For post/audio post events: redirect to dashboard
+    if (activity.target_post_id && (activity.activity_type === 'post_created' || activity.activity_type === 'post_liked')) {
+      router.push('/dashboard');
+      return;
+    }
+    
+    // Fallback: redirect to user's profile
+    router.push(`/profile/${activity.user_profile.username}`);
+  };
+
+  const handleUsernameClick = (e: React.MouseEvent, username: string) => {
+    e.stopPropagation(); // Prevent card click
+    
+    // Don't make clickable if it's the current user
+    if (user && profile?.username === username) {
+      return;
+    }
+    
+    router.push(`/profile/${username}`);
   };
 
   // Show loading state while auth is being determined
@@ -133,42 +153,87 @@ export default function FeedPage() {
             </div>
           ) : (
             <>
-              {activities.map((activity) => (
-                <div
-                  key={activity.id}
-                  onClick={() => handleActivityClick(activity)}
-                  className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className="text-2xl">{getActivityIconForPost(activity.activity_type, activity.target_post?.post_type)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium text-white">{activity.user_profile.username}</span>
-                        <span className="text-gray-400 text-sm">
-                          {formatActivityMessage(activity)}
-                        </span>
-                      </div>
-                      
-                      {activity.target_post && (
-                        <div className="mt-2 p-2 bg-gray-700 rounded text-sm text-gray-300">
-                          {activity.target_post.post_type === 'audio' && activity.target_post.audio_filename ? (
-                            <div className="flex items-center space-x-2">
-                              <span>🎵</span>
-                              <span>{activity.target_post.audio_filename}</span>
-                            </div>
+              {activities.map((activity) => {
+                const isOwnProfile = user && profile?.username === activity.user_profile.username;
+                const isTargetOwnProfile = user && profile?.username === activity.target_user_profile?.username;
+                
+                return (
+                  <div
+                    key={activity.id}
+                    onClick={() => handleActivityClick(activity)}
+                    className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div className="text-2xl">{getActivityIconForPost(activity.activity_type, activity.target_post?.post_type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 flex-wrap">
+                          {isOwnProfile ? (
+                            <span className="font-medium text-white">{activity.user_profile.username}</span>
                           ) : (
-                            <p className="truncate">{activity.target_post.content}</p>
+                            <span
+                              onClick={(e) => handleUsernameClick(e, activity.user_profile.username)}
+                              className="font-medium text-white hover:underline cursor-pointer"
+                            >
+                              {activity.user_profile.username}
+                            </span>
                           )}
+                          <span className="text-gray-400 text-sm">
+                            {activity.activity_type === 'user_followed' && activity.target_user_profile ? (
+                              <>
+                                followed{' '}
+                                {isTargetOwnProfile ? (
+                                  <span className="font-medium text-white">{activity.target_user_profile?.username}</span>
+                                ) : (
+                                  <span
+                                    onClick={(e) => handleUsernameClick(e, activity.target_user_profile?.username || '')}
+                                    className="font-medium text-white hover:underline cursor-pointer"
+                                  >
+                                    {activity.target_user_profile?.username}
+                                  </span>
+                                )}
+                              </>
+                            ) : activity.activity_type === 'post_liked' && activity.target_user_profile ? (
+                              <>
+                                liked{' '}
+                                {isTargetOwnProfile ? (
+                                  <span className="font-medium text-white">{activity.target_user_profile?.username}</span>
+                                ) : (
+                                  <span
+                                    onClick={(e) => handleUsernameClick(e, activity.target_user_profile?.username || '')}
+                                    className="font-medium text-white hover:underline cursor-pointer"
+                                  >
+                                    {activity.target_user_profile?.username}
+                                  </span>
+                                )}
+                                &apos;s post
+                              </>
+                            ) : (
+                              formatActivityMessage(activity)
+                            )}
+                          </span>
                         </div>
-                      )}
-                      
-                      <div className="mt-2 text-xs text-gray-500">
-                        {formatTimeAgo(activity.created_at)}
+                        
+                        {activity.target_post && (
+                          <div className="mt-2 p-2 bg-gray-700 rounded text-sm text-gray-300">
+                            {activity.target_post.post_type === 'audio' && activity.target_post.audio_filename ? (
+                              <div className="flex items-center space-x-2">
+                                <span>🎵</span>
+                                <span>{activity.target_post.audio_filename}</span>
+                              </div>
+                            ) : (
+                              <p className="truncate">{activity.target_post.content}</p>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="mt-2 text-xs text-gray-500">
+                          {formatTimeAgo(activity.created_at)}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Load More */}
               {hasMore && (

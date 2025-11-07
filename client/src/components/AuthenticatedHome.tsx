@@ -163,30 +163,59 @@ export default function AuthenticatedHome() {
                 </button>
               </div>
               <div className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
-                    onClick={() => router.push('/feed')}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <span className="text-2xl">
-                        {getActivityIconForPost(activity.activity_type, activity.target_post?.post_type)}
-                      </span>
-                      <div>
-                        <p className="text-white text-sm">
-                          <span className="font-medium">{activity.user_profile.username}</span>{' '}
-                          {activity.activity_type === 'post_created' && 'created a new post'}
-                          {activity.activity_type === 'audio_uploaded' && 'uploaded new audio'}
-                          {activity.activity_type === 'post_liked' && 'liked a post'}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {new Date(activity.created_at).toLocaleDateString()}
-                        </p>
+                {recentActivity.map((activity) => {
+                  const isOwnActivity = activity.user_profile.id === user?.id;
+                  const isFollowEvent = activity.activity_type === 'user_followed';
+                  const isPostEvent = activity.activity_type === 'post_created' || 
+                                     activity.activity_type === 'audio_uploaded' || 
+                                     activity.activity_type === 'post_liked';
+                  
+                  return (
+                    <div
+                      key={activity.id}
+                      className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+                      onClick={() => {
+                        if (isFollowEvent) {
+                          // For follow events, redirect to the followed user's profile
+                          router.push(`/profile/${activity.user_profile.username}`);
+                        } else if (isPostEvent) {
+                          // For post/audio post events, redirect to dashboard
+                          router.push('/dashboard');
+                        }
+                      }}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">
+                          {getActivityIconForPost(activity.activity_type, activity.target_post?.post_type)}
+                        </span>
+                        <div>
+                          <p className="text-white text-sm">
+                            {isOwnActivity ? (
+                              <span className="font-medium">{activity.user_profile.username}</span>
+                            ) : (
+                              <span 
+                                className="font-medium hover:text-blue-300 transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/profile/${activity.user_profile.username}`);
+                                }}
+                              >
+                                {activity.user_profile.username}
+                              </span>
+                            )}{' '}
+                            {activity.activity_type === 'post_created' && 'created a new post'}
+                            {activity.activity_type === 'audio_uploaded' && 'uploaded new audio'}
+                            {activity.activity_type === 'post_liked' && 'liked a post'}
+                            {activity.activity_type === 'user_followed' && 'followed a creator'}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {new Date(activity.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -228,53 +257,67 @@ export default function AuthenticatedHome() {
                 </button>
               </div>
               <div className="space-y-3">
-                {popularCreators.map((creator, index) => (
-                  <div key={creator.user_id} className="bg-gray-800 p-4 rounded-lg hover:bg-gray-750 transition-colors">
-                    <div className="flex items-center gap-4">
-                      {/* Rank Badge */}
-                      <div className="text-2xl font-bold text-amber-500 w-8 flex-shrink-0">
-                        #{index + 1}
-                      </div>
+                {popularCreators.map((creator, index) => {
+                  const isOwnProfile = creator.user_id === user?.id;
+                  
+                  return (
+                    <div key={creator.user_id} className="bg-gray-800 p-4 rounded-lg hover:bg-gray-750 transition-colors">
+                      <div className="flex items-center gap-4">
+                        {/* Rank Badge */}
+                        <div className="text-2xl font-bold text-amber-500 w-8 flex-shrink-0">
+                          #{index + 1}
+                        </div>
 
-                      {/* Creator Info */}
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                             onClick={() => router.push(`/profile/${creator.user_id}`)}>
-                          <span className="text-white font-semibold text-sm">
-                            {creator.username[0].toUpperCase()}
-                          </span>
+                        {/* Creator Info */}
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div 
+                            className={`w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center ${!isOwnProfile ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+                            onClick={() => !isOwnProfile && router.push(`/profile/${creator.username}`)}
+                          >
+                            <span className="text-white font-semibold text-sm">
+                              {creator.username[0].toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {isOwnProfile ? (
+                              <p className="font-medium text-white truncate">
+                                {creator.username}
+                              </p>
+                            ) : (
+                              <p 
+                                className="font-medium text-white truncate cursor-pointer hover:text-blue-300 transition-colors"
+                                onClick={() => router.push(`/profile/${creator.username}`)}
+                              >
+                                {creator.username}
+                              </p>
+                            )}
+                            <p className="text-sm text-gray-400">{creator.track_count} tracks</p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white truncate cursor-pointer hover:text-blue-300 transition-colors"
-                             onClick={() => router.push(`/profile/${creator.user_id}`)}>
-                            {creator.username}
-                          </p>
-                          <p className="text-sm text-gray-400">{creator.track_count} tracks</p>
-                        </div>
-                      </div>
 
-                      {/* Stats */}
-                      <div className="flex gap-4 text-sm flex-shrink-0">
-                        <div className="text-center">
-                          <div className="font-semibold text-white">{creator.total_plays}</div>
-                          <div className="text-gray-500 text-xs">plays</div>
+                        {/* Stats */}
+                        <div className="flex gap-4 text-sm flex-shrink-0">
+                          <div className="text-center">
+                            <div className="font-semibold text-white">{creator.total_plays}</div>
+                            <div className="text-gray-500 text-xs">plays</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="font-semibold text-white">{creator.total_likes}</div>
+                            <div className="text-gray-500 text-xs">likes</div>
+                          </div>
                         </div>
-                        <div className="text-center">
-                          <div className="font-semibold text-white">{creator.total_likes}</div>
-                          <div className="text-gray-500 text-xs">likes</div>
-                        </div>
-                      </div>
 
-                      {/* View Profile Button */}
-                      <button
-                        onClick={() => router.push(`/profile/${creator.user_id}`)}
-                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors flex-shrink-0"
-                      >
-                        View
-                      </button>
+                        {/* View Profile Button */}
+                        <button
+                          onClick={() => router.push(`/profile/${creator.username}`)}
+                          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors flex-shrink-0"
+                        >
+                          View
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

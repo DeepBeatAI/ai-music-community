@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import type { PopularCreator } from '@/lib/trendingAnalytics';
+import { formatCreatorScore } from '@/utils/creatorScore';
 
 interface PopularCreatorCardProps {
   creator: PopularCreator;
@@ -60,7 +61,7 @@ export function PopularCreatorCard({ creator, rank }: PopularCreatorCardProps) {
       <div className="pt-3 border-t border-gray-700">
         <div className="text-center">
           <div className="text-lg font-bold text-amber-500">
-            {creator.creator_score.toFixed(1)}
+            {formatCreatorScore(creator.creator_score)}
           </div>
           <div className="text-xs text-gray-500">Creator Score</div>
         </div>
@@ -68,7 +69,7 @@ export function PopularCreatorCard({ creator, rank }: PopularCreatorCardProps) {
 
       {/* Actions */}
       <Link
-        href={`/profile/${creator.user_id}`}
+        href={`/profile/${creator.username}`}
         className="block mt-3 w-full py-2 bg-gray-700 hover:bg-gray-600 text-white text-center rounded transition-colors"
       >
         View Profile

@@ -27,18 +27,7 @@ export const getNotifications = async (
   try {
     let query = supabase
       .from('notifications')
-      .select(`
-        id,
-        created_at,
-        user_id,
-        type,
-        title,
-        message,
-        read,
-        related_post_id,
-        related_user_id,
-        data
-      `)
+      .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -50,13 +39,48 @@ export const getNotifications = async (
 
     if (error) throw error;
 
-    // Transform data to include default values for missing fields
-    const transformedData = (data || []).map(notification => ({
-      ...notification,
-      action_url: undefined, // Default value since column doesn't exist yet
-      icon: getDefaultIcon(notification.type), // Generate icon based on type
-      priority: 1 // Default priority
-    }));
+    // Get unique related user IDs
+    const relatedUserIds = [...new Set(
+      (data || [])
+        .map(n => n.related_user_id)
+        .filter(Boolean)
+    )] as string[];
+
+    // Fetch related profiles if there are any
+    let profilesMap: Record<string, string> = {};
+    if (relatedUserIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .in('id', relatedUserIds);
+      
+      if (profiles) {
+        profilesMap = profiles.reduce((acc, profile) => {
+          acc[profile.id] = profile.username;
+          return acc;
+        }, {} as Record<string, string>);
+      }
+    }
+
+    // Transform data to include default values for missing fields and extract username
+    const transformedData: Notification[] = (data || []).map((notification) => {
+      return {
+        id: notification.id,
+        created_at: notification.created_at,
+        user_id: notification.user_id,
+        type: notification.type as 'like' | 'follow' | 'comment' | 'post' | 'mention' | 'system',
+        title: notification.title,
+        message: notification.message,
+        read: notification.read,
+        related_post_id: notification.related_post_id,
+        related_user_id: notification.related_user_id,
+        related_username: notification.related_user_id ? profilesMap[notification.related_user_id] : undefined,
+        action_url: undefined, // Default value since column doesn't exist yet
+        icon: getDefaultIcon(notification.type), // Generate icon based on type
+        priority: 1, // Default priority
+        data: notification.data
+      };
+    });
 
     return { data: transformedData, error: null };
   } catch (error) {

@@ -12,6 +12,27 @@ export interface UserProfile {
   post_count?: number;
 }
 
+export interface CreatorProfile {
+  id: string;
+  username: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  website: string | null;
+  user_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatorStats {
+  creator_score: number;
+  follower_count: number;
+  track_count: number;
+  album_count: number;
+  playlist_count: number;
+  total_plays: number;
+}
+
 export interface Post {
   id: string;
   created_at: string;
@@ -64,6 +85,27 @@ export interface UserFollow {
   following_id: string;
 }
 
+export interface SavedTrack {
+  id: string;
+  user_id: string;
+  track_id: string;
+  created_at: string;
+}
+
+export interface SavedAlbum {
+  id: string;
+  user_id: string;
+  album_id: string;
+  created_at: string;
+}
+
+export interface SavedPlaylist {
+  id: string;
+  user_id: string;
+  playlist_id: string;
+  created_at: string;
+}
+
 export interface Comment {
   id: string;
   post_id: string;
@@ -90,6 +132,7 @@ export interface Notification {
   read: boolean;
   related_post_id?: string;
   related_user_id?: string;
+  related_username?: string; // Username of the related user
   action_url?: string;
   icon?: string;
   priority?: number;

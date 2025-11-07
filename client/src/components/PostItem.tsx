@@ -1,5 +1,6 @@
 'use client'
 import { memo, useState, useCallback, useEffect } from 'react';
+import Link from 'next/link';
 import { formatTimeAgo, truncateText } from '@/utils/format';
 import { Post } from '@/types';
 import WavesurferPlayer from './WavesurferPlayer';
@@ -269,7 +270,17 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
             {/* User Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2 mb-1">
-                <p className="text-gray-200 font-medium">{username}</p>
+                {/* Username - clickable if not current user */}
+                {isOwner ? (
+                  <p className="text-gray-200 font-medium">{username}</p>
+                ) : (
+                  <Link 
+                    href={`/profile/${username}`}
+                    className="text-gray-200 font-medium hover:text-blue-400 hover:underline transition-colors"
+                  >
+                    {username}
+                  </Link>
+                )}
                 {post.post_type === 'audio' && (
                   <span className="text-blue-400 text-xs bg-blue-900/30 px-2 py-1 rounded-full flex items-center space-x-1">
                     <span>🎵</span>

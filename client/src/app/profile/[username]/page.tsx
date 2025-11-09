@@ -144,9 +144,24 @@ export default function CreatorProfilePage() {
 
           {/* Stats Section */}
           <div className="mb-8">
+            {isOwnProfile && (
+              <div className="mb-4 bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-blue-400 text-xl flex-shrink-0">ℹ️</div>
+                  <div>
+                    <p className="text-blue-300 text-sm font-medium mb-1">
+                      Preview Mode
+                    </p>
+                    <p className="text-blue-200/80 text-sm">
+                      This is how other users see your profile. Only your public content is displayed in the stats and sections below.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <CreatorStatsSection
               userId={creatorProfile.id}
-              isOwnProfile={isOwnProfile}
+              isOwnProfile={false}
               key={`stats-${refreshKey}`}
             />
           </div>

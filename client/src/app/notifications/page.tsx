@@ -18,17 +18,62 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
+  // Helper function to extract username from notification
+  const extractUsername = (notification: Notification): string | null => {
+    // Try related_username first
+    if (notification.related_username) {
+      return notification.related_username;
+    }
+    
+    // Extract from title based on notification type
+    if (!notification.title) return null;
+    
+    const title = notification.title;
+    let match;
+    
+    // Try different patterns based on notification type
+    switch (notification.type) {
+      case 'follow':
+        // "Username followed you"
+        match = title.match(/^(.+?)\s+followed\s+you/i);
+        break;
+      case 'like':
+        // "Username liked your post"
+        match = title.match(/^(.+?)\s+liked\s+your/i);
+        break;
+      case 'comment':
+        // "Username commented on your post"
+        match = title.match(/^(.+?)\s+commented\s+on/i);
+        break;
+      case 'mention':
+        // "Username mentioned you"
+        match = title.match(/^(.+?)\s+mentioned\s+you/i);
+        break;
+      case 'post':
+        // "Username posted something" or similar
+        match = title.match(/^(.+?)\s+posted/i);
+        break;
+      default:
+        // Generic pattern: try to extract username from start of title
+        // Assumes format "Username did something"
+        match = title.match(/^([^\s]+)/);
+        break;
+    }
+    
+    return match ? match[1] : null;
+  };
+
   // Helper function to render username link
-  const renderUsernameLink = (notification: Notification) => {
-    if (!notification.related_username) return null;
+  const renderUsernameLink = (username: string) => {
+    if (!username) return null;
     
     // Check if username is current user
-    const isOwnProfile = notification.related_username === user?.user_metadata?.username;
+    const isOwnProfile = username === user?.user_metadata?.username;
     
     if (isOwnProfile) {
       return (
         <span className="font-semibold text-white">
-          {notification.related_username}
+          {username}
         </span>
       );
     }
@@ -37,12 +82,37 @@ export default function NotificationsPage() {
       <button
         onClick={(e) => {
           e.stopPropagation();
-          router.push(`/profile/${notification.related_username}`);
+          router.push(`/profile/${username}`);
         }}
         className="font-semibold text-blue-400 hover:text-blue-300 hover:underline transition-colors"
       >
-        {notification.related_username}
+        {username}
       </button>
+    );
+  };
+
+  // Helper function to render title with clickable username
+  const renderTitleWithUsername = (notification: Notification) => {
+    if (!notification.title) {
+      return notification.title;
+    }
+
+    const username = extractUsername(notification);
+    const title = notification.title;
+    
+    if (!username || !title.includes(username)) {
+      return title;
+    }
+
+    // Split title by username
+    const parts = title.split(username);
+    
+    return (
+      <>
+        {parts[0]}
+        {renderUsernameLink(username)}
+        {parts.slice(1).join(username)}
+      </>
     );
   };
 
@@ -108,9 +178,20 @@ export default function NotificationsPage() {
     // Navigate based on notification type
     switch (notification.type) {
       case 'follow':
-        // Navigate to the followed creator's profile
-        if (notification.related_username) {
-          router.push(`/profile/${notification.related_username}`);
+        // Navigate to the follower's profile (the person who followed you)
+        // Try related_username first, then extract from title
+        let username = notification.related_username;
+        
+        if (!username && notification.title) {
+          // Extract username from title like "Username followed you"
+          const match = notification.title.match(/^(.+?)\s+followed\s+you/i);
+          if (match) {
+            username = match[1];
+          }
+        }
+        
+        if (username) {
+          router.push(`/profile/${username}`);
         }
         break;
       case 'post':
@@ -238,7 +319,7 @@ export default function NotificationsPage() {
                           <p className={`text-sm font-medium ${
                             !notification.read ? 'text-white' : 'text-gray-300'
                           }`}>
-                            {notification.title}
+                            {renderTitleWithUsername(notification)}
                           </p>
                           {!notification.read && (
                             <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
@@ -247,12 +328,23 @@ export default function NotificationsPage() {
                         
                         {notification.message && (
                           <p className="text-gray-400 text-sm mt-1 line-clamp-2">
-                            {notification.message}
-                            {notification.related_username && (
-                              <span className="ml-1">
-                                by {renderUsernameLink(notification)}
-                              </span>
-                            )}
+                            {(() => {
+                              const username = extractUsername(notification);
+                              const message = notification.message || '';
+                              
+                              if (username && message.includes(username)) {
+                                const parts = message.split(username);
+                                return (
+                                  <>
+                                    {parts[0]}
+                                    {renderUsernameLink(username)}
+                                    {parts.slice(1).join(username)}
+                                  </>
+                                );
+                              }
+                              
+                              return message;
+                            })()}
                           </p>
                         )}
                         

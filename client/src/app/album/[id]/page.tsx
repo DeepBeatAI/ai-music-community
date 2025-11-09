@@ -5,7 +5,9 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import MainLayout from '@/components/layout/MainLayout';
+import SaveButton from '@/components/profile/SaveButton';
 import { getAlbumWithTracks, deleteAlbum, reorderAlbumTracks, updateAlbum } from '@/lib/albums';
+import { getSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_KEYS } from '@/utils/cache';
 import type { AlbumWithTracks } from '@/types/album';
 import type { PlaylistWithTracks } from '@/types/playlist';
@@ -41,6 +43,7 @@ export default function AlbumDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   
   // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -91,6 +94,20 @@ export default function AlbumDetailPage() {
       fetchAlbum();
     }
   }, [authLoading, fetchAlbum]);
+
+  // Check saved status
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      if (user && albumId) {
+        const result = await getSavedStatus(user.id, albumId, 'album');
+        if (result.data !== null) {
+          setIsSaved(result.data);
+        }
+      }
+    };
+
+    checkSavedStatus();
+  }, [user, albumId]);
 
   // Check if current user is the album owner
   const isOwner = user && album && user.id === album.user_id;
@@ -413,23 +430,37 @@ export default function AlbumDetailPage() {
                     )}
                   </div>
 
-                  {/* Owner Actions */}
-                  {isOwner && (
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => setShowEditModal(true)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
-                      >
-                        Edit Album
-                      </button>
-                      <button
-                        onClick={() => setShowDeleteModal(true)}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
+                  {/* Actions */}
+                  <div className="flex gap-2 flex-shrink-0">
+                    {/* Save Button for non-owners */}
+                    {!isOwner && user && (
+                      <SaveButton
+                        itemId={albumId}
+                        itemType="album"
+                        isSaved={isSaved}
+                        onToggle={() => setIsSaved(!isSaved)}
+                        size="md"
+                      />
+                    )}
+                    
+                    {/* Owner Actions */}
+                    {isOwner && (
+                      <>
+                        <button
+                          onClick={() => setShowEditModal(true)}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
+                        >
+                          Edit Album
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteModal(true)}
+                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

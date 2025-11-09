@@ -29,7 +29,9 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { getCachedAudioUrl, audioCacheManager } from "@/utils/audioCache";
+import { getSavedStatus } from "@/lib/saveService";
 import MainLayout from "@/components/layout/MainLayout";
+import SaveButton from "@/components/profile/SaveButton";
 import type { TrackWithMembership } from "@/types/library";
 
 // Lazy load heavy components for code splitting and improved initial page load
@@ -98,6 +100,7 @@ export default function SingleTrackPageClient() {
 
   // User-specific state for social features
   const [likeCount, setLikeCount] = useState(0);
+  const [isSaved, setIsSaved] = useState(false);
 
   // Audio URL state
   const [cachedAudioUrl, setCachedAudioUrl] = useState<string | null>(null);
@@ -501,6 +504,22 @@ export default function SingleTrackPageClient() {
   }, [trackId, user?.id, authLoading]);
 
   /**
+   * Effect to check if track is saved by the current user
+   */
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      if (user && trackId) {
+        const result = await getSavedStatus(user.id, trackId, 'track');
+        if (result.data !== null) {
+          setIsSaved(result.data);
+        }
+      }
+    };
+
+    checkSavedStatus();
+  }, [user, trackId]);
+
+  /**
    * Effect to load audio URL when user interaction is detected
    *
    * This effect implements progressive loading - audio is not loaded until
@@ -866,6 +885,19 @@ export default function SingleTrackPageClient() {
           </svg>
           <span className="text-sm sm:text-base">Back</span>
         </button>
+
+        {/* Save Button - Only show for non-owners */}
+        {!loading && track && user && user.id !== track.user_id && (
+          <div className="mb-4 sm:mb-6">
+            <SaveButton
+              itemId={trackId}
+              itemType="track"
+              isSaved={isSaved}
+              onToggle={() => setIsSaved(!isSaved)}
+              size="md"
+            />
+          </div>
+        )}
 
         {/* Loading State */}
         {loading && (

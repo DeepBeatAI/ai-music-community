@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import MainLayout from '@/components/layout/MainLayout';
+import SaveButton from '@/components/profile/SaveButton';
+import { useAuth } from '@/contexts/AuthContext';
 import { removeTrackFromPlaylist, reorderPlaylistTracks, getPlaylistWithTracks } from '@/lib/playlists';
+import { getSavedStatus } from '@/lib/saveService';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import { TrackReorderList } from './TrackReorderList';
 import type { PlaylistWithTracks } from '@/types/playlist';
@@ -17,12 +20,28 @@ interface PlaylistDetailClientProps {
 
 export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creatorUsername }: PlaylistDetailClientProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [playlist, setPlaylist] = useState(initialPlaylist);
   const [removingTrack, setRemovingTrack] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   
   // Playback context
   const { playPlaylist, updatePlaylist } = usePlayback();
+
+  // Check saved status
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      if (user && playlist.id) {
+        const result = await getSavedStatus(user.id, playlist.id, 'playlist');
+        if (result.data !== null) {
+          setIsSaved(result.data);
+        }
+      }
+    };
+
+    checkSavedStatus();
+  }, [user, playlist.id]);
 
   const handleRemoveTrack = async (trackId: string) => {
     setRemovingTrack(trackId);
@@ -233,6 +252,18 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
                 )}
               </div>
 
+              {/* Save Button for non-owners */}
+              {!isOwner && user && (
+                <SaveButton
+                  itemId={playlist.id}
+                  itemType="playlist"
+                  isSaved={isSaved}
+                  onToggle={() => setIsSaved(!isSaved)}
+                  size="md"
+                />
+              )}
+              
+              {/* Edit Button for owners */}
               {isOwner && (
                 <button
                   onClick={() => router.push(`/playlists/${playlist.id}/edit`)}

@@ -65,15 +65,16 @@ function StatCardSkeleton() {
  * - Error state with retry button
  * - Responsive layout using Tailwind
  * - Shows Creator Score, Followers, Tracks, Albums, Playlists, Total Plays
- * - Filters all counts to only public content (is_public = true)
+ * - Conditionally shows all content (own profile) or public only (others)
  * 
  * Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
  */
 interface CreatorStatsSectionProps {
   userId: string;
+  isOwnProfile?: boolean;
 }
 
-export default function CreatorStatsSection({ userId }: CreatorStatsSectionProps) {
+export default function CreatorStatsSection({ userId, isOwnProfile = false }: CreatorStatsSectionProps) {
   const [stats, setStats] = useState<CreatorStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +100,7 @@ export default function CreatorStatsSection({ userId }: CreatorStatsSectionProps
     setError(null);
 
     try {
-      const creatorStats = await getCreatorStats(userId);
+      const creatorStats = await getCreatorStats(userId, isOwnProfile);
       setStats(creatorStats);
       
       // Cache the stats for 5 minutes
@@ -110,7 +111,7 @@ export default function CreatorStatsSection({ userId }: CreatorStatsSectionProps
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, isOwnProfile]);
 
   useEffect(() => {
     fetchStats();

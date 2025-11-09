@@ -146,6 +146,7 @@ export default function CreatorProfilePage() {
           <div className="mb-8">
             <CreatorStatsSection
               userId={creatorProfile.id}
+              isOwnProfile={isOwnProfile}
               key={`stats-${refreshKey}`}
             />
           </div>
@@ -157,6 +158,7 @@ export default function CreatorProfilePage() {
               initialLimit={8}
               showViewAll={true}
               username={creatorProfile.username}
+              isOwnProfile={isOwnProfile}
               key={`tracks-${refreshKey}`}
             />
           </div>
@@ -166,6 +168,7 @@ export default function CreatorProfilePage() {
             <CreatorAlbumsSection
               userId={creatorProfile.id}
               initialLimit={8}
+              isOwnProfile={isOwnProfile}
               key={`albums-${refreshKey}`}
             />
           </div>
@@ -175,6 +178,7 @@ export default function CreatorProfilePage() {
             <CreatorPlaylistsSection
               userId={creatorProfile.id}
               initialLimit={8}
+              isOwnProfile={isOwnProfile}
               key={`playlists-${refreshKey}`}
             />
           </div>

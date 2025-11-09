@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
+import FollowButton from '@/components/FollowButton';
 import { getNotifications, markNotificationsAsRead } from '@/utils/notifications';
 import { Notification } from '@/types';
 import { formatTimeAgo } from '@/utils/format';
@@ -45,20 +46,7 @@ export default function NotificationsPage() {
     );
   };
 
-  useEffect(() => {
-    // Only redirect if auth is not loading AND user is null
-    if (!authLoading && !user) {
-      router.push('/');
-      return;
-    }
-    
-    // Load notifications once user is available
-    if (user && !authLoading) {
-      loadNotifications(0, true);
-    }
-  }, [user, authLoading, router, filter]);
-
-  const loadNotifications = async (pageNum: number = 0, reset: boolean = false) => {
+  const loadNotifications = useCallback(async (pageNum: number = 0, reset: boolean = false) => {
     if (!user) return;
     
     setLoading(true);
@@ -86,7 +74,20 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, filter]);
+
+  useEffect(() => {
+    // Only redirect if auth is not loading AND user is null
+    if (!authLoading && !user) {
+      router.push('/');
+      return;
+    }
+    
+    // Load notifications once user is available
+    if (user && !authLoading) {
+      loadNotifications(0, true);
+    }
+  }, [user, authLoading, router, filter, loadNotifications]);
 
   const handleMarkAllAsRead = async () => {
     if (!user) return;
@@ -104,12 +105,31 @@ export default function NotificationsPage() {
       );
     }
 
-    // Navigate based on notification data
-    if (notification.related_post_id) {
-      router.push(`/dashboard`); // Since you don't have individual post pages yet
-    } else if (notification.related_username) {
-      // Navigate to the creator's profile
-      router.push(`/profile/${notification.related_username}`);
+    // Navigate based on notification type
+    switch (notification.type) {
+      case 'follow':
+        // Navigate to the followed creator's profile
+        if (notification.related_username) {
+          router.push(`/profile/${notification.related_username}`);
+        }
+        break;
+      case 'post':
+      case 'like':
+        // Navigate to dashboard for post and like events
+        router.push('/dashboard');
+        break;
+      case 'comment':
+      case 'mention':
+        // Navigate to dashboard for comment and mention events
+        router.push('/dashboard');
+        break;
+      default:
+        // For other types, navigate to dashboard if there's a related post
+        if (notification.related_post_id) {
+          router.push('/dashboard');
+        } else if (notification.related_username) {
+          router.push(`/profile/${notification.related_username}`);
+        }
     }
   };
 
@@ -207,47 +227,61 @@ export default function NotificationsPage() {
                       : 'border-gray-600'
                   }`}
                 >
-                  <div className="flex items-start space-x-3">
-                    <div className="text-2xl flex-shrink-0">
-                      {notification.data?.icon || notification.icon || '📢'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className={`text-sm font-medium ${
-                          !notification.read ? 'text-white' : 'text-gray-300'
-                        }`}>
-                          {notification.title}
-                        </p>
-                        {!notification.read && (
-                          <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                        )}
+                  <div className="flex items-start justify-between gap-3">
+                    {/* Left side: Icon and content */}
+                    <div className="flex items-start space-x-3 flex-1 min-w-0">
+                      <div className="text-2xl flex-shrink-0">
+                        {notification.data?.icon || notification.icon || '📢'}
                       </div>
-                      
-                      {notification.message && (
-                        <p className="text-gray-400 text-sm mt-1 line-clamp-2">
-                          {notification.message}
-                          {notification.related_username && (
-                            <span className="ml-1">
-                              by {renderUsernameLink(notification)}
-                            </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`text-sm font-medium ${
+                            !notification.read ? 'text-white' : 'text-gray-300'
+                          }`}>
+                            {notification.title}
+                          </p>
+                          {!notification.read && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                           )}
-                        </p>
-                      )}
-                      
-                      <div className="flex items-center justify-between mt-2">
-                        <p className="text-xs text-gray-500">
-                          {formatTimeAgo(notification.created_at)}
-                        </p>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          notification.type === 'like' ? 'bg-pink-900/30 text-pink-300' :
-                          notification.type === 'follow' ? 'bg-blue-900/30 text-blue-300' :
-                          notification.type === 'comment' ? 'bg-green-900/30 text-green-300' :
-                          'bg-gray-900/30 text-gray-400'
-                        }`}>
-                          {notification.type}
-                        </span>
+                        </div>
+                        
+                        {notification.message && (
+                          <p className="text-gray-400 text-sm mt-1 line-clamp-2">
+                            {notification.message}
+                            {notification.related_username && (
+                              <span className="ml-1">
+                                by {renderUsernameLink(notification)}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        
+                        <div className="flex items-center gap-2 mt-2">
+                          <p className="text-xs text-gray-500">
+                            {formatTimeAgo(notification.created_at)}
+                          </p>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            notification.type === 'like' ? 'bg-pink-900/30 text-pink-300' :
+                            notification.type === 'follow' ? 'bg-blue-900/30 text-blue-300' :
+                            notification.type === 'comment' ? 'bg-green-900/30 text-green-300' :
+                            'bg-gray-900/30 text-gray-400'
+                          }`}>
+                            {notification.type}
+                          </span>
+                        </div>
                       </div>
                     </div>
+                    
+                    {/* Right side: Follow button */}
+                    {notification.type === 'follow' && notification.related_user_id && (
+                      <div onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
+                        <FollowButton
+                          userId={notification.related_user_id}
+                          username={notification.related_username}
+                          size="sm"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

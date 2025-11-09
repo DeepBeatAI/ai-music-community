@@ -50,60 +50,56 @@ interface CreatorAlbumCardProps {
   album: Album;
   isSaved: boolean;
   onSaveToggle: () => Promise<void>;
+  isOwnProfile?: boolean;
 }
 
-function CreatorAlbumCard({ album, isSaved, onSaveToggle }: CreatorAlbumCardProps) {
+function CreatorAlbumCard({ album, isSaved, onSaveToggle, isOwnProfile = false }: CreatorAlbumCardProps) {
   const router = useRouter();
 
   const handleCardClick = () => {
     router.push(`/album/${album.id}`);
   };
 
+  // Generate gradient placeholder if no cover image (same as library AlbumCard)
+  const gradientColors = [
+    'from-purple-400 to-pink-600',
+    'from-blue-400 to-cyan-600',
+    'from-green-400 to-teal-600',
+    'from-orange-400 to-red-600',
+    'from-indigo-400 to-purple-600',
+  ];
+  const gradientIndex = album.id.charCodeAt(0) % gradientColors.length;
+  const gradient = gradientColors[gradientIndex];
+
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden hover:border-gray-600 transition-colors cursor-pointer group">
-      {/* Cover Image */}
+      {/* Cover Image or Gradient Placeholder */}
       <div 
-        className="h-48 bg-gray-700 bg-cover bg-center relative"
-        style={album.cover_image_url ? { backgroundImage: `url(${album.cover_image_url})` } : {}}
+        className="h-48 relative"
         onClick={handleCardClick}
       >
-        {!album.cover_image_url && (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-            <svg
-              className="w-16 h-16"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-              />
-            </svg>
+        {album.cover_image_url ? (
+          <div 
+            className="w-full h-full bg-cover bg-center"
+            style={{ backgroundImage: `url(${album.cover_image_url})` }}
+          />
+        ) : (
+          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            {/* Album icon (💿) */}
+            <div className="text-6xl text-white opacity-80">💿</div>
           </div>
         )}
       </div>
       
       {/* Content */}
       <div className="p-4">
-        {/* Title and Save Button */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 
-            className="text-lg font-semibold text-white truncate flex-1 cursor-pointer hover:text-blue-400 transition-colors"
-            onClick={handleCardClick}
-          >
-            {album.name}
-          </h3>
-          <SaveButton
-            itemId={album.id}
-            itemType="album"
-            isSaved={isSaved}
-            onToggle={onSaveToggle}
-            size="sm"
-          />
-        </div>
+        {/* Title */}
+        <h3 
+          className="text-lg font-semibold text-white truncate mb-2 cursor-pointer hover:text-blue-400 transition-colors"
+          onClick={handleCardClick}
+        >
+          {album.name}
+        </h3>
         
         {/* Description */}
         {album.description && (
@@ -117,9 +113,15 @@ function CreatorAlbumCard({ album, isSaved, onSaveToggle }: CreatorAlbumCardProp
           <span>
             {new Date(album.created_at).toLocaleDateString()}
           </span>
-          <span className="px-2 py-1 bg-purple-600 text-white rounded-full">
-            💿 Album
-          </span>
+          {!isOwnProfile && (
+            <SaveButton
+              itemId={album.id}
+              itemType="album"
+              isSaved={isSaved}
+              onToggle={onSaveToggle}
+              size="sm"
+            />
+          )}
         </div>
       </div>
     </div>
@@ -148,11 +150,13 @@ function CreatorAlbumCard({ album, isSaved, onSaveToggle }: CreatorAlbumCardProp
 interface CreatorAlbumsSectionProps {
   userId: string;
   initialLimit?: number;
+  isOwnProfile?: boolean;
 }
 
 export default function CreatorAlbumsSection({ 
   userId,
-  initialLimit = 8
+  initialLimit = 8,
+  isOwnProfile = false
 }: CreatorAlbumsSectionProps) {
   const { user } = useAuth();
   const router = useRouter();
@@ -411,6 +415,7 @@ export default function CreatorAlbumsSection({
                 album={album}
                 isSaved={savedAlbumIds.has(album.id)}
                 onSaveToggle={() => handleSaveToggle(album.id)}
+                isOwnProfile={isOwnProfile}
               />
             ))}
           </div>
@@ -424,6 +429,7 @@ export default function CreatorAlbumsSection({
                     album={album}
                     isSaved={savedAlbumIds.has(album.id)}
                     onSaveToggle={() => handleSaveToggle(album.id)}
+                    isOwnProfile={isOwnProfile}
                   />
                 </div>
               ))}

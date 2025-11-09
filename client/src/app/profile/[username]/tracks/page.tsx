@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import MainLayout from '@/components/layout/MainLayout';
 import { CreatorTrackCard } from '@/components/profile/CreatorTrackCard';
+import { AddToPlaylistModal } from '@/components/library/AddToPlaylistModal';
 import { supabase } from '@/lib/supabase';
 import { getCreatorByUsername, getCreatorById } from '@/lib/profileService';
 import { saveTrack, unsaveTrack, getSavedStatus } from '@/lib/saveService';
@@ -49,6 +50,8 @@ export default function CreatorTracksPage() {
   const [hasMore, setHasMore] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [savedTracks, setSavedTracks] = useState<Set<string>>(new Set());
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
 
   // Fetch creator profile
   useEffect(() => {
@@ -274,9 +277,28 @@ export default function CreatorTracksPage() {
 
   // Handle add to playlist
   const handleAddToPlaylist = useCallback((trackId: string) => {
-    // TODO: Implement add to playlist functionality
-    console.log('Add to playlist:', trackId);
-    handleShowToast('Add to playlist functionality coming soon', 'info');
+    if (!user) {
+      handleShowToast('Please log in to add tracks to playlists', 'info');
+      return;
+    }
+    
+    setSelectedTrackId(trackId);
+    setShowAddToPlaylistModal(true);
+  }, [user, handleShowToast]);
+
+  // Handle playlist assignment success
+  const handlePlaylistSuccess = useCallback((playlistIds: string[], playlistNames: string[]) => {
+    if (playlistIds.length > 0) {
+      handleShowToast('Updated playlist membership', 'success');
+    } else {
+      handleShowToast('Removed from all playlists', 'success');
+    }
+    setShowAddToPlaylistModal(false);
+  }, [handleShowToast]);
+
+  // Handle modal error
+  const handleModalError = useCallback((message: string) => {
+    handleShowToast(message, 'error');
   }, [handleShowToast]);
 
   // Handle copy URL
@@ -558,6 +580,18 @@ export default function CreatorTracksPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Add to Playlist Modal */}
+          {user && selectedTrackId && (
+            <AddToPlaylistModal
+              isOpen={showAddToPlaylistModal}
+              onClose={() => setShowAddToPlaylistModal(false)}
+              trackId={selectedTrackId}
+              userId={user.id}
+              onSuccess={handlePlaylistSuccess}
+              onError={handleModalError}
+            />
           )}
         </div>
       </div>

@@ -157,7 +157,13 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Back Button */}
         <button
-          onClick={() => router.push('/library')}
+          onClick={() => {
+            if (isOwner) {
+              router.push('/library');
+            } else {
+              router.push(`/profile/${playlist.user_id}`);
+            }
+          }}
           className="mb-6 flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
         >
           <svg
@@ -173,7 +179,7 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             />
           </svg>
-          <span>Back to Library</span>
+          <span>{isOwner ? 'Back to Library' : 'Back to Creator'}</span>
         </button>
 
         {/* Playlist Header */}

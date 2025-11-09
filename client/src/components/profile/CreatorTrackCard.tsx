@@ -12,6 +12,7 @@ interface CreatorTrackCardProps {
   onPlay?: (trackId: string) => void;
   isSaved: boolean;
   onSaveToggle: (trackId: string) => Promise<void>;
+  isOwnProfile?: boolean;
 }
 
 /**
@@ -46,6 +47,7 @@ export const CreatorTrackCard = memo(function CreatorTrackCard({
   onPlay,
   isSaved,
   onSaveToggle,
+  isOwnProfile = false,
 }: CreatorTrackCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
@@ -166,19 +168,10 @@ export const CreatorTrackCard = memo(function CreatorTrackCard({
 
       {/* Track Info */}
       <div className="p-4">
-        {/* Title and Save Button */}
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <h3 className="text-lg font-semibold text-white truncate flex-1">
-            {track.title}
-          </h3>
-          <SaveButton
-            itemId={track.id}
-            itemType="track"
-            isSaved={isSaved}
-            onToggle={() => onSaveToggle(track.id)}
-            size="sm"
-          />
-        </div>
+        {/* Title */}
+        <h3 className="text-lg font-semibold text-white truncate mb-1">
+          {track.title}
+        </h3>
         
         {/* Author */}
         <p className="text-sm text-gray-400 truncate mb-2">
@@ -247,8 +240,20 @@ export const CreatorTrackCard = memo(function CreatorTrackCard({
             </div>
           </div>
 
-          {/* Actions Menu Button */}
-          <div className="relative">
+          {/* Save Button and Actions Menu */}
+          <div className="flex items-center gap-2">
+            {!isOwnProfile && (
+              <SaveButton
+                itemId={track.id}
+                itemType="track"
+                isSaved={isSaved}
+                onToggle={() => onSaveToggle(track.id)}
+                size="sm"
+              />
+            )}
+            
+            {/* Actions Menu Button */}
+            <div className="relative">
             <button
               onClick={handleActionsToggle}
               className="p-2 md:p-1 hover:bg-gray-700 rounded transition-colors opacity-0 group-hover:opacity-100 md:opacity-100"
@@ -269,25 +274,27 @@ export const CreatorTrackCard = memo(function CreatorTrackCard({
                 ref={actionsRef}
                 className="absolute right-0 bottom-full mb-2 w-48 bg-gray-900 rounded-lg shadow-xl border border-gray-700 py-1 z-10"
               >
-                <button
-                  onClick={() => handleAction(() => onSaveToggle(track.id))}
-                  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-800 transition-colors flex items-center gap-2"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill={isSaved ? 'currentColor' : 'none'}
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                {!isOwnProfile && (
+                  <button
+                    onClick={() => handleAction(() => onSaveToggle(track.id))}
+                    className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-800 transition-colors flex items-center gap-2"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-                    />
-                  </svg>
-                  <span>{isSaved ? 'Remove' : 'Save'}</span>
-                </button>
+                    <svg
+                      className="w-4 h-4"
+                      fill={isSaved ? 'currentColor' : 'none'}
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                      />
+                    </svg>
+                    <span>{isSaved ? 'Remove' : 'Save'}</span>
+                  </button>
+                )}
                 <button
                   onClick={() => handleAction(() => onAddToPlaylist(track.id))}
                   className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-800 transition-colors flex items-center gap-2"
@@ -335,6 +342,7 @@ export const CreatorTrackCard = memo(function CreatorTrackCard({
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

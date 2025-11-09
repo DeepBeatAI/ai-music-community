@@ -7,6 +7,7 @@ import { getPublicTracks } from '@/lib/profileService';
 import { getSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_TTL } from '@/utils/cache';
 import { CreatorTrackCard } from './CreatorTrackCard';
+import { AddToPlaylistModal } from '@/components/library/AddToPlaylistModal';
 import type { TrackWithMembership } from '@/types/library';
 import type { Track } from '@/types/track';
 import { useToast } from '@/contexts/ToastContext';
@@ -69,13 +70,15 @@ interface CreatorTracksSectionProps {
   username?: string;
   initialLimit?: number;
   showViewAll?: boolean;
+  isOwnProfile?: boolean;
 }
 
 export default function CreatorTracksSection({ 
   userId,
   username,
   initialLimit = 8,
-  showViewAll = false
+  showViewAll = false,
+  isOwnProfile = false
 }: CreatorTracksSectionProps) {
   const { user } = useAuth();
   const router = useRouter();
@@ -94,6 +97,8 @@ export default function CreatorTracksSection({
   });
   const [totalTracksCount, setTotalTracksCount] = useState(0);
   const [savedTrackIds, setSavedTrackIds] = useState<Set<string>>(new Set());
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
 
   const fetchTracks = useCallback(async () => {
     if (!userId) {
@@ -221,7 +226,6 @@ export default function CreatorTracksSection({
   };
 
   // Handle add to playlist
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleAddToPlaylist = (trackId: string) => {
     if (!user) {
       showToast('Please log in to add tracks to playlists', 'info');
@@ -229,8 +233,23 @@ export default function CreatorTracksSection({
       return;
     }
     
-    // TODO: Implement add to playlist modal
-    showToast('Add to playlist feature coming soon', 'info');
+    setSelectedTrackId(trackId);
+    setShowAddToPlaylistModal(true);
+  };
+
+  // Handle playlist assignment success
+  const handlePlaylistSuccess = (playlistIds: string[], playlistNames: string[]) => {
+    if (playlistIds.length > 0) {
+      showToast('Updated playlist membership', 'success');
+    } else {
+      showToast('Removed from all playlists', 'success');
+    }
+    setShowAddToPlaylistModal(false);
+  };
+
+  // Handle modal error
+  const handleModalError = (message: string) => {
+    showToast(message, 'error');
   };
 
   // Handle copy URL
@@ -420,10 +439,23 @@ export default function CreatorTracksSection({
                 onShare={handleShare}
                 isSaved={savedTrackIds.has(track.id)}
                 onSaveToggle={handleSaveToggle}
+                isOwnProfile={isOwnProfile}
               />
             ))}
           </div>
         </div>
+      )}
+
+      {/* Add to Playlist Modal */}
+      {user && selectedTrackId && (
+        <AddToPlaylistModal
+          isOpen={showAddToPlaylistModal}
+          onClose={() => setShowAddToPlaylistModal(false)}
+          trackId={selectedTrackId}
+          userId={user.id}
+          onSuccess={handlePlaylistSuccess}
+          onError={handleModalError}
+        />
       )}
     </div>
   );

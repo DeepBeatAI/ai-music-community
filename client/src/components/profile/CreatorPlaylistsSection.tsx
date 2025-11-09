@@ -50,37 +50,49 @@ interface CreatorPlaylistCardProps {
   playlist: Playlist;
   isSaved: boolean;
   onSaveToggle: () => Promise<void>;
+  isOwnProfile?: boolean;
 }
 
-function CreatorPlaylistCard({ playlist, isSaved, onSaveToggle }: CreatorPlaylistCardProps) {
+function CreatorPlaylistCard({ playlist, isSaved, onSaveToggle, isOwnProfile = false }: CreatorPlaylistCardProps) {
   const router = useRouter();
 
   const handleCardClick = () => {
     router.push(`/playlist/${playlist.id}`);
   };
 
+  // Generate gradient placeholder if no cover image (same as library PlaylistCard)
+  const gradientColors = [
+    'from-purple-400 to-pink-600',
+    'from-blue-400 to-cyan-600',
+    'from-green-400 to-teal-600',
+    'from-orange-400 to-red-600',
+    'from-indigo-400 to-purple-600',
+  ];
+  const gradientIndex = playlist.id.charCodeAt(0) % gradientColors.length;
+  const gradient = gradientColors[gradientIndex];
+
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden hover:border-gray-600 transition-colors cursor-pointer group">
-      {/* Cover Image */}
+      {/* Cover Image or Gradient Placeholder */}
       <div 
-        className="h-48 bg-gray-700 bg-cover bg-center relative"
-        style={playlist.cover_image_url ? { backgroundImage: `url(${playlist.cover_image_url})` } : {}}
+        className="h-48 relative"
         onClick={handleCardClick}
       >
-        {!playlist.cover_image_url && (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+        {playlist.cover_image_url ? (
+          <div 
+            className="w-full h-full bg-cover bg-center"
+            style={{ backgroundImage: `url(${playlist.cover_image_url})` }}
+          />
+        ) : (
+          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            {/* Playlist icon */}
             <svg
-              className="w-16 h-16"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+              className="w-16 h-16 text-white opacity-80"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+              xmlns="http://www.w3.org/2000/svg"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-              />
+              <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
             </svg>
           </div>
         )}
@@ -88,22 +100,13 @@ function CreatorPlaylistCard({ playlist, isSaved, onSaveToggle }: CreatorPlaylis
       
       {/* Content */}
       <div className="p-4">
-        {/* Title and Save Button */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 
-            className="text-lg font-semibold text-white truncate flex-1 cursor-pointer hover:text-blue-400 transition-colors"
-            onClick={handleCardClick}
-          >
-            {playlist.name}
-          </h3>
-          <SaveButton
-            itemId={playlist.id}
-            itemType="playlist"
-            isSaved={isSaved}
-            onToggle={onSaveToggle}
-            size="sm"
-          />
-        </div>
+        {/* Title */}
+        <h3 
+          className="text-lg font-semibold text-white truncate mb-2 cursor-pointer hover:text-blue-400 transition-colors"
+          onClick={handleCardClick}
+        >
+          {playlist.name}
+        </h3>
         
         {/* Description */}
         {playlist.description && (
@@ -117,9 +120,15 @@ function CreatorPlaylistCard({ playlist, isSaved, onSaveToggle }: CreatorPlaylis
           <span>
             {new Date(playlist.created_at).toLocaleDateString()}
           </span>
-          <span className="px-2 py-1 bg-pink-600 text-white rounded-full">
-            📝 Playlist
-          </span>
+          {!isOwnProfile && (
+            <SaveButton
+              itemId={playlist.id}
+              itemType="playlist"
+              isSaved={isSaved}
+              onToggle={onSaveToggle}
+              size="sm"
+            />
+          )}
         </div>
       </div>
     </div>
@@ -148,11 +157,13 @@ function CreatorPlaylistCard({ playlist, isSaved, onSaveToggle }: CreatorPlaylis
 interface CreatorPlaylistsSectionProps {
   userId: string;
   initialLimit?: number;
+  isOwnProfile?: boolean;
 }
 
 export default function CreatorPlaylistsSection({ 
   userId,
-  initialLimit = 8
+  initialLimit = 8,
+  isOwnProfile = false
 }: CreatorPlaylistsSectionProps) {
   const { user } = useAuth();
   const router = useRouter();
@@ -411,6 +422,7 @@ export default function CreatorPlaylistsSection({
                 playlist={playlist}
                 isSaved={savedPlaylistIds.has(playlist.id)}
                 onSaveToggle={() => handleSaveToggle(playlist.id)}
+                isOwnProfile={isOwnProfile}
               />
             ))}
           </div>
@@ -424,6 +436,7 @@ export default function CreatorPlaylistsSection({
                     playlist={playlist}
                     isSaved={savedPlaylistIds.has(playlist.id)}
                     onSaveToggle={() => handleSaveToggle(playlist.id)}
+                    isOwnProfile={isOwnProfile}
                   />
                 </div>
               ))}

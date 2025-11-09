@@ -122,22 +122,24 @@ export async function getCreatorById(userId: string): Promise<CreatorProfile | n
  * Fetches comprehensive statistics for a creator including:
  * - Creator score (calculated from plays and likes)
  * - Follower count
- * - Public track count
- * - Public album count
- * - Public playlist count
- * - Total plays across all public tracks
+ * - Track count (public only for others, all for own profile)
+ * - Album count (public only for others, all for own profile)
+ * - Playlist count (public only for others, all for own profile)
+ * - Total plays across all tracks
  * 
  * @param userId - The user ID of the creator
+ * @param isOwnProfile - Whether the viewer is viewing their own profile (shows all content including private)
  * @returns Promise<CreatorStats> - Creator statistics
  * 
  * @example
  * ```typescript
- * const stats = await getCreatorStats(userId);
+ * const stats = await getCreatorStats(userId, false); // Public stats only
+ * const ownStats = await getCreatorStats(userId, true); // All stats including private
  * console.log(`Creator score: ${stats.creator_score}`);
  * console.log(`Followers: ${stats.follower_count}`);
  * ```
  */
-export async function getCreatorStats(userId: string): Promise<CreatorStats> {
+export async function getCreatorStats(userId: string, isOwnProfile: boolean = false): Promise<CreatorStats> {
   try {
     // Use the same database function as discover page for consistency
     // This ensures creator scores match exactly across all pages
@@ -164,19 +166,25 @@ export async function getCreatorStats(userId: string): Promise<CreatorStats> {
     if (!creatorData) {
       // If not found in popular creators, they have no stats yet
       // Fetch counts separately for albums and playlists (not in database function)
+      const albumsQuery = supabase
+        .from('albums')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      
+      const playlistsQuery = supabase
+        .from('playlists')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      
+      // Only filter by is_public if not viewing own profile
+      if (!isOwnProfile) {
+        albumsQuery.eq('is_public', true);
+        playlistsQuery.eq('is_public', true);
+      }
+      
       const [albumsResult, playlistsResult, followersResult] = await Promise.all([
-        supabase
-          .from('albums')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId)
-          .eq('is_public', true),
-        
-        supabase
-          .from('playlists')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId)
-          .eq('is_public', true),
-        
+        albumsQuery,
+        playlistsQuery,
         supabase
           .from('user_follows')
           .select('id', { count: 'exact', head: true })
@@ -194,18 +202,25 @@ export async function getCreatorStats(userId: string): Promise<CreatorStats> {
     }
 
     // Fetch albums and playlists counts (not included in database function)
+    const albumsQuery = supabase
+      .from('albums')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    
+    const playlistsQuery = supabase
+      .from('playlists')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    
+    // Only filter by is_public if not viewing own profile
+    if (!isOwnProfile) {
+      albumsQuery.eq('is_public', true);
+      playlistsQuery.eq('is_public', true);
+    }
+    
     const [albumsResult, playlistsResult] = await Promise.all([
-      supabase
-        .from('albums')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('is_public', true),
-      
-      supabase
-        .from('playlists')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('is_public', true),
+      albumsQuery,
+      playlistsQuery,
     ]);
 
     // Get follower count separately (not in database function)

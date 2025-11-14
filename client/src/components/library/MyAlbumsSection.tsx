@@ -73,7 +73,13 @@ export default function MyAlbumsSection({
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('my-albums-collapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [totalAlbumsCount, setTotalAlbumsCount] = useState(0);
 
@@ -148,7 +154,9 @@ export default function MyAlbumsSection({
 
   // Toggle collapse state
   const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('my-albums-collapsed', String(newState));
   };
 
   // Determine if "View All" button should show

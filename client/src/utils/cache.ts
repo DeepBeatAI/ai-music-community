@@ -126,6 +126,9 @@ export const CACHE_KEYS = {
   TRACKS: (userId: string) => `tracks:${userId}`,
   ALBUMS: (userId: string) => `albums:${userId}`,
   PLAYLISTS: (userId: string) => `playlists:${userId}`,
+  SAVED_TRACKS: (userId: string) => `saved-tracks:${userId}`,
+  SAVED_ALBUMS: (userId: string) => `saved-albums:${userId}`,
+  SAVED_PLAYLISTS: (userId: string) => `saved-playlists:${userId}`,
 } as const;
 
 // Export TTL constants (in milliseconds)
@@ -134,4 +137,7 @@ export const CACHE_TTL = {
   TRACKS: 2 * 60 * 1000, // 2 minutes
   ALBUMS: 2 * 60 * 1000, // 2 minutes
   PLAYLISTS: 2 * 60 * 1000, // 2 minutes
+  SAVED_TRACKS: 2 * 60 * 1000, // 2 minutes
+  SAVED_ALBUMS: 2 * 60 * 1000, // 2 minutes
+  SAVED_PLAYLISTS: 2 * 60 * 1000, // 2 minutes
 } as const;

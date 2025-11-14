@@ -365,4 +365,163 @@ export function PlaylistsSectionErrorBoundary({
   );
 }
 
+/**
+ * Saved Tracks Section Error Boundary
+ * Handles errors in the saved tracks display
+ * Requirements: 6.4, 6.5, 6.6
+ */
+export function SavedTracksSectionErrorBoundary({ 
+  children, 
+  onRetry 
+}: { 
+  children: ReactNode; 
+  onRetry?: () => void;
+}) {
+  return (
+    <LibraryErrorBoundary
+      onRetry={onRetry}
+      fallback={
+        <div className="mb-12">
+          <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-8">
+            <div className="flex flex-col items-center text-center">
+              <div className="text-5xl mb-4">🔖</div>
+              <h3 className="text-red-400 font-medium text-lg mb-2">
+                Saved Tracks Section Error
+              </h3>
+              <p className="text-gray-300 text-sm mb-4">
+                Unable to load your saved tracks. Your bookmarks are safe, but we couldn&apos;t display them right now.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onRetry}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+      onError={(error, errorInfo) => {
+        console.error('Saved Tracks Section Error:', error, errorInfo);
+      }}
+    >
+      {children}
+    </LibraryErrorBoundary>
+  );
+}
+
+/**
+ * Saved Albums Section Error Boundary
+ * Handles errors in the saved albums display
+ * Requirements: 6.4, 6.5, 6.6
+ */
+export function SavedAlbumsSectionErrorBoundary({ 
+  children, 
+  onRetry 
+}: { 
+  children: ReactNode; 
+  onRetry?: () => void;
+}) {
+  return (
+    <LibraryErrorBoundary
+      onRetry={onRetry}
+      fallback={
+        <div className="mb-12">
+          <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-8">
+            <div className="flex flex-col items-center text-center">
+              <div className="text-5xl mb-4">🔖</div>
+              <h3 className="text-red-400 font-medium text-lg mb-2">
+                Saved Albums Section Error
+              </h3>
+              <p className="text-gray-300 text-sm mb-4">
+                Unable to load your saved albums. Your bookmarks are safe, but we couldn&apos;t display them right now.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onRetry}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+      onError={(error, errorInfo) => {
+        console.error('Saved Albums Section Error:', error, errorInfo);
+      }}
+    >
+      {children}
+    </LibraryErrorBoundary>
+  );
+}
+
+/**
+ * Saved Playlists Section Error Boundary
+ * Handles errors in the saved playlists display
+ * Requirements: 6.4, 6.5, 6.6
+ */
+export function SavedPlaylistsSectionErrorBoundary({ 
+  children, 
+  onRetry 
+}: { 
+  children: ReactNode; 
+  onRetry?: () => void;
+}) {
+  return (
+    <LibraryErrorBoundary
+      onRetry={onRetry}
+      fallback={
+        <div className="mb-12">
+          <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-8">
+            <div className="flex flex-col items-center text-center">
+              <div className="text-5xl mb-4">🔖</div>
+              <h3 className="text-red-400 font-medium text-lg mb-2">
+                Saved Playlists Section Error
+              </h3>
+              <p className="text-gray-300 text-sm mb-4">
+                Unable to load your saved playlists. Your bookmarks are safe, but we couldn&apos;t display them right now.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onRetry}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+      onError={(error, errorInfo) => {
+        console.error('Saved Playlists Section Error:', error, errorInfo);
+      }}
+    >
+      {children}
+    </LibraryErrorBoundary>
+  );
+}
+
 export default LibraryErrorBoundary;

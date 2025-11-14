@@ -73,7 +73,13 @@ export default function AllTracksSection({
   const [tracks, setTracks] = useState<TrackWithMembership[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('all-tracks-collapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
   const [totalTracksCount, setTotalTracksCount] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -180,7 +186,9 @@ export default function AllTracksSection({
 
   // Toggle collapse state
   const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('all-tracks-collapsed', String(newState));
   };
 
   // Determine if "View All" button should show

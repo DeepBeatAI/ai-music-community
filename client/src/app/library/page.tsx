@@ -16,7 +16,13 @@ import {
   AllTracksSectionErrorBoundary,
   AlbumsSectionErrorBoundary,
   PlaylistsSectionErrorBoundary,
+  SavedTracksSectionErrorBoundary,
+  SavedAlbumsSectionErrorBoundary,
+  SavedPlaylistsSectionErrorBoundary,
 } from '@/components/library/LibraryErrorBoundaries';
+import SavedTracksSection from '@/components/library/SavedTracksSection';
+import SavedAlbumsSection from '@/components/library/SavedAlbumsSection';
+import SavedPlaylistsSection from '@/components/library/SavedPlaylistsSection';
 
 /**
  * LibraryPage Component
@@ -45,8 +51,6 @@ export default function LibraryPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [isPlaylistsCollapsed, setIsPlaylistsCollapsed] = useState(false);
-  const [playlistCount, setPlaylistCount] = useState<number | null>(null);
   
   // Handle upload success - invalidate caches and refresh sections
   const handleUploadSuccess = useCallback(() => {
@@ -187,50 +191,55 @@ export default function LibraryPage() {
           {/* My Playlists Section */}
           <div className="mb-8">
             <PlaylistsSectionErrorBoundary>
-              <div className="mb-12">
-                {/* Section Header with Collapse Button */}
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setIsPlaylistsCollapsed(!isPlaylistsCollapsed)}
-                      className="p-3 md:p-2 hover:bg-gray-800 rounded-lg transition-colors"
-                      aria-label={isPlaylistsCollapsed ? 'Expand section' : 'Collapse section'}
-                    >
-                      <svg
-                        className={`w-5 h-5 text-gray-400 transition-transform ${
-                          isPlaylistsCollapsed ? 'rotate-0' : 'rotate-90'
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
-                    </button>
-                    
-                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                      <span>📝</span>
-                      <span>My Playlists{playlistCount !== null ? ` (${playlistCount})` : ''}</span>
-                    </h2>
-                  </div>
-                </div>
-
-                {/* Collapsible Content */}
-                {!isPlaylistsCollapsed && (
-                  <div className="transition-all duration-300">
-                    <PlaylistsList 
-                      hideMyPlaylistsHeader={true}
-                      onPlaylistCountChange={setPlaylistCount}
-                    />
-                  </div>
-                )}
-              </div>
+              <PlaylistsList 
+                hideMyPlaylistsHeader={false}
+              />
             </PlaylistsSectionErrorBoundary>
+          </div>
+
+          {/* Saved Content Divider */}
+          <div className="mb-8 mt-12">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-px bg-gray-700"></div>
+              <h2 className="text-xl font-semibold text-gray-400 flex items-center gap-2">
+                <span>🔖</span>
+                <span>Saved Content</span>
+              </h2>
+              <div className="flex-1 h-px bg-gray-700"></div>
+            </div>
+          </div>
+
+          {/* Saved Tracks Section */}
+          <div className="mb-8">
+            <SavedTracksSectionErrorBoundary>
+              <SavedTracksSection 
+                userId={user.id}
+                initialLimit={8}
+                key={`saved-tracks-${refreshKey}`}
+              />
+            </SavedTracksSectionErrorBoundary>
+          </div>
+
+          {/* Saved Albums Section */}
+          <div className="mb-8">
+            <SavedAlbumsSectionErrorBoundary>
+              <SavedAlbumsSection 
+                userId={user.id}
+                initialLimit={8}
+                key={`saved-albums-${refreshKey}`}
+              />
+            </SavedAlbumsSectionErrorBoundary>
+          </div>
+
+          {/* Saved Playlists Section */}
+          <div className="mb-8">
+            <SavedPlaylistsSectionErrorBoundary>
+              <SavedPlaylistsSection 
+                userId={user.id}
+                initialLimit={8}
+                key={`saved-playlists-${refreshKey}`}
+              />
+            </SavedPlaylistsSectionErrorBoundary>
           </div>
         </div>
       </div>

@@ -18,6 +18,8 @@ export interface AlbumWithTracks extends Album {
     track: PlaylistTrackDisplay; // Reuse display type from playlists
   }>;
   track_count: number;
+  creator_username?: string;
+  creator_display_name?: string;
 }
 
 export interface AlbumWithOwner extends Album {

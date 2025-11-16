@@ -474,17 +474,25 @@ export async function getSavedAlbums(
       return album.user_id;
     }))];
 
-    // Fetch creator profiles
-    const { data: profiles } = await supabase
+    console.log('Fetching profiles for creator IDs:', creatorIds);
+
+    // Fetch creator profiles - match on user_id field
+    const { data: profiles, error: profileError } = await supabase
       .from('user_profiles')
-      .select('id, username')
-      .in('id', creatorIds);
+      .select('user_id, username')
+      .in('user_id', creatorIds);
+
+    if (profileError) {
+      console.error('Error fetching creator profiles:', profileError);
+    }
+
+    console.log('Found profiles:', profiles);
 
     // Create a map of user_id to profile
-    const profileMap = new Map<string, { id: string; username: string }>();
+    const profileMap = new Map<string, { user_id: string; username: string }>();
     if (profiles) {
       profiles.forEach(profile => {
-        profileMap.set(profile.id, profile);
+        profileMap.set(profile.user_id, profile);
       });
     }
 
@@ -515,8 +523,8 @@ export async function getSavedAlbums(
       
       return {
         ...album,
-        creator_username: creator?.username || 'Unknown',
-        creator_id: creator?.id || '',
+        creator_username: creator?.username || 'Unknown Creator',
+        creator_id: album.user_id, // Use album.user_id directly
         saved_at: item.created_at,
         track_count: trackCountMap.get(album.id) || 0
       } as SavedAlbumWithCreator;

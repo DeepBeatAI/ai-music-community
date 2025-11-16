@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import { getPublicTracks } from '@/lib/profileService';
-import { getSavedStatus } from '@/lib/saveService';
+import { getBulkSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_TTL } from '@/utils/cache';
 import { CreatorTrackCard } from './CreatorTrackCard';
 import { AddToPlaylistModal } from '@/components/library/AddToPlaylistModal';
@@ -162,22 +162,21 @@ export default function CreatorTracksSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, initialLimit, user]);
 
-  // Fetch saved status for tracks
+  // Fetch saved status for tracks using bulk query
   const fetchSavedStatus = async (tracksToCheck: TrackWithMembership[]) => {
     if (!user) return;
 
     try {
-      const savedIds = new Set<string>();
+      const trackIds = tracksToCheck.map(track => track.id);
+      const result = await getBulkSavedStatus(user.id, trackIds, 'track');
       
-      // Check saved status for each track
-      for (const track of tracksToCheck) {
-        const isSaved = await getSavedStatus(user.id, track.id, 'track');
-        if (isSaved) {
-          savedIds.add(track.id);
-        }
+      if (result.data) {
+        const savedIds = new Set<string>();
+        Object.entries(result.data).forEach(([id, isSaved]) => {
+          if (isSaved) savedIds.add(id);
+        });
+        setSavedTrackIds(savedIds);
       }
-      
-      setSavedTrackIds(savedIds);
     } catch (err) {
       console.error('Error fetching saved status:', err);
     }

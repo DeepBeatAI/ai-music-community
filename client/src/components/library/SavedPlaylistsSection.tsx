@@ -7,6 +7,7 @@ import { getSavedPlaylists } from '@/lib/library';
 import { cache, CACHE_KEYS, CACHE_TTL } from '@/utils/cache';
 import { unsavePlaylist } from '@/lib/saveService';
 import SaveButton from '@/components/profile/SaveButton';
+import CreatorLink from '@/components/common/CreatorLink';
 import type { SavedPlaylistWithCreator } from '@/types/library';
 
 /**
@@ -17,25 +18,25 @@ import type { SavedPlaylistWithCreator } from '@/types/library';
 function PlaylistCardSkeleton() {
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden animate-pulse">
+      {/* Cover Image Skeleton */}
+      <div className="h-48 bg-gray-700"></div>
+      
       {/* Content Skeleton */}
-      <div className="p-6">
+      <div className="p-4">
         {/* Title */}
-        <div className="h-6 bg-gray-700 rounded mb-3"></div>
+        <div className="h-6 bg-gray-700 rounded mb-2"></div>
         
         {/* Creator */}
-        <div className="h-4 bg-gray-700 rounded mb-3 w-3/4"></div>
+        <div className="h-4 bg-gray-700 rounded mb-2 w-2/3"></div>
+        
+        {/* Description */}
+        <div className="h-4 bg-gray-700 rounded mb-3 w-full"></div>
         
         {/* Metadata */}
-        <div className="flex justify-between mb-4">
+        <div className="flex justify-between">
           <div className="h-3 w-24 bg-gray-700 rounded"></div>
-          <div className="h-3 w-16 bg-gray-700 rounded"></div>
+          <div className="h-8 w-20 bg-gray-700 rounded"></div>
         </div>
-        
-        {/* Privacy Badge */}
-        <div className="h-6 w-20 bg-gray-700 rounded mb-4"></div>
-        
-        {/* Button */}
-        <div className="h-10 bg-gray-700 rounded"></div>
       </div>
     </div>
   );
@@ -115,6 +116,16 @@ function SavedPlaylistCard({ playlist, onRemove }: SavedPlaylistCardProps) {
           {playlist.name}
         </h3>
         
+        {/* Creator Name */}
+        <div className="text-sm text-gray-400 mb-2">
+          by <CreatorLink 
+            userId={playlist.creator_id}
+            username={playlist.creator_username}
+            displayName={playlist.creator_username}
+            className="text-sm"
+          />
+        </div>
+        
         {/* Description */}
         {playlist.description && (
           <p className="text-sm text-gray-400 line-clamp-2 mb-3">
@@ -177,6 +188,8 @@ export default function SavedPlaylistsSection({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [totalPlaylistsCount, setTotalPlaylistsCount] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [displayLimit, setDisplayLimit] = useState(initialLimit);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Use provided userId or fall back to authenticated user
   const effectiveUserId = userId || user?.id;
@@ -193,7 +206,7 @@ export default function SavedPlaylistsSection({
     const cachedData = cache.get<{ playlists: SavedPlaylistWithCreator[]; totalCount: number }>(cacheKey);
 
     if (cachedData) {
-      setPlaylists(cachedData.playlists.slice(0, initialLimit));
+      setPlaylists(cachedData.playlists);
       setTotalPlaylistsCount(cachedData.totalCount);
       setLoading(false);
       return;
@@ -207,9 +220,8 @@ export default function SavedPlaylistsSection({
       const allPlaylists = await getSavedPlaylists(effectiveUserId);
       setTotalPlaylistsCount(allPlaylists.length);
       
-      // Limit playlists for display
-      const limitedPlaylists = allPlaylists.slice(0, initialLimit);
-      setPlaylists(limitedPlaylists);
+      // Store all playlists
+      setPlaylists(allPlaylists);
       
       // Cache the data for 2 minutes
       cache.set(cacheKey, { playlists: allPlaylists, totalCount: allPlaylists.length }, CACHE_TTL.SAVED_PLAYLISTS);
@@ -219,7 +231,7 @@ export default function SavedPlaylistsSection({
     } finally {
       setLoading(false);
     }
-  }, [effectiveUserId, initialLimit]);
+  }, [effectiveUserId]);
 
   useEffect(() => {
     fetchPlaylists();
@@ -308,6 +320,23 @@ export default function SavedPlaylistsSection({
     setIsCollapsed(newState);
     localStorage.setItem('saved-playlists-collapsed', String(newState));
   };
+
+  // Handle Load More
+  const handleLoadMore = () => {
+    setIsLoadingMore(true);
+    // Simulate brief loading for better UX
+    setTimeout(() => {
+      setDisplayLimit(prev => prev + 8);
+      setIsLoadingMore(false);
+    }, 300);
+  };
+
+  // Calculate if there are more playlists to load
+  const hasMore = displayLimit < totalPlaylistsCount;
+  const showLoadMore = totalPlaylistsCount >= 9 && hasMore;
+
+  // Get playlists to display based on displayLimit
+  const displayedPlaylists = playlists.slice(0, displayLimit);
 
   // Loading state - show skeleton grid
   if (loading) {
@@ -423,7 +452,7 @@ export default function SavedPlaylistsSection({
         <div className="transition-all duration-300">
           {/* Playlists Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {playlists.map(playlist => (
+            {displayedPlaylists.map(playlist => (
               <SavedPlaylistCard
                 key={playlist.id}
                 playlist={playlist}
@@ -431,6 +460,26 @@ export default function SavedPlaylistsSection({
               />
             ))}
           </div>
+
+          {/* Load More Button */}
+          {showLoadMore && (
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingMore ? (
+                  <span className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Loading...
+                  </span>
+                ) : (
+                  'Load More'
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

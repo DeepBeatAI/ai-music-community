@@ -394,6 +394,8 @@ export default function SavedTracksSection({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [displayLimit, setDisplayLimit] = useState(initialLimit);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Use provided userId or fall back to authenticated user
   const effectiveUserId = userId || user?.id;
@@ -410,7 +412,7 @@ export default function SavedTracksSection({
     const cachedData = cache.get<{ tracks: SavedTrackWithUploader[]; totalCount: number }>(cacheKey);
 
     if (cachedData) {
-      setTracks(cachedData.tracks.slice(0, initialLimit));
+      setTracks(cachedData.tracks);
       setTotalTracksCount(cachedData.totalCount);
       setLoading(false);
       return;
@@ -424,9 +426,8 @@ export default function SavedTracksSection({
       const allTracks = await getSavedTracks(effectiveUserId);
       setTotalTracksCount(allTracks.length);
       
-      // Limit tracks for display
-      const limitedTracks = allTracks.slice(0, initialLimit);
-      setTracks(limitedTracks);
+      // Store all tracks (we'll slice based on displayLimit for rendering)
+      setTracks(allTracks);
       
       // Cache the data for 2 minutes
       cache.set(cacheKey, { tracks: allTracks, totalCount: allTracks.length }, CACHE_TTL.SAVED_TRACKS);
@@ -591,6 +592,17 @@ export default function SavedTracksSection({
     localStorage.setItem('saved-tracks-collapsed', String(newState));
   };
 
+  // Handle Load More
+  const handleLoadMore = () => {
+    setIsLoadingMore(true);
+    setDisplayLimit(prev => prev + 8);
+    setIsLoadingMore(false);
+  };
+
+  // Calculate if there are more tracks to load
+  const hasMore = displayLimit < totalTracksCount;
+  const showLoadMore = totalTracksCount >= 9 && hasMore;
+
   // Loading state - show skeleton grid
   if (loading) {
     return (
@@ -705,7 +717,7 @@ export default function SavedTracksSection({
         <div className="transition-all duration-300">
           {/* Tracks Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {tracks.map(track => (
+            {tracks.slice(0, displayLimit).map(track => (
               <SavedTrackCard
                 key={track.id}
                 track={track}
@@ -717,6 +729,26 @@ export default function SavedTracksSection({
               />
             ))}
           </div>
+
+          {/* Load More Button */}
+          {showLoadMore && (
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingMore ? (
+                  <span className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Loading...
+                  </span>
+                ) : (
+                  'Load More'
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

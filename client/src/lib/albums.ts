@@ -99,6 +99,18 @@ export async function getAlbumWithTracks(albumId: string): Promise<AlbumWithTrac
       return null;
     }
 
+    // Fetch creator information separately
+    const { data: creatorData, error: creatorError } = await supabase
+      .from('user_profiles')
+      .select('username, user_id')
+      .eq('user_id', data.user_id)
+      .single();
+
+    if (creatorError) {
+      console.error('Error fetching creator profile:', creatorError);
+      console.log('Looking for user_id:', data.user_id);
+    }
+
     // Sort tracks by position
     const sortedTracks = (data.tracks || []).sort(
       (a: { position: number }, b: { position: number }) => a.position - b.position
@@ -130,6 +142,8 @@ export async function getAlbumWithTracks(albumId: string): Promise<AlbumWithTrac
       ...data,
       tracks: tracksWithAuthor,
       track_count,
+      creator_username: creatorData?.username || 'Unknown',
+      creator_display_name: creatorData?.username || 'Unknown',
     } as AlbumWithTracks;
   } catch (error) {
     console.error('Unexpected error fetching album with tracks:', error);

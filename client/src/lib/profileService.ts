@@ -254,15 +254,16 @@ export async function getCreatorStats(userId: string, isOwnProfile: boolean = fa
 }
 
 /**
- * Get public tracks for a creator
+ * Get public tracks for a creator with like counts
  * 
  * Fetches public tracks for a creator with pagination support.
  * Only returns tracks where is_public = true.
+ * Includes like counts by joining with posts and post_likes tables.
  * 
  * @param userId - The user ID of the creator
  * @param limit - Maximum number of tracks to return
  * @param offset - Number of tracks to skip (for pagination)
- * @returns Promise<Track[]> - Array of public tracks
+ * @returns Promise<TrackWithLikes[]> - Array of public tracks with like counts
  * 
  * @example
  * ```typescript
@@ -277,9 +278,10 @@ export async function getPublicTracks(
   userId: string,
   limit: number = 12,
   offset: number = 0
-): Promise<Track[]> {
+): Promise<(Track & { like_count: number })[]> {
   try {
-    const { data, error } = await supabase
+    // First, get the tracks
+    const { data: tracks, error: tracksError } = await supabase
       .from('tracks')
       .select('*')
       .eq('user_id', userId)
@@ -287,11 +289,67 @@ export async function getPublicTracks(
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) {
-      throw error;
+    if (tracksError) {
+      throw tracksError;
     }
 
-    return data || [];
+    if (!tracks || tracks.length === 0) {
+      return [];
+    }
+
+    // Get track IDs
+    const trackIds = tracks.map(track => track.id);
+
+    // Get like counts for these tracks by joining posts and post_likes
+    // Use LEFT JOIN (posts) instead of INNER JOIN (posts!inner) to include tracks without posts
+    const { data: likeCounts, error: likesError } = await supabase
+      .from('tracks')
+      .select(`
+        id,
+        posts(
+          id,
+          post_likes(count)
+        )
+      `)
+      .in('id', trackIds);
+
+    if (likesError) {
+      console.error('Error fetching like counts:', likesError);
+      // Continue without like counts rather than failing completely
+    }
+
+    // Create a map of track_id -> like_count
+    const likeCountMap = new Map<string, number>();
+    
+    if (likeCounts) {
+      interface PostWithLikes {
+        post_likes: Array<{ count: number }>;
+      }
+      
+      interface TrackWithPosts {
+        id: string;
+        posts: PostWithLikes[] | null;
+      }
+      
+      (likeCounts as TrackWithPosts[]).forEach((item) => {
+        // Sum up likes from all posts for this track
+        // If posts is null or empty, totalLikes will be 0
+        const totalLikes = item.posts?.reduce((sum: number, post: PostWithLikes) => {
+          const postLikes = post.post_likes?.[0]?.count || 0;
+          return sum + postLikes;
+        }, 0) || 0;
+        
+        likeCountMap.set(item.id, totalLikes);
+      });
+    }
+
+    // Merge tracks with like counts
+    const tracksWithLikes = tracks.map(track => ({
+      ...track,
+      like_count: likeCountMap.get(track.id) || 0,
+    }));
+
+    return tracksWithLikes;
   } catch (error) {
     console.error('Error fetching public tracks:', error);
     return [];

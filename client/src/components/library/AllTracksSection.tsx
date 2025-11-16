@@ -201,7 +201,7 @@ export default function AllTracksSection({
         {/* Section Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">
-            📀 All Tracks
+            📀 My Tracks
           </h2>
         </div>
 
@@ -222,7 +222,7 @@ export default function AllTracksSection({
         {/* Section Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">
-            📀 All Tracks
+            📀 My Tracks
           </h2>
         </div>
 
@@ -250,7 +250,7 @@ export default function AllTracksSection({
         {/* Section Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">
-            📀 All Tracks (0)
+            📀 My Tracks (0)
           </h2>
         </div>
 
@@ -310,7 +310,7 @@ export default function AllTracksSection({
           </button>
           
           <h2 className="text-2xl font-bold text-white">
-            📀 All Tracks ({totalTracksCount})
+            📀 My Tracks ({totalTracksCount})
           </h2>
         </div>
 

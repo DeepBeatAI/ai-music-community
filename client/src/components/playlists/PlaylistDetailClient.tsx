@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import MainLayout from '@/components/layout/MainLayout';
 import SaveButton from '@/components/profile/SaveButton';
+import CreatorLink from '@/components/common/CreatorLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { removeTrackFromPlaylist, reorderPlaylistTracks, getPlaylistWithTracks } from '@/lib/playlists';
 import { getSavedStatus } from '@/lib/saveService';
@@ -15,10 +16,16 @@ import type { PlaylistWithTracks } from '@/types/playlist';
 interface PlaylistDetailClientProps {
   playlist: PlaylistWithTracks;
   isOwner: boolean;
+  creatorUserId?: string;
   creatorUsername?: string;
 }
 
-export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creatorUsername }: PlaylistDetailClientProps) {
+export function PlaylistDetailClient({ 
+  playlist: initialPlaylist, 
+  isOwner, 
+  creatorUserId,
+  creatorUsername
+}: PlaylistDetailClientProps) {
   const router = useRouter();
   const { user } = useAuth();
   const [playlist, setPlaylist] = useState(initialPlaylist);
@@ -176,13 +183,7 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Back Button */}
         <button
-          onClick={() => {
-            if (isOwner) {
-              router.push('/library');
-            } else {
-              router.push(`/profile/${playlist.user_id}`);
-            }
-          }}
+          onClick={() => router.back()}
           className="mb-6 flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
         >
           <svg
@@ -198,7 +199,7 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             />
           </svg>
-          <span>{isOwner ? 'Back to Library' : 'Back to Creator'}</span>
+          <span>Back</span>
         </button>
 
         {/* Playlist Header */}
@@ -274,11 +275,17 @@ export function PlaylistDetailClient({ playlist: initialPlaylist, isOwner, creat
               )}
             </div>
 
-            {/* Creator Name (for non-owners) */}
-            {!isOwner && creatorUsername && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                Created by <span className="font-medium text-gray-700 dark:text-gray-300">{creatorUsername}</span>
-              </p>
+            {/* Creator Name - Only show for other users' playlists */}
+            {creatorUsername && creatorUserId && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                by{' '}
+                <CreatorLink
+                  userId={creatorUserId}
+                  username={creatorUsername}
+                  displayName={creatorUsername}
+                  className="text-base"
+                />
+              </div>
             )}
 
             {playlist.description && (

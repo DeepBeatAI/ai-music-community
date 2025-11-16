@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/contexts/ToastContext';
 import { getPublicPlaylists } from '@/lib/profileService';
-import { getSavedStatus } from '@/lib/saveService';
+import { getBulkSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_TTL } from '@/utils/cache';
 import SaveButton from './SaveButton';
 import type { Playlist } from '@/types/playlist';
@@ -234,22 +234,21 @@ export default function CreatorPlaylistsSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, initialLimit, user]);
 
-  // Fetch saved status for playlists
+  // Fetch saved status for playlists using bulk query
   const fetchSavedStatus = async (playlistsToCheck: Playlist[]) => {
     if (!user) return;
 
     try {
-      const savedIds = new Set<string>();
+      const playlistIds = playlistsToCheck.map(playlist => playlist.id);
+      const result = await getBulkSavedStatus(user.id, playlistIds, 'playlist');
       
-      // Check saved status for each playlist
-      for (const playlist of playlistsToCheck) {
-        const isSaved = await getSavedStatus(user.id, playlist.id, 'playlist');
-        if (isSaved) {
-          savedIds.add(playlist.id);
-        }
+      if (result.data) {
+        const savedIds = new Set<string>();
+        Object.entries(result.data).forEach(([id, isSaved]) => {
+          if (isSaved) savedIds.add(id);
+        });
+        setSavedPlaylistIds(savedIds);
       }
-      
-      setSavedPlaylistIds(savedIds);
     } catch (err) {
       console.error('Error fetching saved status:', err);
     }

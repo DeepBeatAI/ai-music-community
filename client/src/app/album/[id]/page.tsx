@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import MainLayout from '@/components/layout/MainLayout';
 import SaveButton from '@/components/profile/SaveButton';
+import CreatorLink from '@/components/common/CreatorLink';
 import { getAlbumWithTracks, deleteAlbum, reorderAlbumTracks, updateAlbum } from '@/lib/albums';
 import { getSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_KEYS } from '@/utils/cache';
@@ -356,9 +357,9 @@ export default function AlbumDetailPage() {
     <MainLayout>
       <div className="min-h-screen bg-gray-900 text-white p-4">
         <div className="max-w-6xl mx-auto">
-          {/* Back to Creator Button */}
+          {/* Back Button */}
           <button
-            onClick={() => router.push(`/profile/${album.user_id}`)}
+            onClick={() => router.back()}
             className="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
           >
             <svg
@@ -374,7 +375,7 @@ export default function AlbumDetailPage() {
                 d="M15 19l-7-7 7-7"
               />
             </svg>
-            <span>Back to Creator</span>
+            <span>Back</span>
           </button>
 
           {/* Album Header */}
@@ -403,6 +404,18 @@ export default function AlbumDetailPage() {
                 <div className="flex items-start justify-between mb-4 gap-4">
                   <div className="flex-1 min-w-0">
                     <h1 className="text-3xl font-bold mb-2 break-words">{album.name}</h1>
+                    
+                    {/* Creator Name */}
+                    <div className="mb-3">
+                      <span className="text-gray-400">by </span>
+                      <CreatorLink
+                        userId={album.user_id}
+                        username={album.creator_username}
+                        displayName={album.creator_display_name || album.creator_username}
+                        className="text-lg"
+                      />
+                    </div>
+                    
                     {album.description && (
                       <p className="text-gray-400 mb-4 whitespace-pre-wrap break-words">{album.description}</p>
                     )}

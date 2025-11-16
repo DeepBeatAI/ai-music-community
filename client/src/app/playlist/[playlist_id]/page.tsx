@@ -118,17 +118,20 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
   console.log('Fetched playlist tracks:', tracks.length, 'tracks');
 
   // Fetch playlist creator's username
-  let creatorUsername = 'Unknown';
-  if (!isOwner) {
-    const { data: creatorProfile } = await supabase
-      .from('user_profiles')
-      .select('username')
-      .eq('user_id', playlist.user_id)
-      .single();
-    
-    if (creatorProfile) {
-      creatorUsername = creatorProfile.username;
-    }
+  let creatorUsername: string | undefined;
+  const { data: creatorProfile, error: creatorError } = await supabase
+    .from('user_profiles')
+    .select('username')
+    .eq('user_id', playlist.user_id)
+    .single();
+  
+  if (creatorError) {
+    console.error('Error fetching creator profile:', creatorError);
+    console.log('Looking for user_id:', playlist.user_id);
+  }
+  
+  if (creatorProfile) {
+    creatorUsername = creatorProfile.username;
   }
 
   const playlistWithTracks: PlaylistWithTracks = {
@@ -137,5 +140,12 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
     track_count: tracks.length,
   };
 
-  return <PlaylistDetailClient playlist={playlistWithTracks} isOwner={isOwner} creatorUsername={!isOwner ? creatorUsername : undefined} />;
+  return (
+    <PlaylistDetailClient 
+      playlist={playlistWithTracks} 
+      isOwner={isOwner} 
+      creatorUserId={playlist.user_id}
+      creatorUsername={creatorUsername}
+    />
+  );
 }

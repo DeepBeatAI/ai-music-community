@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/contexts/ToastContext';
 import { getPublicAlbums } from '@/lib/profileService';
-import { getSavedStatus } from '@/lib/saveService';
+import { getBulkSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_TTL } from '@/utils/cache';
 import SaveButton from './SaveButton';
 import type { Album } from '@/types/album';
@@ -227,22 +227,21 @@ export default function CreatorAlbumsSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, initialLimit, user]);
 
-  // Fetch saved status for albums
+  // Fetch saved status for albums using bulk query
   const fetchSavedStatus = async (albumsToCheck: Album[]) => {
     if (!user) return;
 
     try {
-      const savedIds = new Set<string>();
+      const albumIds = albumsToCheck.map(album => album.id);
+      const result = await getBulkSavedStatus(user.id, albumIds, 'album');
       
-      // Check saved status for each album
-      for (const album of albumsToCheck) {
-        const isSaved = await getSavedStatus(user.id, album.id, 'album');
-        if (isSaved) {
-          savedIds.add(album.id);
-        }
+      if (result.data) {
+        const savedIds = new Set<string>();
+        Object.entries(result.data).forEach(([id, isSaved]) => {
+          if (isSaved) savedIds.add(id);
+        });
+        setSavedAlbumIds(savedIds);
       }
-      
-      setSavedAlbumIds(savedIds);
     } catch (err) {
       console.error('Error fetching saved status:', err);
     }

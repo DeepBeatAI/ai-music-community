@@ -361,11 +361,12 @@ export async function getPublicTracks(
  * 
  * Fetches public albums for a creator with pagination support.
  * Only returns albums where is_public = true.
+ * Includes track count for each album.
  * 
  * @param userId - The user ID of the creator
  * @param limit - Maximum number of albums to return
  * @param offset - Number of albums to skip (for pagination)
- * @returns Promise<Album[]> - Array of public albums
+ * @returns Promise<(Album & { track_count: number })[]> - Array of public albums with track counts
  * 
  * @example
  * ```typescript
@@ -377,11 +378,16 @@ export async function getPublicAlbums(
   userId: string,
   limit: number = 8,
   offset: number = 0
-): Promise<Album[]> {
+): Promise<(Album & { track_count: number })[]> {
   try {
     const { data, error } = await supabase
       .from('albums')
-      .select('*')
+      .select(`
+        *,
+        album_tracks (
+          id
+        )
+      `)
       .eq('user_id', userId)
       .eq('is_public', true)
       .order('created_at', { ascending: false })
@@ -391,7 +397,20 @@ export async function getPublicAlbums(
       throw error;
     }
 
-    return data || [];
+    if (!data) {
+      return [];
+    }
+
+    // Transform data to include track count
+    const albumsWithTrackCount = data.map(album => {
+      const albumTracks = album.album_tracks as Array<{ id: string }> | undefined;
+      return {
+        ...album,
+        track_count: albumTracks?.length || 0
+      };
+    }) as (Album & { track_count: number })[];
+
+    return albumsWithTrackCount;
   } catch (error) {
     console.error('Error fetching public albums:', error);
     return [];
@@ -403,11 +422,12 @@ export async function getPublicAlbums(
  * 
  * Fetches public playlists for a creator with pagination support.
  * Only returns playlists where is_public = true.
+ * Includes track count for each playlist.
  * 
  * @param userId - The user ID of the creator
  * @param limit - Maximum number of playlists to return
  * @param offset - Number of playlists to skip (for pagination)
- * @returns Promise<Playlist[]> - Array of public playlists
+ * @returns Promise<(Playlist & { track_count: number })[]> - Array of public playlists with track counts
  * 
  * @example
  * ```typescript
@@ -419,11 +439,16 @@ export async function getPublicPlaylists(
   userId: string,
   limit: number = 8,
   offset: number = 0
-): Promise<Playlist[]> {
+): Promise<(Playlist & { track_count: number })[]> {
   try {
     const { data, error } = await supabase
       .from('playlists')
-      .select('*')
+      .select(`
+        *,
+        playlist_tracks (
+          id
+        )
+      `)
       .eq('user_id', userId)
       .eq('is_public', true)
       .order('created_at', { ascending: false })
@@ -433,7 +458,20 @@ export async function getPublicPlaylists(
       throw error;
     }
 
-    return data || [];
+    if (!data) {
+      return [];
+    }
+
+    // Transform data to include track count
+    const playlistsWithTrackCount = data.map(playlist => {
+      const playlistTracks = playlist.playlist_tracks as Array<{ id: string }> | undefined;
+      return {
+        ...playlist,
+        track_count: playlistTracks?.length || 0
+      };
+    }) as (Playlist & { track_count: number })[];
+
+    return playlistsWithTrackCount;
   } catch (error) {
     console.error('Error fetching public playlists:', error);
     return [];

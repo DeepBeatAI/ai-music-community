@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/contexts/ToastContext';
@@ -158,12 +159,14 @@ interface CreatorPlaylistsSectionProps {
   userId: string;
   initialLimit?: number;
   isOwnProfile?: boolean;
+  username?: string;
 }
 
 export default function CreatorPlaylistsSection({ 
   userId,
   initialLimit = 8,
-  isOwnProfile = false
+  isOwnProfile = false,
+  username
 }: CreatorPlaylistsSectionProps) {
   const { user } = useAuth();
   const router = useRouter();
@@ -377,6 +380,9 @@ export default function CreatorPlaylistsSection({
     );
   }
 
+  // Determine if "View All" button should show
+  const showViewAll = totalPlaylistsCount > initialLimit && username;
+
   return (
     <div className="mb-12">
       {/* Section Header */}
@@ -408,6 +414,28 @@ export default function CreatorPlaylistsSection({
             📝 Public Playlists ({totalPlaylistsCount})
           </h2>
         </div>
+
+        {!isCollapsed && showViewAll && (
+          <Link
+            href={`/profile/${username}/playlists`}
+            className="text-blue-400 hover:text-blue-300 font-medium transition-colors flex items-center gap-1"
+          >
+            <span>View All</span>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </Link>
+        )}
       </div>
 
       {/* Collapsible Content */}

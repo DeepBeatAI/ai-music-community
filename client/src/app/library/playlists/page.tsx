@@ -2,32 +2,30 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlbumCard } from '@/components/library/AlbumCard';
+import { PlaylistCard } from '@/components/playlists/PlaylistCard';
 import { supabase } from '@/lib/supabase';
-import type { Album } from '@/types/album';
+import type { Playlist } from '@/types/playlist';
 
-type SortOption = 'recent' | 'oldest' | 'most_played';
+type SortOption = 'recent' | 'oldest' | 'most_tracks';
 
 const ITEMS_PER_PAGE = 20;
 
 /**
- * All Albums Page
+ * All Playlists Page
  * 
- * Displays all user albums with pagination and sorting options.
- * Supports sorting by recent, oldest, and most played.
+ * Displays all user playlists with pagination and sorting options.
+ * Supports sorting by recent, oldest, and most tracks.
  * 
  * Features:
  * - Pagination with 20 items per page
- * - Sorting options (recent, oldest, most played)
- * - Reuses AlbumCard component
+ * - Sorting options (recent, oldest, most tracks)
+ * - Reuses PlaylistCard component
  * - Loading states for pagination
  * - Authentication check
- * 
- * Requirements: 3.3, 4.4, 6.7, 10.7
  */
-export default function AllAlbumsPage() {
+export default function AllPlaylistsPage() {
   const router = useRouter();
-  const [albums, setAlbums] = useState<Album[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +40,7 @@ export default function AllAlbumsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        router.push('/login?redirect=/library/albums');
+        router.push('/login?redirect=/library/playlists');
         return;
       }
       
@@ -52,55 +50,55 @@ export default function AllAlbumsPage() {
     checkAuth();
   }, [router]);
 
-  // Fetch albums
+  // Fetch playlists
   useEffect(() => {
     if (!userId) return;
 
-    const fetchAlbums = async () => {
+    const fetchPlaylists = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Fetch all albums with track counts
+        // Fetch all playlists with track counts
         const { data, error: fetchError } = await supabase
-          .from('albums')
+          .from('playlists')
           .select(`
             *,
-            album_tracks (
+            playlist_tracks (
               id
             )
           `)
           .eq('user_id', userId);
 
         if (fetchError) {
-          console.error('Error fetching albums:', fetchError);
-          setError('Failed to load albums');
+          console.error('Error fetching playlists:', fetchError);
+          setError('Failed to load playlists');
           return;
         }
 
         if (!data) {
-          setAlbums([]);
+          setPlaylists([]);
           setHasMore(false);
           return;
         }
 
         // Transform data to include track count
-        const transformedAlbums = data.map(album => {
-          const albumTracks = album.album_tracks as Array<{ id: string }> | undefined;
+        const transformedPlaylists = data.map(playlist => {
+          const playlistTracks = playlist.playlist_tracks as Array<{ id: string }> | undefined;
           return {
-            ...album,
-            track_count: albumTracks?.length || 0
+            ...playlist,
+            track_count: playlistTracks?.length || 0
           };
-        }) as (Album & { track_count: number })[];
+        }) as (Playlist & { track_count: number })[];
 
         // Apply sorting
-        const sortedAlbums = [...transformedAlbums].sort((a, b) => {
+        const sortedPlaylists = [...transformedPlaylists].sort((a, b) => {
           switch (sortBy) {
             case 'recent':
               return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
             case 'oldest':
               return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-            case 'most_played':
+            case 'most_tracks':
               // Sort by track count
               return b.track_count - a.track_count;
             default:
@@ -111,19 +109,19 @@ export default function AllAlbumsPage() {
         // Apply pagination
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE;
-        const paginatedAlbums = sortedAlbums.slice(from, to);
+        const paginatedPlaylists = sortedPlaylists.slice(from, to);
 
-        // Check if there are more albums
-        setHasMore(to < sortedAlbums.length);
+        // Check if there are more playlists
+        setHasMore(to < sortedPlaylists.length);
 
-        // Append or replace albums based on page
+        // Append or replace playlists based on page
         if (currentPage === 1) {
-          setAlbums(paginatedAlbums);
+          setPlaylists(paginatedPlaylists);
         } else {
-          setAlbums(prev => [...prev, ...paginatedAlbums]);
+          setPlaylists(prev => [...prev, ...paginatedPlaylists]);
         }
       } catch (err) {
-        console.error('Unexpected error fetching albums:', err);
+        console.error('Unexpected error fetching playlists:', err);
         setError('An unexpected error occurred');
       } finally {
         setLoading(false);
@@ -131,14 +129,14 @@ export default function AllAlbumsPage() {
       }
     };
 
-    fetchAlbums();
+    fetchPlaylists();
   }, [userId, sortBy, currentPage]);
 
   // Handle sort change
   const handleSortChange = (newSort: SortOption) => {
     setSortBy(newSort);
     setCurrentPage(1);
-    setAlbums([]);
+    setPlaylists([]);
   };
 
   // Handle load more
@@ -147,9 +145,11 @@ export default function AllAlbumsPage() {
     setCurrentPage(prev => prev + 1);
   };
 
-  // Handle album deletion
-  const handleAlbumDeleted = (deletedAlbumId: string) => {
-    setAlbums(prev => prev.filter(album => album.id !== deletedAlbumId));
+  // Handle playlist deletion
+  const handlePlaylistDeleted = () => {
+    // Refresh the playlists list
+    setCurrentPage(1);
+    setPlaylists([]);
   };
 
   if (!userId) {
@@ -185,9 +185,9 @@ export default function AllAlbumsPage() {
             Back to Library
           </button>
 
-          <h1 className="text-3xl font-bold text-white mb-2">All Albums</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">All Playlists</h1>
           <p className="text-gray-400">
-            {albums.length > 0 && `Showing ${albums.length} album${albums.length !== 1 ? 's' : ''}`}
+            {playlists.length > 0 && `Showing ${playlists.length} playlist${playlists.length !== 1 ? 's' : ''}`}
           </p>
         </div>
 
@@ -216,9 +216,9 @@ export default function AllAlbumsPage() {
               Oldest
             </button>
             <button
-              onClick={() => handleSortChange('most_played')}
+              onClick={() => handleSortChange('most_tracks')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                sortBy === 'most_played'
+                sortBy === 'most_tracks'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
               }`}
@@ -259,16 +259,16 @@ export default function AllAlbumsPage() {
           </div>
         )}
 
-        {/* Albums Grid */}
-        {!loading && albums.length > 0 && (
+        {/* Playlists Grid */}
+        {!loading && playlists.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {albums.map(album => (
-                <AlbumCard
-                  key={album.id}
-                  album={album}
+              {playlists.map(playlist => (
+                <PlaylistCard
+                  key={playlist.id}
+                  playlist={playlist}
                   isOwner={true}
-                  onDelete={() => handleAlbumDeleted(album.id)}
+                  onDelete={handlePlaylistDeleted}
                 />
               ))}
             </div>
@@ -289,14 +289,14 @@ export default function AllAlbumsPage() {
         )}
 
         {/* Empty State */}
-        {!loading && albums.length === 0 && (
+        {!loading && playlists.length === 0 && (
           <div className="text-center py-12">
             <div className="text-gray-500 mb-4">
-              <div className="text-6xl mb-4">💿</div>
+              <div className="text-6xl mb-4">🎵</div>
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">No albums yet</h3>
+            <h3 className="text-xl font-semibold text-white mb-2">No playlists yet</h3>
             <p className="text-gray-400 mb-6">
-              Create your first album to organize your tracks
+              Create your first playlist to organize your favorite tracks
             </p>
             <button
               onClick={() => router.push('/library')}

@@ -184,6 +184,7 @@ export default function CreatorProfilePage() {
               userId={creatorProfile.id}
               initialLimit={8}
               isOwnProfile={isOwnProfile}
+              username={creatorProfile.username}
               key={`albums-${refreshKey}`}
             />
           </div>
@@ -194,6 +195,7 @@ export default function CreatorProfilePage() {
               userId={creatorProfile.id}
               initialLimit={8}
               isOwnProfile={isOwnProfile}
+              username={creatorProfile.username}
               key={`playlists-${refreshKey}`}
             />
           </div>

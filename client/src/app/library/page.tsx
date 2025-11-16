@@ -193,6 +193,7 @@ export default function LibraryPage() {
             <PlaylistsSectionErrorBoundary>
               <PlaylistsList 
                 hideMyPlaylistsHeader={false}
+                initialLimit={8}
               />
             </PlaylistsSectionErrorBoundary>
           </div>

@@ -9,7 +9,7 @@ import { CreatorTrackCard } from '@/components/profile/CreatorTrackCard';
 import { AddToPlaylistModal } from '@/components/library/AddToPlaylistModal';
 import { supabase } from '@/lib/supabase';
 import { getCreatorByUsername, getCreatorById } from '@/lib/profileService';
-import { saveTrack, unsaveTrack, getSavedStatus } from '@/lib/saveService';
+import { saveTrack, unsaveTrack, getBulkSavedStatus } from '@/lib/saveService';
 import type { CreatorProfile } from '@/types';
 import type { TrackWithMembership } from '@/types/library';
 
@@ -223,14 +223,20 @@ export default function CreatorTracksPage() {
     const fetchSavedStatus = async () => {
       if (!user || tracks.length === 0) return;
 
-      const savedSet = new Set<string>();
-      for (const track of tracks) {
-        const isSaved = await getSavedStatus(user.id, track.id, 'track');
-        if (isSaved) {
-          savedSet.add(track.id);
+      try {
+        const trackIds = tracks.map(track => track.id);
+        const result = await getBulkSavedStatus(user.id, trackIds, 'track');
+        
+        if (result.data) {
+          const savedSet = new Set<string>();
+          Object.entries(result.data).forEach(([id, isSaved]) => {
+            if (isSaved) savedSet.add(id);
+          });
+          setSavedTracks(savedSet);
         }
+      } catch (err) {
+        console.error('Error fetching saved status:', err);
       }
-      setSavedTracks(savedSet);
     };
 
     fetchSavedStatus();

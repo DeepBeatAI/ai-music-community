@@ -5,15 +5,17 @@
  * - createAudioPost with track references
  * - fetchPosts with track data
  * - fetchPostsByCreator with track data
+ * - fetchPostById with track data and interactions
  * - Track validation and permission checks
  * 
- * Requirements: 4.2, 6.1, 6.2, 7.1, 9.4
+ * Requirements: 3.1, 4.1, 4.2, 6.1, 6.2, 7.1, 9.4
  */
 
 import {
   createAudioPost,
   fetchPosts,
   fetchPostsByCreator,
+  fetchPostById,
 } from '@/utils/posts';
 import { supabase } from '@/lib/supabase';
 import type { Post } from '@/types';
@@ -673,6 +675,354 @@ describe('Post Management Functions with Track Integration', () => {
 
       expect(result.posts).toHaveLength(50);
       expect(result.hasMore).toBe(true);
+    });
+  });
+
+  describe('fetchPostById', () => {
+    it('should successfully fetch a text post', async () => {
+      const mockPost = {
+        id: mockPostId,
+        user_id: mockUserId,
+        content: 'Test text post',
+        post_type: 'text' as const,
+        track_id: null,
+        track: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_profiles: {
+          id: 'profile-1',
+          username: 'testuser',
+          user_id: mockUserId,
+          created_at: new Date().toISOString(),
+        },
+      };
+
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          // First call: fetch post
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: mockPost,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Second call: like count
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({
+              count: 3,
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Third call: user like check
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+      (supabase.from as jest.Mock) = mockFrom;
+
+      const result = await fetchPostById(mockPostId, mockUserId);
+
+      expect(result).toBeDefined();
+      expect(result?.id).toBe(mockPostId);
+      expect(result?.content).toBe('Test text post');
+      expect(result?.post_type).toBe('text');
+      expect(result?.track).toBeNull();
+      expect(result?.likes_count).toBe(3);
+      expect(result?.liked_by_user).toBe(false);
+    });
+
+    it('should successfully fetch an audio post with track data', async () => {
+      const mockPost = {
+        id: mockPostId,
+        user_id: mockUserId,
+        content: 'Check out my track!',
+        post_type: 'audio' as const,
+        track_id: mockTrackId,
+        track: {
+          id: mockTrackId,
+          title: 'Amazing Song',
+          file_url: 'https://example.com/track.mp3',
+          user_id: mockUserId,
+          is_public: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_profiles: {
+          id: 'profile-1',
+          username: 'testuser',
+          user_id: mockUserId,
+          created_at: new Date().toISOString(),
+        },
+      };
+
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          // First call: fetch post
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: mockPost,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Second call: like count
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({
+              count: 10,
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Third call: user like check
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: { id: 'like-1' },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+      (supabase.from as jest.Mock) = mockFrom;
+
+      const result = await fetchPostById(mockPostId, mockUserId);
+
+      expect(result).toBeDefined();
+      expect(result?.id).toBe(mockPostId);
+      expect(result?.post_type).toBe('audio');
+      expect(result?.track).toBeDefined();
+      expect(result?.track?.title).toBe('Amazing Song');
+      expect(result?.track?.id).toBe(mockTrackId);
+      expect(result?.likes_count).toBe(10);
+      expect(result?.liked_by_user).toBe(true);
+    });
+
+    it('should return null when post is not found', async () => {
+      const mockFrom = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      (supabase.from as jest.Mock) = mockFrom;
+
+      const result = await fetchPostById('non-existent-post-id');
+
+      expect(result).toBeNull();
+    });
+
+    it('should fetch post with authenticated user and check like status', async () => {
+      const mockPost = {
+        id: mockPostId,
+        user_id: mockUserId,
+        content: 'Test post',
+        post_type: 'text' as const,
+        track_id: null,
+        track: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_profiles: {
+          id: 'profile-1',
+          username: 'testuser',
+          user_id: mockUserId,
+          created_at: new Date().toISOString(),
+        },
+      };
+
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          // First call: fetch post
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: mockPost,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Second call: like count
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({
+              count: 5,
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Third call: user like check (user has liked)
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: { id: 'like-1' },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+      (supabase.from as jest.Mock) = mockFrom;
+
+      const result = await fetchPostById(mockPostId, mockUserId);
+
+      expect(result).toBeDefined();
+      expect(result?.liked_by_user).toBe(true);
+      expect(result?.likes_count).toBe(5);
+    });
+
+    it('should fetch post with unauthenticated user (no userId)', async () => {
+      const mockPost = {
+        id: mockPostId,
+        user_id: mockUserId,
+        content: 'Public post',
+        post_type: 'text' as const,
+        track_id: null,
+        track: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_profiles: {
+          id: 'profile-1',
+          username: 'testuser',
+          user_id: mockUserId,
+          created_at: new Date().toISOString(),
+        },
+      };
+
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          // First call: fetch post
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: mockPost,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Second call: like count
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({
+              count: 7,
+            }),
+          }),
+        });
+
+      (supabase.from as jest.Mock) = mockFrom;
+
+      const result = await fetchPostById(mockPostId);
+
+      expect(result).toBeDefined();
+      expect(result?.liked_by_user).toBe(false);
+      expect(result?.likes_count).toBe(7);
+    });
+
+    it('should calculate like count correctly', async () => {
+      const mockPost = {
+        id: mockPostId,
+        user_id: mockUserId,
+        content: 'Popular post',
+        post_type: 'text' as const,
+        track_id: null,
+        track: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_profiles: {
+          id: 'profile-1',
+          username: 'testuser',
+          user_id: mockUserId,
+          created_at: new Date().toISOString(),
+        },
+      };
+
+      const mockFrom = jest.fn()
+        .mockReturnValueOnce({
+          // First call: fetch post
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: mockPost,
+                error: null,
+              }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Second call: like count (15 likes)
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({
+              count: 15,
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          // Third call: user like check
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+      (supabase.from as jest.Mock) = mockFrom;
+
+      const result = await fetchPostById(mockPostId, mockUserId);
+
+      expect(result).toBeDefined();
+      expect(result?.likes_count).toBe(15);
+    });
+
+    it('should throw error on database error', async () => {
+      const mockError = { message: 'Database connection error', code: 'PGRST500' };
+      
+      const mockFrom = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({
+              data: null,
+              error: mockError,
+            }),
+          }),
+        }),
+      });
+
+      (supabase.from as jest.Mock) = mockFrom;
+
+      await expect(fetchPostById(mockPostId)).rejects.toEqual(mockError);
     });
   });
 });

@@ -35,6 +35,100 @@ export interface PostWithProfile extends Post {
  * - Each post includes likes_count and liked_by_user fields
  * - Results are ordered by created_at descending (newest first)
  */
+/**
+ * Fetch a single post by ID with all related data
+ * 
+ * Retrieves a single post from the database with user profile and track data for audio posts.
+ * Includes like count and user like status calculation.
+ * 
+ * @param postId - The ID of the post to fetch
+ * @param userId - Optional user ID to check like status
+ * @returns Promise resolving to the post with profile and interactions, or null if not found
+ * 
+ * @example
+ * ```typescript
+ * const post = await fetchPostById(postId, currentUserId);
+ * if (post) {
+ *   console.log('Post content:', post.content);
+ *   console.log('Liked by user:', post.liked_by_user);
+ * }
+ * ```
+ * 
+ * @remarks
+ * - Returns null if post doesn't exist
+ * - Audio posts include joined track data via post.track
+ * - Includes likes_count and liked_by_user fields
+ * - Respects RLS policies for access control
+ * 
+ * @throws {Error} Network errors or database connection issues
+ */
+export async function fetchPostById(
+  postId: string,
+  userId?: string
+): Promise<PostWithProfile | null> {
+  try {
+    logger.debug(`Fetching post by ID: ${postId}`);
+    
+    // Fetch post with user profile and track data (for audio posts)
+    const { data: post, error } = await supabase
+      .from('posts')
+      .select(`
+        *,
+        track:tracks(*),
+        user_profiles!posts_user_id_fkey (
+          id,
+          username,
+          user_id,
+          created_at
+        )
+      `)
+      .eq('id', postId)
+      .maybeSingle();
+
+    if (error) {
+      logger.error('Error fetching post by ID:', error);
+      throw error;
+    }
+
+    if (!post) {
+      logger.debug('Post not found');
+      return null;
+    }
+
+    // Get total like count
+    const { count: likeCount } = await supabase
+      .from('post_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', post.id);
+
+    // Check if current user liked this post
+    let likedByUser = false;
+    if (userId) {
+      const { data: userLike, error: likeError } = await supabase
+        .from('post_likes')
+        .select('id')
+        .eq('post_id', post.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      likedByUser = !likeError && !!userLike;
+    }
+
+    const postWithInteractions = {
+      ...post,
+      likes_count: likeCount || 0,
+      liked_by_user: likedByUser
+    };
+
+    logger.debug(`Successfully fetched post ${postId}`);
+    
+    return postWithInteractions;
+  } catch (error) {
+    logger.error('Error in fetchPostById:', error);
+    throw error;
+  }
+}
+
 export async function fetchPosts(
   page: number = 1,
   limit: number = 15,

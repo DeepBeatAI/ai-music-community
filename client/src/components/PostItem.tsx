@@ -10,6 +10,7 @@ import UserStatsCard from './UserStatsCard';
 import CommentList from './CommentList';
 import { AddToPlaylist } from './playlists/AddToPlaylist';
 import { ShareModal } from './library/ShareModal';
+import { PostShareButtons } from './posts/PostShareButtons';
 import { supabase } from '@/lib/supabase';
 import { queryCache } from '@/utils/queryCache';
 import { useToast } from '@/contexts/ToastContext';
@@ -469,14 +470,14 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
               )}
             </button>
             
-            {/* Share Post Button */}
-            <button 
-              className="flex items-center space-x-2 text-gray-400 hover:text-green-400 transition-colors text-sm px-2 py-1 rounded hover:bg-green-900/10"
-              aria-label="Share this post"
-            >
-              <span>🔗</span>
-              <span>Share post</span>
-            </button>
+            {/* Post Share Buttons */}
+            <PostShareButtons
+              postId={post.id}
+              postContent={post.content || ''}
+              username={username}
+              postType={post.post_type}
+              trackTitle={post.track?.title}
+            />
           </div>
           
           {/* Duration for Audio Posts (removed file size) */}

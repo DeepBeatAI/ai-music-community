@@ -12,6 +12,11 @@ A modern social platform for AI-generated music creators and enthusiasts, built 
 - **User Profiles**: Customizable profiles with bio, avatar, and music collections
 
 ### Social Engagement
+- **Post Sharing**: Share posts with shareable URLs and native share functionality
+  - Copy post URL to clipboard with one click
+  - Native share dialog on mobile devices (Web Share API)
+  - Dedicated post detail pages with SEO optimization
+  - Open Graph and Twitter Card meta tags for social media previews
 - **Comments System**: Threaded comments with nested replies (up to 3 levels deep)
   - Real-time comment updates using Supabase Realtime
   - Optimistic UI for instant feedback
@@ -128,6 +133,15 @@ client/
 ```
 
 ## Key Features Documentation
+
+### Post Sharing
+Share posts with others using shareable URLs:
+- **Copy URL Button**: Copies the post URL to clipboard for easy sharing
+- **Share Button**: Opens native share dialog on supported devices (mobile)
+- **Fallback Support**: Automatically falls back to clipboard copy on desktop browsers
+- **Manual Copy Modal**: Provides manual copy option if clipboard API is unavailable
+- **Post Detail Pages**: Each post has a dedicated page at `/posts/[postId]`
+- **SEO Optimization**: Post pages include Open Graph and Twitter Card meta tags for rich social media previews
 
 ### Comments System
 The threaded comments system allows users to engage in discussions on posts:

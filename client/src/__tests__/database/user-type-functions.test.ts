@@ -18,15 +18,17 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-
-// Disable implicit any errors for test file
-// @ts-nocheck
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck - Test file with mocked Supabase client
 
 // Type for Supabase response
 type SupabaseResponse<T> = {
   data: T;
   error: { message: string } | null;
 };
+
+// Helper type for promise then callbacks
+type ThenCallback<T> = (value: SupabaseResponse<T>) => void;
 
 // Mock Supabase client for testing
 const mockSupabase: any = {
@@ -84,7 +86,7 @@ describe('User Type Database Functions', () => {
         p_user_id: testUserId,
       });
 
-      return result.then(({ data, error }) => {
+      return result.then(({ data, error }: SupabaseResponse<string>) => {
         expect(error).toBeNull();
         expect(data).toBe('creator_premium');
       });

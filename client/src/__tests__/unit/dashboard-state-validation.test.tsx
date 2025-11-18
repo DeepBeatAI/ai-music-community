@@ -5,7 +5,7 @@
  * Validates that the state validation effect is read-only and handles errors properly
  */
 
-// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -137,7 +137,11 @@ describe('Dashboard State Validation Effect', () => {
       signOut: jest.fn(),
       signIn: jest.fn(),
       signUp: jest.fn(),
-      refreshProfile: jest.fn()
+      refreshProfile: jest.fn(),
+      userTypeInfo: null,
+      isAdmin: false,
+      userTypeLoading: false,
+      userTypeError: null
     });
 
     mockUseRouter.mockReturnValue(mockRouter);

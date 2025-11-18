@@ -1,4 +1,4 @@
-// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { jest } from '@jest/globals';
@@ -81,6 +81,23 @@ jest.mock('@/utils/loadMoreStateMachine', () => ({
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
+// Helper to create complete auth context mock
+const createMockAuthContext = (overrides: any = {}) => ({
+  user: null,
+  profile: null,
+  loading: false,
+  session: null,
+  signIn: jest.fn() as any,
+  signUp: jest.fn() as any,
+  signOut: jest.fn() as any,
+  refreshProfile: jest.fn() as any,
+  userTypeInfo: null,
+  isAdmin: false,
+  userTypeLoading: false,
+  userTypeError: null,
+  ...overrides
+});
+
 describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
   const mockRouter = {
     replace: jest.fn(),
@@ -115,16 +132,9 @@ describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
         aud: 'authenticated',
         created_at: '2023-01-01T00:00:00Z'
       };
-      mockUseAuth.mockReturnValue({
-        user: mockUser,
-        session: null,
-        profile: null,
-        signIn: jest.fn() as any,
-        signUp: jest.fn() as any,
-        signOut: jest.fn() as any,
-        loading: false,
-        refreshProfile: jest.fn() as any
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext({
+        user: mockUser
+      }));
 
       // Mock pagination manager with validation warnings
       const mockPaginationManager = {
@@ -199,16 +209,9 @@ describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
         aud: 'authenticated',
         created_at: '2023-01-01T00:00:00Z'
       };
-      mockUseAuth.mockReturnValue({
-        user: mockUser,
-        session: null,
-        profile: null,
-        signIn: jest.fn() as any,
-        signUp: jest.fn() as any,
-        signOut: jest.fn() as any,
-        loading: false,
-        refreshProfile: jest.fn() as any
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext({
+        user: mockUser
+      }));
 
       // Mock pagination manager that throws validation error
       const mockPaginationManager = {
@@ -276,16 +279,9 @@ describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
         aud: 'authenticated',
         created_at: '2023-01-01T00:00:00Z'
       };
-      mockUseAuth.mockReturnValue({
-        user: mockUser,
-        session: null,
-        profile: null,
-        signIn: jest.fn() as any,
-        signUp: jest.fn() as any,
-        signOut: jest.fn() as any,
-        loading: false,
-        refreshProfile: jest.fn() as any
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext({
+        user: mockUser
+      }));
 
       const mockPaginationManager = {
         getState: jest.fn(() => ({
@@ -367,16 +363,9 @@ describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
         aud: 'authenticated',
         created_at: '2023-01-01T00:00:00Z'
       };
-      mockUseAuth.mockReturnValue({
-        user: mockUser,
-        session: null,
-        profile: null,
-        signIn: jest.fn() as any,
-        signUp: jest.fn() as any,
-        signOut: jest.fn() as any,
-        loading: false,
-        refreshProfile: jest.fn() as any
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext({
+        user: mockUser
+      }));
 
       // Mock pagination manager with critical errors
       const mockPaginationManager = {
@@ -446,16 +435,9 @@ describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
         aud: 'authenticated',
         created_at: '2023-01-01T00:00:00Z'
       };
-      mockUseAuth.mockReturnValue({
-        user: mockUser,
-        session: null,
-        profile: null,
-        signIn: jest.fn() as any,
-        signUp: jest.fn() as any,
-        signOut: jest.fn() as any,
-        loading: false,
-        refreshProfile: jest.fn() as any
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext({
+        user: mockUser
+      }));
 
       // Mock slow validation that would timeout
       const mockPaginationManager = {
@@ -526,16 +508,9 @@ describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
         aud: 'authenticated',
         created_at: '2023-01-01T00:00:00Z'
       };
-      mockUseAuth.mockReturnValue({
-        user: mockUser,
-        session: null,
-        profile: null,
-        signIn: jest.fn() as any,
-        signUp: jest.fn() as any,
-        signOut: jest.fn() as any,
-        loading: false,
-        refreshProfile: jest.fn() as any
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext({
+        user: mockUser
+      }));
 
       let validationCallCount = 0;
       const mockPaginationManager = {
@@ -624,16 +599,11 @@ describe('Dashboard State Validation Effect - Task 2 Implementation', () => {
         aud: 'authenticated',
         created_at: '2023-01-01T00:00:00Z'
       };
-      mockUseAuth.mockReturnValue({
+      mockUseAuth.mockReturnValue(createMockAuthContext({
         user: mockUser,
-        session: null,
-        profile: null,
-        signIn: jest.fn() as any,
-        signUp: jest.fn() as any,
         signOut: jest.fn() as () => Promise<void>,
-        loading: false,
         refreshProfile: jest.fn() as () => Promise<void>
-      });
+      }));
 
       // Mock state with critical issues
       const mockPaginationManager = {

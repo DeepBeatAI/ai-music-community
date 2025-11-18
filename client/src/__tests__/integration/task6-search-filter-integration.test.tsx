@@ -109,7 +109,11 @@ describe('Task 6: Search and Filter Integration', () => {
       signIn: jest.fn() as any,
       signUp: jest.fn() as any,
       signOut: jest.fn() as any,
-      refreshProfile: jest.fn() as any
+      refreshProfile: jest.fn() as any,
+      userTypeInfo: null,
+      isAdmin: false,
+      userTypeLoading: false,
+      userTypeError: null
     });
 
     // Mock Supabase responses

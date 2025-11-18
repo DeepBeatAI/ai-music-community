@@ -17,8 +17,10 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// @ts-expect-error - Test file with mocked dependencies, implicit any types are acceptable
 /* eslint-disable @typescript-eslint/no-unused-vars */
+
+// Disable implicit any errors for test file
+// @ts-nocheck
 
 // Type for Supabase response
 type SupabaseResponse<T> = {

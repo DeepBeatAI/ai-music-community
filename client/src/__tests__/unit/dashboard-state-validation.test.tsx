@@ -5,6 +5,7 @@
  * Validates that the state validation effect is read-only and handles errors properly
  */
 
+// @ts-nocheck
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { useAuth } from '@/contexts/AuthContext';

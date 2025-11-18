@@ -11,7 +11,10 @@ import CreatorTracksSection from '@/components/profile/CreatorTracksSection';
 import CreatorAlbumsSection from '@/components/profile/CreatorAlbumsSection';
 import CreatorPlaylistsSection from '@/components/profile/CreatorPlaylistsSection';
 import { getCreatorByUsername, getCreatorById } from '@/lib/profileService';
+import { getUserTypeInfo } from '@/utils/userTypes';
 import type { CreatorProfile } from '@/types';
+import type { UserTypeInfo } from '@/types/userTypes';
+import { PlanTier, RoleType } from '@/types/userTypes';
 
 
 
@@ -39,8 +42,11 @@ export default function CreatorProfilePage() {
   const username = params.username as string;
 
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
+  const [userTypeInfo, setUserTypeInfo] = useState<UserTypeInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userTypeLoading, setUserTypeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userTypeError, setUserTypeError] = useState<string | null>(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [refreshKey] = useState(0);
 
@@ -87,6 +93,30 @@ export default function CreatorProfilePage() {
     }
   }, [username, user, authLoading]);
 
+  // Fetch user type information
+  useEffect(() => {
+    const fetchUserTypes = async () => {
+      if (!creatorProfile) return;
+
+      try {
+        setUserTypeLoading(true);
+        setUserTypeError(null);
+
+        const typeInfo = await getUserTypeInfo(creatorProfile.id);
+        setUserTypeInfo(typeInfo);
+      } catch (err) {
+        console.error('Error fetching user type information:', err);
+        setUserTypeError('Failed to load user type information');
+        // Don't set default values on error - just leave it null
+        setUserTypeInfo(null);
+      } finally {
+        setUserTypeLoading(false);
+      }
+    };
+
+    fetchUserTypes();
+  }, [creatorProfile]);
+
   // Show loading state
   if (loading || authLoading) {
     return (
@@ -131,7 +161,29 @@ export default function CreatorProfilePage() {
         <div className="max-w-7xl mx-auto">
           {/* User Type Badge */}
           <div className="mb-6">
-            <UserTypeBadge userType={creatorProfile.user_type} />
+            {userTypeLoading ? (
+              <div className="flex items-center gap-2 mb-4">
+                <div className="animate-pulse bg-gray-700 h-7 w-24 rounded-full"></div>
+                <div className="animate-pulse bg-gray-700 h-7 w-20 rounded-full"></div>
+              </div>
+            ) : userTypeError ? (
+              <div className="mb-4 p-3 bg-red-900/20 border border-red-700 rounded-md">
+                <p className="text-red-400 text-sm">{userTypeError}</p>
+              </div>
+            ) : userTypeInfo ? (
+              <UserTypeBadge 
+                planTier={userTypeInfo.planTier}
+                roles={userTypeInfo.isAdmin ? userTypeInfo.roles.filter(r => r === RoleType.ADMIN) : userTypeInfo.roles}
+                size="md"
+                showPlanTier={!userTypeInfo.isAdmin}
+              />
+            ) : creatorProfile.user_type ? (
+              // Fallback to legacy display if no user type info
+              <UserTypeBadge 
+                planTier={PlanTier.FREE_USER}
+                userType={creatorProfile.user_type} 
+              />
+            ) : null}
           </div>
 
           {/* Profile Header */}

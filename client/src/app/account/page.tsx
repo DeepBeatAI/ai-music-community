@@ -4,18 +4,20 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import UserStatsCard from '@/components/UserStatsCard';
+import PlanInformationSection from '@/components/account/PlanInformationSection';
 import { supabase } from '@/lib/supabase';
 import { validateUsername } from '@/utils/validation';
 import { syncMyStatsToDatabase } from '@/utils/userStats';
 
 export default function ProfilePage() {
-  const { user, profile, loading, refreshProfile } = useAuth();
+  const { user, profile, loading, refreshProfile, userTypeInfo } = useAuth();
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
+  const [planInfoError, setPlanInfoError] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -46,6 +48,23 @@ export default function ProfilePage() {
 
     syncStats();
   }, [user, profile]);
+
+  // Handle plan information errors
+  useEffect(() => {
+    if (!loading && user && !userTypeInfo) {
+      // If user is loaded but no userTypeInfo, there might be an error
+      // This will be handled by the AuthContext, but we can set a local error state
+      const timer = setTimeout(() => {
+        if (!userTypeInfo) {
+          setPlanInfoError('Unable to load plan information. Please refresh the page.');
+        }
+      }, 5000); // Wait 5 seconds before showing error
+
+      return () => clearTimeout(timer);
+    } else if (userTypeInfo) {
+      setPlanInfoError(null);
+    }
+  }, [loading, user, userTypeInfo]);
 
   // Refresh user statistics when profile loads
   // useEffect(() => {
@@ -149,7 +168,7 @@ export default function ProfilePage() {
         <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-2">Your Profile</h1>
+            <h1 className="text-3xl font-bold mb-2">Your Account</h1>
             <p className="text-gray-400">Manage your account information</p>
           </div>
 
@@ -196,9 +215,37 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* Plan Information Section */}
+            {userTypeInfo ? (
+              <div className="mb-8 border-t border-gray-700 pt-6">
+                <PlanInformationSection
+                  planTier={userTypeInfo.planTier}
+                  roles={userTypeInfo.roles}
+                />
+              </div>
+            ) : (
+              <div className="mb-8 border-t border-gray-700 pt-6">
+                {planInfoError ? (
+                  <div className="p-4 bg-red-900/20 border border-red-700 rounded-md">
+                    <p className="text-red-400 text-sm">{planInfoError}</p>
+                  </div>
+                ) : (
+                  <div className="animate-pulse">
+                    <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+                    <div className="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                      <div className="h-8 bg-gray-700 rounded w-32 mb-4"></div>
+                      <div className="h-6 bg-gray-700 rounded w-24 mb-4"></div>
+                      <div className="h-16 bg-gray-700 rounded w-full mb-4"></div>
+                      <div className="h-10 bg-gray-700 rounded w-32"></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* User Stats Section */}
             {profile && (
-              <div className="mb-8">
+              <div className="mb-8 border-t border-gray-700 pt-6">
                 <h2 className="text-xl font-semibold mb-4 text-gray-200">Community Stats</h2>
                 <UserStatsCard 
                   userId={user.id}

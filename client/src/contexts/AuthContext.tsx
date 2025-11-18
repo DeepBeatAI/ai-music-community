@@ -4,15 +4,21 @@ import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useRouter, usePathname } from 'next/navigation'
 import { UserProfile, ApiResponse } from '@/types'
+import { UserTypeInfo, PlanTier, RoleType } from '@/types/userTypes'
+import { fetchUserAllTypes, clearUserTypeCache } from '@/lib/userTypeService'
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   profile: UserProfile | null
+  userTypeInfo: UserTypeInfo | null
+  isAdmin: boolean
   signIn: (email: string, password: string) => Promise<ApiResponse<any>>
   signUp: (email: string, password: string, username: string) => Promise<ApiResponse<any>>
   signOut: () => Promise<void>
   loading: boolean
+  userTypeLoading: boolean
+  userTypeError: string | null
   refreshProfile: () => Promise<void>
 }
 
@@ -22,7 +28,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [userTypeInfo, setUserTypeInfo] = useState<UserTypeInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [userTypeLoading, setUserTypeLoading] = useState(false)
+  const [userTypeError, setUserTypeError] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -52,10 +61,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchUserTypeInfo = async (userId: string): Promise<void> => {
+    setUserTypeLoading(true);
+    setUserTypeError(null);
+
+    try {
+      const typeInfo = await fetchUserAllTypes(userId, true);
+      
+      // Build UserTypeInfo object
+      const userTypeData: UserTypeInfo = {
+        userId,
+        planTier: typeInfo.planTier,
+        roles: typeInfo.roles,
+        isAdmin: typeInfo.roles.includes(RoleType.ADMIN),
+        displayTypes: [
+          typeInfo.planTier,
+          ...typeInfo.roles
+        ],
+      };
+
+      setUserTypeInfo(userTypeData);
+    } catch (err) {
+      console.error('Error fetching user type info:', err);
+      setUserTypeError(err instanceof Error ? err.message : 'Failed to load user type information');
+      
+      // Set default values on error
+      setUserTypeInfo({
+        userId,
+        planTier: PlanTier.FREE_USER,
+        roles: [],
+        isAdmin: false,
+        displayTypes: [PlanTier.FREE_USER],
+      });
+    } finally {
+      setUserTypeLoading(false);
+    }
+  };
+
   const refreshProfile = async () => {
     if (user) {
       const profileData = await fetchUserProfile(user.id);
       setProfile(profileData);
+      
+      // Clear cache and reload user type information
+      clearUserTypeCache(user.id);
+      await fetchUserTypeInfo(user.id);
     }
   };
 
@@ -95,12 +145,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const profileData = await fetchUserProfile(currentSession.user.id);
       setProfile(profileData);
 
+      // Fetch user type information
+      await fetchUserTypeInfo(currentSession.user.id);
+
       // Redirect logic for authenticated users
       if (['/login', '/signup'].includes(pathname)) {
         router.replace('/');
       }
     } else {
       setProfile(null);
+      setUserTypeInfo(null);
+      setUserTypeError(null);
+      
       // Redirect logic for unauthenticated users
       const publicRoutes = ['/login', '/signup', '/', '/verify-email', '/discover'];
       if (!publicRoutes.includes(pathname)) {
@@ -245,8 +301,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
   const signOut = async () => {
     try {
+      // Clear user type cache before signing out
+      if (user) {
+        clearUserTypeCache(user.id);
+      }
+      
       await supabase.auth.signOut();
       setProfile(null);
+      setUserTypeInfo(null);
+      setUserTypeError(null);
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -257,10 +320,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user, 
       session, 
       profile, 
+      userTypeInfo,
+      isAdmin: userTypeInfo?.isAdmin || false,
       signIn, 
       signUp, 
       signOut, 
-      loading, 
+      loading,
+      userTypeLoading,
+      userTypeError,
       refreshProfile 
     }}>
       {children}

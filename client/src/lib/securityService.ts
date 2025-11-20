@@ -440,7 +440,7 @@ export async function fetchUnresolvedEventsCounts(): Promise<{
       low: 0,
     };
 
-    (data || []).forEach((event: unknown) => {
+    (data || []).forEach((event: { severity: string }) => {
       if (event.severity in counts) {
         counts[event.severity as keyof typeof counts]++;
       }

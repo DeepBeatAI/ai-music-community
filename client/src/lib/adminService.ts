@@ -1,511 +1,470 @@
 /**
- * Admin Service
+ * Admin Service - User Management
  * 
- * This service provides functions for admin operations on user types,
- * including assigning plan tiers and managing user roles.
- * All functions include authorization checks and comprehensive error handling.
+ * This service provides functions for managing users in the admin dashboard.
+ * All functions include proper error handling and audit logging.
+ * 
+ * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8
  */
 
 import { supabase } from '@/lib/supabase';
-import {
-  PlanTier,
-  RoleType,
-  UserTypeError,
-  USER_TYPE_ERROR_CODES,
-} from '@/types/userTypes';
-import { clearUserTypeCache } from './userTypeService';
-import {
-  validatePlanTier as validatePlanTierInput,
-  validateRoleType as validateRoleTypeInput,
-  validateUserId,
-} from '@/utils/validation';
-import {
-  logPlanTierAssignment,
-  logRoleGrant,
-  logRoleRevocation,
-  logAdminAccessDenied,
-} from '@/utils/auditLogger';
+import { AdminError, ADMIN_ERROR_CODES, AdminUserData, UserActivitySummary } from '@/types/admin';
+import { 
+  adminCache, 
+  ADMIN_CACHE_KEYS, 
+  ADMIN_CACHE_TTL,
+  cachedFetch 
+} from '@/utils/adminCache';
 
 /**
- * Validates that a plan tier value is valid
- * 
- * @param planTier - The plan tier to validate
- * @throws UserTypeError if the plan tier is invalid
+ * Pagination parameters for user list
  */
-function validatePlanTier(planTier: string): asserts planTier is PlanTier {
-  const result = validatePlanTierInput(planTier);
-  if (!result.valid) {
-    throw new UserTypeError(
-      result.error || 'Invalid plan tier',
-      USER_TYPE_ERROR_CODES.INVALID_PLAN_TIER,
-      { code: result.code }
-    );
-  }
+export interface UserListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  planTier?: string;
+  role?: string;
 }
 
 /**
- * Validates that a role type value is valid
- * 
- * @param roleType - The role type to validate
- * @throws UserTypeError if the role type is invalid
+ * Paginated user list response
  */
-function validateRoleType(roleType: string): asserts roleType is RoleType {
-  const result = validateRoleTypeInput(roleType);
-  if (!result.valid) {
-    throw new UserTypeError(
-      result.error || 'Invalid role type',
-      USER_TYPE_ERROR_CODES.INVALID_ROLE,
-      { code: result.code }
-    );
-  }
+export interface PaginatedUsers {
+  users: AdminUserData[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 /**
- * Validates that a user ID is valid
- * 
- * @param userId - The user ID to validate
- * @throws UserTypeError if the user ID is invalid
+ * Fetch all users with pagination and filtering
+ * Requirements: 3.1
+ * Caching: 5 minute TTL
  */
-function validateUserIdInput(userId: string): asserts userId is string {
-  const result = validateUserId(userId);
-  if (!result.valid) {
-    throw new UserTypeError(
-      result.error || 'Invalid user ID',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-      { code: result.code }
-    );
-  }
-}
-
-/**
- * Checks if the current user has admin privileges
- * 
- * @returns true if the current user is an admin, false otherwise
- * @throws UserTypeError if the check fails
- */
-async function checkIsAdmin(): Promise<boolean> {
+export async function fetchAllUsers(params: UserListParams = {}): Promise<PaginatedUsers> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return false;
-    }
+    const {
+      page = 1,
+      pageSize = 50,
+      search = '',
+      planTier,
+      role,
+    } = params;
 
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('role_type', RoleType.ADMIN)
-      .eq('is_active', true)
-      .maybeSingle();
+    // Create cache key based on parameters
+    const filters = JSON.stringify({ search, planTier, role });
+    const cacheKey = ADMIN_CACHE_KEYS.USER_LIST(page, filters);
 
-    if (error) {
-      throw new UserTypeError(
-        'Failed to check admin status',
-        USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-        { originalError: error }
-      );
-    }
+    // Use cached fetch with 5 minute TTL
+    return await cachedFetch(
+      cacheKey,
+      ADMIN_CACHE_TTL.USER_LIST,
+      async () => {
+        // Calculate pagination
+        const offset = (page - 1) * pageSize;
 
-    return data !== null;
+        // Use database function to get users with emails (returns JSONB)
+        const { data: usersData, error } = await supabase.rpc('get_users_with_emails', {
+          p_limit: pageSize,
+          p_offset: offset,
+          p_search: search || null,
+        });
+
+        if (error) {
+          throw new AdminError(
+            'Failed to fetch users',
+            ADMIN_ERROR_CODES.DATABASE_ERROR,
+            { originalError: error }
+          );
+        }
+
+        // Get total count for pagination
+        const { data: countData, error: countError } = await supabase.rpc('get_users_count', {
+          p_search: search || null,
+        });
+
+        if (countError) {
+          throw new AdminError(
+            'Failed to fetch user count',
+            ADMIN_ERROR_CODES.DATABASE_ERROR,
+            { originalError: countError }
+          );
+        }
+
+        const totalCount = countData || 0;
+
+        // Parse JSONB response and transform to AdminUserData format
+        const usersArray = Array.isArray(usersData) ? usersData : (usersData ? [usersData] : []);
+        let users: AdminUserData[] = usersArray.map((user: any) => ({
+          id: user.id,
+          user_id: user.user_id,
+          username: user.username,
+          email: user.email,
+          plan_tier: user.plan_tier,
+          roles: Array.isArray(user.roles) ? user.roles : [],
+          created_at: user.created_at,
+          last_active: new Date().toISOString(), // Will be populated from user_stats
+          is_suspended: false, // Will be populated from user profile
+          activity_summary: {
+            posts_count: 0,
+            tracks_count: 0,
+            albums_count: 0,
+            playlists_count: 0,
+            comments_count: 0,
+            likes_given: 0,
+            likes_received: 0,
+            last_active: new Date().toISOString(),
+          },
+        }));
+
+        // Apply client-side filters for plan tier and role
+        if (planTier) {
+          users = users.filter((u) => u.plan_tier === planTier);
+        }
+
+        if (role) {
+          if (role === 'none') {
+            users = users.filter((u) => u.roles.length === 0);
+          } else {
+            users = users.filter((u) => u.roles.includes(role));
+          }
+        }
+
+        const totalPages = Math.ceil(totalCount / pageSize);
+
+        return {
+          users,
+          total: totalCount,
+          page,
+          pageSize,
+          totalPages,
+        };
+      }
+    );
   } catch (error) {
-    if (error instanceof UserTypeError) {
+    if (error instanceof AdminError) {
       throw error;
     }
-    throw new UserTypeError(
-      'Unexpected error checking admin status',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
+    throw new AdminError(
+      'An unexpected error occurred while fetching users',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );
   }
 }
 
 /**
- * Assigns a plan tier to a user (Admin only)
- * 
- * @param targetUserId - The user ID to assign the plan tier to
- * @param newPlanTier - The plan tier to assign
- * @returns true if successful
- * @throws UserTypeError if the operation fails or user is not authorized
+ * Fetch detailed user information including activity summary
+ * Requirements: 3.2
+ * Caching: 5 minute TTL
  */
-export async function assignPlanTier(
-  targetUserId: string,
-  newPlanTier: PlanTier
-): Promise<boolean> {
-  let adminUserId: string | undefined;
-  
+export async function fetchUserDetails(userId: string): Promise<AdminUserData> {
   try {
-    // Validate inputs
-    validateUserIdInput(targetUserId);
-    validatePlanTier(newPlanTier);
+    const cacheKey = ADMIN_CACHE_KEYS.USER_DETAILS(userId);
 
-    // Check authorization
-    const isAdmin = await checkIsAdmin();
-    if (!isAdmin) {
-      // Log authorization failure
-      const { data: { user } } = await supabase.auth.getUser();
-      logAdminAccessDenied({
-        userId: user?.id,
-        action: `Assign plan tier to ${targetUserId}`,
-      });
-      
-      throw new UserTypeError(
-        'Only admins can assign plan tiers',
-        USER_TYPE_ERROR_CODES.UNAUTHORIZED
+    // Use cached fetch with 5 minute TTL
+    return await cachedFetch(
+      cacheKey,
+      ADMIN_CACHE_TTL.USER_DETAILS,
+      async () => {
+        // Use database function to get user with email (returns JSONB)
+        const { data: usersData, error: profileError } = await supabase.rpc('get_users_with_emails', {
+          p_limit: 100,
+          p_offset: 0,
+          p_search: null,
+        });
+
+        if (profileError) {
+          throw new AdminError(
+            'Failed to fetch user profile',
+            ADMIN_ERROR_CODES.DATABASE_ERROR,
+            { originalError: profileError }
+          );
+        }
+
+        // Parse JSONB response
+        const usersArray = Array.isArray(usersData) ? usersData : (usersData ? [usersData] : []);
+        
+        // Find the specific user by user_id
+        const profile = usersArray.find((u: any) => u.user_id === userId);
+
+        if (!profile) {
+          throw new AdminError(
+            'User not found',
+            ADMIN_ERROR_CODES.NOT_FOUND,
+            { userId }
+          );
+        }
+
+        // Fetch activity summary using database function
+        const { data: activityData, error: activityError } = await supabase
+          .rpc('get_user_activity_summary', {
+            p_user_id: userId,
+            p_days_back: 30,
+          });
+
+        if (activityError) {
+          console.error('Failed to fetch activity summary:', activityError);
+        }
+
+        const activity: UserActivitySummary = activityData || {
+          posts_count: 0,
+          tracks_count: 0,
+          albums_count: 0,
+          playlists_count: 0,
+          comments_count: 0,
+          likes_given: 0,
+          likes_received: 0,
+          last_active: new Date().toISOString(),
+        };
+
+        return {
+          id: profile.id,
+          user_id: profile.user_id,
+          username: profile.username,
+          email: profile.email,
+          plan_tier: profile.plan_tier,
+          roles: profile.roles || [],
+          created_at: profile.created_at,
+          last_active: activity.last_active,
+          is_suspended: false, // Will be populated from user profile
+          activity_summary: activity,
+        };
+      }
+    );
+  } catch (error) {
+    if (error instanceof AdminError) {
+      throw error;
+    }
+    throw new AdminError(
+      'An unexpected error occurred while fetching user details',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
+ * Update user plan tier with audit logging
+ * Requirements: 3.3
+ */
+export async function updateUserPlanTier(
+  userId: string,
+  newPlanTier: string
+): Promise<void> {
+  try {
+    // Get current plan tier for audit log
+    const { data: currentPlan, error: fetchError } = await supabase
+      .from('user_plan_tiers')
+      .select('plan_tier')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) {
+      throw new AdminError(
+        'Failed to fetch current plan tier',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
+        { originalError: fetchError }
       );
     }
 
-    // Get current user for audit logging
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new UserTypeError(
-        'User not authenticated',
-        USER_TYPE_ERROR_CODES.UNAUTHORIZED
-      );
-    }
-    
-    adminUserId = user.id;
-
-    // Call the database function
-    const { data, error } = await supabase.rpc('assign_plan_tier', {
-      p_target_user_id: targetUserId,
+    // Update plan tier using database function
+    const { error: updateError } = await supabase.rpc('update_user_plan_tier', {
+      p_user_id: userId,
       p_new_plan_tier: newPlanTier,
-      p_admin_user_id: user.id,
     });
 
-    if (error) {
-      // Log failure
-      logPlanTierAssignment({
-        adminUserId: user.id,
-        targetUserId,
-        newTier: newPlanTier,
-        success: false,
-        errorMessage: error.message,
-      });
-      
-      // Check for specific error messages from the database function
-      if (error.message.includes('Only admins can assign plan tiers')) {
-        throw new UserTypeError(
-          'Only admins can assign plan tiers',
-          USER_TYPE_ERROR_CODES.UNAUTHORIZED,
-          { originalError: error }
-        );
-      }
-      if (error.message.includes('Invalid plan tier')) {
-        throw new UserTypeError(
-          `Invalid plan tier: ${newPlanTier}`,
-          USER_TYPE_ERROR_CODES.INVALID_PLAN_TIER,
-          { originalError: error }
-        );
-      }
-      throw new UserTypeError(
-        'Failed to assign plan tier',
-        USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-        { originalError: error }
+    if (updateError) {
+      throw new AdminError(
+        'Failed to update user plan tier',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
+        { originalError: updateError }
       );
     }
 
-    // Log success
-    logPlanTierAssignment({
-      adminUserId: user.id,
-      targetUserId,
-      newTier: newPlanTier,
-      success: true,
+    // Log the action
+    await supabase.rpc('log_admin_action', {
+      p_action_type: 'user_plan_changed',
+      p_target_resource_type: 'user',
+      p_target_resource_id: userId,
+      p_old_value: { plan_tier: currentPlan?.plan_tier },
+      p_new_value: { plan_tier: newPlanTier },
     });
 
-    // Clear cache for the target user
-    clearUserTypeCache(targetUserId);
-
-    return data === true;
+    // Invalidate user caches
+    adminCache.invalidateUserCaches(userId);
   } catch (error) {
-    // Log failure if we have admin user ID
-    if (adminUserId) {
-      logPlanTierAssignment({
-        adminUserId,
-        targetUserId,
-        newTier: newPlanTier,
-        success: false,
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-    
-    if (error instanceof UserTypeError) {
+    if (error instanceof AdminError) {
       throw error;
     }
-    throw new UserTypeError(
-      'Unexpected error assigning plan tier',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
+    throw new AdminError(
+      'An unexpected error occurred while updating plan tier',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );
   }
 }
 
 /**
- * Grants a role to a user (Admin only)
- * 
- * @param targetUserId - The user ID to grant the role to
- * @param roleType - The role to grant
- * @returns true if successful
- * @throws UserTypeError if the operation fails or user is not authorized
+ * Update user roles with audit logging
+ * Requirements: 3.4
  */
-export async function grantRole(
-  targetUserId: string,
-  roleType: RoleType
-): Promise<boolean> {
-  let adminUserId: string | undefined;
-  
+export async function updateUserRoles(
+  userId: string,
+  rolesToAdd: string[],
+  rolesToRemove: string[]
+): Promise<void> {
   try {
-    // Validate inputs
-    validateUserIdInput(targetUserId);
-    validateRoleType(roleType);
+    // Get current roles for audit log
+    const { data: currentRoles, error: fetchError } = await supabase
+      .from('user_roles')
+      .select('role_type')
+      .eq('user_id', userId)
+      .eq('is_active', true);
 
-    // Check authorization
-    const isAdmin = await checkIsAdmin();
-    if (!isAdmin) {
-      // Log authorization failure
-      const { data: { user } } = await supabase.auth.getUser();
-      logAdminAccessDenied({
-        userId: user?.id,
-        action: `Grant role ${roleType} to ${targetUserId}`,
+    if (fetchError) {
+      throw new AdminError(
+        'Failed to fetch current roles',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
+        { originalError: fetchError }
+      );
+    }
+
+    // Add new roles
+    for (const roleType of rolesToAdd) {
+      const { error: addError } = await supabase.rpc('assign_user_role', {
+        p_user_id: userId,
+        p_role_type: roleType,
       });
-      
-      throw new UserTypeError(
-        'Only admins can grant roles',
-        USER_TYPE_ERROR_CODES.UNAUTHORIZED
-      );
+
+      if (addError) {
+        throw new AdminError(
+          `Failed to add role: ${roleType}`,
+          ADMIN_ERROR_CODES.DATABASE_ERROR,
+          { originalError: addError }
+        );
+      }
     }
 
-    // Get current user for audit logging
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new UserTypeError(
-        'User not authenticated',
-        USER_TYPE_ERROR_CODES.UNAUTHORIZED
-      );
-    }
-    
-    adminUserId = user.id;
+    // Remove roles
+    for (const roleType of rolesToRemove) {
+      const { error: removeError } = await supabase.rpc('revoke_user_role', {
+        p_user_id: userId,
+        p_role_type: roleType,
+      });
 
-    // Call the database function
-    const { data, error } = await supabase.rpc('grant_user_role', {
-      p_target_user_id: targetUserId,
-      p_role_type: roleType,
-      p_admin_user_id: user.id,
+      if (removeError) {
+        throw new AdminError(
+          `Failed to remove role: ${roleType}`,
+          ADMIN_ERROR_CODES.DATABASE_ERROR,
+          { originalError: removeError }
+        );
+      }
+    }
+
+    // Log the action
+    await supabase.rpc('log_admin_action', {
+      p_action_type: 'user_role_changed',
+      p_target_resource_type: 'user',
+      p_target_resource_id: userId,
+      p_old_value: { roles: currentRoles?.map((r: { role_type: string }) => r.role_type) || [] },
+      p_new_value: {
+        added: rolesToAdd,
+        removed: rolesToRemove,
+      },
     });
 
-    if (error) {
-      // Log failure
-      logRoleGrant({
-        adminUserId: user.id,
-        targetUserId,
-        role: roleType,
-        success: false,
-        errorMessage: error.message,
-      });
-      
-      // Check for specific error messages from the database function
-      if (error.message.includes('Only admins can grant roles')) {
-        throw new UserTypeError(
-          'Only admins can grant roles',
-          USER_TYPE_ERROR_CODES.UNAUTHORIZED,
-          { originalError: error }
-        );
-      }
-      if (error.message.includes('Invalid role type')) {
-        throw new UserTypeError(
-          `Invalid role type: ${roleType}`,
-          USER_TYPE_ERROR_CODES.INVALID_ROLE,
-          { originalError: error }
-        );
-      }
-      if (error.message.includes('User already has role')) {
-        throw new UserTypeError(
-          `User already has role: ${roleType}`,
-          USER_TYPE_ERROR_CODES.ROLE_ALREADY_EXISTS,
-          { originalError: error }
-        );
-      }
-      throw new UserTypeError(
-        'Failed to grant role',
-        USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-        { originalError: error }
-      );
-    }
-
-    // Log success
-    logRoleGrant({
-      adminUserId: user.id,
-      targetUserId,
-      role: roleType,
-      success: true,
-    });
-
-    // Clear cache for the target user
-    clearUserTypeCache(targetUserId);
-
-    return data === true;
+    // Invalidate user caches
+    adminCache.invalidateUserCaches(userId);
   } catch (error) {
-    // Log failure if we have admin user ID
-    if (adminUserId) {
-      logRoleGrant({
-        adminUserId,
-        targetUserId,
-        role: roleType,
-        success: false,
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-    
-    if (error instanceof UserTypeError) {
+    if (error instanceof AdminError) {
       throw error;
     }
-    throw new UserTypeError(
-      'Unexpected error granting role',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
+    throw new AdminError(
+      'An unexpected error occurred while updating user roles',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );
   }
 }
 
 /**
- * Revokes a role from a user (Admin only)
- * 
- * @param targetUserId - The user ID to revoke the role from
- * @param roleType - The role to revoke
- * @returns true if successful
- * @throws UserTypeError if the operation fails or user is not authorized
+ * Suspend user account with audit logging
+ * Requirements: 3.7
  */
-export async function revokeRole(
-  targetUserId: string,
-  roleType: RoleType
-): Promise<boolean> {
-  let adminUserId: string | undefined;
-  
+export async function suspendUser(
+  userId: string,
+  reason: string,
+  durationDays?: number
+): Promise<void> {
   try {
-    // Validate inputs
-    validateUserIdInput(targetUserId);
-    validateRoleType(roleType);
-
-    // Check authorization
-    const isAdmin = await checkIsAdmin();
-    if (!isAdmin) {
-      // Log authorization failure
-      const { data: { user } } = await supabase.auth.getUser();
-      logAdminAccessDenied({
-        userId: user?.id,
-        action: `Revoke role ${roleType} from ${targetUserId}`,
-      });
-      
-      throw new UserTypeError(
-        'Only admins can revoke roles',
-        USER_TYPE_ERROR_CODES.UNAUTHORIZED
-      );
-    }
-
-    // Get current user for audit logging
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new UserTypeError(
-        'User not authenticated',
-        USER_TYPE_ERROR_CODES.UNAUTHORIZED
-      );
-    }
-    
-    adminUserId = user.id;
-
-    // Prevent revoking own admin role
-    if (targetUserId === user.id && roleType === RoleType.ADMIN) {
-      // Log attempt
-      logRoleRevocation({
-        adminUserId: user.id,
-        targetUserId,
-        role: roleType,
-        success: false,
-        errorMessage: 'Cannot revoke your own admin role',
-      });
-      
-      throw new UserTypeError(
-        'Cannot revoke your own admin role',
-        USER_TYPE_ERROR_CODES.CANNOT_REVOKE_OWN_ADMIN
-      );
-    }
-
-    // Call the database function
-    const { data, error } = await supabase.rpc('revoke_user_role', {
-      p_target_user_id: targetUserId,
-      p_role_type: roleType,
-      p_admin_user_id: user.id,
+    const { error } = await supabase.rpc('suspend_user_account', {
+      p_target_user_id: userId,
+      p_reason: reason,
+      p_duration_days: durationDays || null,
     });
 
     if (error) {
-      // Log failure
-      logRoleRevocation({
-        adminUserId: user.id,
-        targetUserId,
-        role: roleType,
-        success: false,
-        errorMessage: error.message,
-      });
-      
-      // Check for specific error messages from the database function
-      if (error.message.includes('Only admins can revoke roles')) {
-        throw new UserTypeError(
-          'Only admins can revoke roles',
-          USER_TYPE_ERROR_CODES.UNAUTHORIZED,
-          { originalError: error }
-        );
-      }
-      if (error.message.includes('Cannot revoke your own admin role')) {
-        throw new UserTypeError(
-          'Cannot revoke your own admin role',
-          USER_TYPE_ERROR_CODES.CANNOT_REVOKE_OWN_ADMIN,
-          { originalError: error }
-        );
-      }
-      if (error.message.includes('Invalid role type')) {
-        throw new UserTypeError(
-          `Invalid role type: ${roleType}`,
-          USER_TYPE_ERROR_CODES.INVALID_ROLE,
-          { originalError: error }
-        );
-      }
-      throw new UserTypeError(
-        'Failed to revoke role',
-        USER_TYPE_ERROR_CODES.DATABASE_ERROR,
+      throw new AdminError(
+        'Failed to suspend user account',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
         { originalError: error }
       );
     }
 
-    // Log success
-    logRoleRevocation({
-      adminUserId: user.id,
-      targetUserId,
-      role: roleType,
-      success: true,
-    });
-
-    // Clear cache for the target user
-    clearUserTypeCache(targetUserId);
-
-    return data === true;
+    // Invalidate user caches
+    adminCache.invalidateUserCaches(userId);
   } catch (error) {
-    // Log failure if we have admin user ID
-    if (adminUserId) {
-      logRoleRevocation({
-        adminUserId,
-        targetUserId,
-        role: roleType,
-        success: false,
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-    
-    if (error instanceof UserTypeError) {
+    if (error instanceof AdminError) {
       throw error;
     }
-    throw new UserTypeError(
-      'Unexpected error revoking role',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
+    throw new AdminError(
+      'An unexpected error occurred while suspending user',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
+ * Reset user password with audit logging
+ * Requirements: 3.6
+ */
+export async function resetUserPassword(userId: string, email: string): Promise<void> {
+  try {
+    // Use Supabase Auth API to send password reset email
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      throw new AdminError(
+        'Failed to send password reset email',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
+        { originalError: error }
+      );
+    }
+
+    // Log the action
+    await supabase.rpc('log_admin_action', {
+      p_action_type: 'user_password_reset',
+      p_target_resource_type: 'user',
+      p_target_resource_id: userId,
+      p_old_value: null,
+      p_new_value: { email },
+    });
+
+    // Invalidate user caches
+    adminCache.invalidateUserCaches(userId);
+  } catch (error) {
+    if (error instanceof AdminError) {
+      throw error;
+    }
+    throw new AdminError(
+      'An unexpected error occurred while resetting password',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );
   }

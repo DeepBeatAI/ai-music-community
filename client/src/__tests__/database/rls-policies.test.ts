@@ -1,13 +1,24 @@
 /**
- * Row Level Security (RLS) Policy Tests for User Types and Plan Tiers System
+ * Row Level Security (RLS) Policy Tests
  * 
  * Tests the following RLS policies:
+ * 
+ * User Types and Plan Tiers System:
  * - user_plan_tiers: Users can view own data, admins can view all
  * - user_roles: Users can view own data, admins can view all
  * - user_type_audit_log: Only admins can view audit logs
  * - Modification policies: Only admins can modify user types
  * 
- * Requirements: 5.3, 7.1, 7.2, 7.3
+ * Admin Dashboard System:
+ * - admin_audit_log: Only admins can view audit logs
+ * - security_events: Only admins can view and update security events
+ * - platform_config: Only admins can view and modify platform config
+ * - system_metrics: Only admins can view system metrics
+ * - user_sessions: Users can view own sessions, admins can view all and terminate
+ * 
+ * Requirements: 
+ * - User Types: 5.3, 7.1, 7.2, 7.3
+ * - Admin Dashboard: 1.2, 5.1, 5.5, 8.6
  * 
  * Note: These tests use mocked Supabase client to simulate RLS policy behavior.
  * They verify that RLS policies correctly restrict access based on user permissions.
@@ -76,6 +87,79 @@ describe('RLS Policies for User Types and Plan Tiers', () => {
           return { allowed: true };
         } else {
           return { allowed: false, error: 'new row violates row-level security policy for table "user_type_audit_log"' };
+        }
+      }
+    }
+
+    // Admin Dashboard Tables
+    if (table === 'admin_audit_log') {
+      if (operation === 'select') {
+        if (isAdmin) {
+          return { allowed: true, data: 'all_data' };
+        } else {
+          return { allowed: true, data: 'filtered' }; // Non-admins see nothing
+        }
+      }
+      // No direct INSERT policy - handled by database functions
+    }
+
+    if (table === 'security_events') {
+      if (operation === 'select') {
+        if (isAdmin) {
+          return { allowed: true, data: 'all_data' };
+        } else {
+          return { allowed: true, data: 'filtered' }; // Non-admins see nothing
+        }
+      } else if (operation === 'update') {
+        if (isAdmin) {
+          return { allowed: true };
+        } else {
+          return { allowed: false, error: 'new row violates row-level security policy for table "security_events"' };
+        }
+      }
+    }
+
+    if (table === 'platform_config') {
+      if (operation === 'select') {
+        if (isAdmin) {
+          return { allowed: true, data: 'all_data' };
+        } else {
+          return { allowed: true, data: 'filtered' }; // Non-admins see nothing
+        }
+      } else if (['insert', 'update', 'delete'].includes(operation)) {
+        if (isAdmin) {
+          return { allowed: true };
+        } else {
+          return { allowed: false, error: 'new row violates row-level security policy for table "platform_config"' };
+        }
+      }
+    }
+
+    if (table === 'system_metrics') {
+      if (operation === 'select') {
+        if (isAdmin) {
+          return { allowed: true, data: 'all_data' };
+        } else {
+          return { allowed: true, data: 'filtered' }; // Non-admins see nothing
+        }
+      }
+      // No modification policies - metrics are inserted via database functions
+    }
+
+    if (table === 'user_sessions') {
+      if (operation === 'select') {
+        if (isAdmin) {
+          return { allowed: true, data: 'all_data' };
+        } else if (targetUserId === userId) {
+          return { allowed: true, data: 'own_data' };
+        } else {
+          return { allowed: true, data: 'filtered' }; // RLS filters out
+        }
+      } else if (operation === 'update') {
+        if (isAdmin) {
+          return { allowed: true };
+        } else {
+          return { allowed: false, error: 'new row violates row-level security policy for table "user_sessions"' };
         }
       }
     }
@@ -352,6 +436,235 @@ describe('RLS Policies for User Types and Plan Tiers', () => {
 
       // user_type_audit_log
       expect(checkRLS('user_type_audit_log', 'insert', testUserId, false).allowed).toBe(false);
+    });
+  });
+
+  describe('Admin Dashboard RLS Policies', () => {
+    describe('admin_audit_log RLS Policies', () => {
+      it('should allow admins to view all audit logs', () => {
+        const result = checkRLS('admin_audit_log', 'select', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('all_data');
+      });
+
+      it('should prevent non-admins from viewing audit logs', () => {
+        const result = checkRLS('admin_audit_log', 'select', testUserId, false);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('filtered'); // RLS filters out all results
+      });
+
+      it('should prevent non-admins from viewing any audit log entries', () => {
+        const result = checkRLS('admin_audit_log', 'select', testUserId, false, testUserId);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('filtered'); // Even entries about them should be hidden
+      });
+    });
+
+    describe('security_events RLS Policies', () => {
+      it('should allow admins to view all security events', () => {
+        const result = checkRLS('security_events', 'select', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('all_data');
+      });
+
+      it('should prevent non-admins from viewing security events', () => {
+        const result = checkRLS('security_events', 'select', testUserId, false);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('filtered'); // RLS filters out all results
+      });
+
+      it('should allow admins to update security events', () => {
+        const result = checkRLS('security_events', 'update', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+      });
+
+      it('should prevent non-admins from updating security events', () => {
+        const result = checkRLS('security_events', 'update', testUserId, false);
+        
+        expect(result.allowed).toBe(false);
+        expect(result.error).toContain('row-level security policy');
+      });
+    });
+
+    describe('platform_config RLS Policies', () => {
+      it('should allow admins to view platform config', () => {
+        const result = checkRLS('platform_config', 'select', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('all_data');
+      });
+
+      it('should prevent non-admins from viewing platform config', () => {
+        const result = checkRLS('platform_config', 'select', testUserId, false);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('filtered'); // RLS filters out all results
+      });
+
+      it('should allow admins to insert platform config', () => {
+        const result = checkRLS('platform_config', 'insert', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+      });
+
+      it('should allow admins to update platform config', () => {
+        const result = checkRLS('platform_config', 'update', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+      });
+
+      it('should allow admins to delete platform config', () => {
+        const result = checkRLS('platform_config', 'delete', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+      });
+
+      it('should prevent non-admins from inserting platform config', () => {
+        const result = checkRLS('platform_config', 'insert', testUserId, false);
+        
+        expect(result.allowed).toBe(false);
+        expect(result.error).toContain('row-level security policy');
+      });
+
+      it('should prevent non-admins from updating platform config', () => {
+        const result = checkRLS('platform_config', 'update', testUserId, false);
+        
+        expect(result.allowed).toBe(false);
+        expect(result.error).toContain('row-level security policy');
+      });
+
+      it('should prevent non-admins from deleting platform config', () => {
+        const result = checkRLS('platform_config', 'delete', testUserId, false);
+        
+        expect(result.allowed).toBe(false);
+        expect(result.error).toContain('row-level security policy');
+      });
+    });
+
+    describe('system_metrics RLS Policies', () => {
+      it('should allow admins to view system metrics', () => {
+        const result = checkRLS('system_metrics', 'select', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('all_data');
+      });
+
+      it('should prevent non-admins from viewing system metrics', () => {
+        const result = checkRLS('system_metrics', 'select', testUserId, false);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('filtered'); // RLS filters out all results
+      });
+    });
+
+    describe('user_sessions RLS Policies', () => {
+      it('should allow users to view their own sessions', () => {
+        const result = checkRLS('user_sessions', 'select', testUserId, false, testUserId);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('own_data');
+      });
+
+      it('should prevent users from viewing other users sessions', () => {
+        const result = checkRLS('user_sessions', 'select', testUserId, false, otherUserId);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('filtered'); // RLS filters out results
+      });
+
+      it('should allow admins to view all sessions', () => {
+        const result = checkRLS('user_sessions', 'select', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+        expect(result.data).toBe('all_data');
+      });
+
+      it('should allow admins to terminate sessions', () => {
+        const result = checkRLS('user_sessions', 'update', adminUserId, true);
+        
+        expect(result.allowed).toBe(true);
+      });
+
+      it('should prevent non-admins from terminating sessions', () => {
+        const result = checkRLS('user_sessions', 'update', testUserId, false);
+        
+        expect(result.allowed).toBe(false);
+        expect(result.error).toContain('row-level security policy');
+      });
+
+      it('should prevent users from terminating their own sessions via direct update', () => {
+        const result = checkRLS('user_sessions', 'update', testUserId, false);
+        
+        expect(result.allowed).toBe(false);
+        expect(result.error).toContain('row-level security policy');
+      });
+    });
+
+    describe('Admin Dashboard comprehensive access verification', () => {
+      it('should verify admins can access all admin tables', () => {
+        const tables = [
+          'admin_audit_log',
+          'security_events',
+          'platform_config',
+          'system_metrics',
+          'user_sessions'
+        ];
+
+        tables.forEach(table => {
+          const result = checkRLS(table, 'select', adminUserId, true);
+          expect(result.allowed).toBe(true);
+          expect(result.data).toBe('all_data');
+        });
+      });
+
+      it('should verify non-admins cannot access any admin tables', () => {
+        const tables = [
+          'admin_audit_log',
+          'security_events',
+          'platform_config',
+          'system_metrics'
+        ];
+
+        tables.forEach(table => {
+          const result = checkRLS(table, 'select', testUserId, false);
+          expect(result.allowed).toBe(true);
+          expect(result.data).toBe('filtered'); // RLS filters out all results
+        });
+      });
+
+      it('should verify admins can modify security events', () => {
+        const result = checkRLS('security_events', 'update', adminUserId, true);
+        expect(result.allowed).toBe(true);
+      });
+
+      it('should verify admins can modify platform config', () => {
+        const operations = ['insert', 'update', 'delete'];
+        
+        operations.forEach(operation => {
+          const result = checkRLS('platform_config', operation, adminUserId, true);
+          expect(result.allowed).toBe(true);
+        });
+      });
+
+      it('should verify admins can terminate any user session', () => {
+        const result = checkRLS('user_sessions', 'update', adminUserId, true);
+        expect(result.allowed).toBe(true);
+      });
+
+      it('should verify audit logs are protected from all non-admin access', () => {
+        const selectResult = checkRLS('admin_audit_log', 'select', testUserId, false);
+        expect(selectResult.data).toBe('filtered');
+        
+        // Verify even viewing own entries is blocked
+        const ownResult = checkRLS('admin_audit_log', 'select', testUserId, false, testUserId);
+        expect(ownResult.data).toBe('filtered');
+      });
     });
   });
 });

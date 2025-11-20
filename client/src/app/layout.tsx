@@ -2,6 +2,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from '@/contexts/AuthContext';
+import { AdminProvider } from '@/contexts/AdminContext';
 import { FollowProvider } from '@/contexts/FollowContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { PlaybackProvider } from '@/contexts/PlaybackContext';
@@ -37,17 +38,19 @@ export default function RootLayout({
       >
         <ErrorBoundary>
           <AuthProvider>
-            <FollowProvider>
-              <ToastProvider>
-                <PlaybackProvider>
-                  {children}
-                  {/* Mini Player - persistent audio player across all pages */}
-                  <MiniPlayer />
-                  {/* Performance Dashboard - unified monitoring interface */}
-                  <PerformanceDashboard />
-                </PlaybackProvider>
-              </ToastProvider>
-            </FollowProvider>
+            <AdminProvider>
+              <FollowProvider>
+                <ToastProvider>
+                  <PlaybackProvider>
+                    {children}
+                    {/* Mini Player - persistent audio player across all pages */}
+                    <MiniPlayer />
+                    {/* Performance Dashboard - unified monitoring interface */}
+                    <PerformanceDashboard />
+                  </PlaybackProvider>
+                </ToastProvider>
+              </FollowProvider>
+            </AdminProvider>
           </AuthProvider>
         </ErrorBoundary>
       </body>

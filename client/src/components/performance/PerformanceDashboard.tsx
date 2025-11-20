@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAdmin } from '@/contexts/AdminContext';
 import { metadataCache } from '@/utils/metadataCache';
 import { imageCache } from '@/utils/imageCache';
 import { audioCacheManager, audioUrlCache } from '@/utils/audioCache';
@@ -54,6 +55,7 @@ function MetricCard({
 }
 
 export default function PerformanceDashboard() {
+  const { isAdmin } = useAdmin();
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -544,6 +546,11 @@ export default function PerformanceDashboard() {
         )}
       </div>
     );
+  }
+
+  // Hide from non-admin users
+  if (!isAdmin) {
+    return null;
   }
 
   // Collapsed state - fixed button in bottom-right (above mini player)

@@ -1,0 +1,490 @@
+/**
+ * System Health Service Tests
+ * 
+ * Tests for system health and performance monitoring service functions
+ * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 6.10
+ */
+
+import { supabase } from '@/lib/supabase';
+import {
+  fetchSystemMetrics,
+  fetchSystemHealth,
+  fetchPerformanceMetrics,
+  clearCache,
+  fetchSlowQueries,
+  fetchErrorLogs,
+  recordSystemMetric,
+} from '@/lib/systemHealthService';
+import { AdminError, ADMIN_ERROR_CODES } from '@/types/admin';
+
+// Mock Supabase
+jest.mock('@/lib/supabase', () => ({
+  supabase: {
+    from: jest.fn(),
+    rpc: jest.fn(),
+  },
+}));
+
+// Mock admin cache
+jest.mock('@/utils/adminCache', () => ({
+  ADMIN_CACHE_KEYS: {
+    SYSTEM_METRICS: jest.fn((type) => `metrics_${type || 'all'}`),
+    SYSTEM_HEALTH: jest.fn(() => 'system_health'),
+    PERFORMANCE_METRICS: jest.fn(() => 'performance_metrics'),
+  },
+  ADMIN_CACHE_TTL: {
+    SYSTEM_METRICS: 60000,
+    SYSTEM_HEALTH: 60000,
+    PERFORMANCE_METRICS: 60000,
+  },
+  cachedFetch: jest.fn((key, ttl, fn) => fn()),
+}));
+
+describe('System Health Service', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+  });
+
+  describe('fetchSystemMetrics', () => {
+    it('should fetch system metrics with default filters', async () => {
+      const mockMetrics = [
+        {
+          id: '1',
+          metric_type: 'page_load_time',
+          metric_value: 1500,
+          metric_unit: 'ms',
+          recorded_at: '2024-01-01T00:00:00Z',
+        },
+      ];
+
+      (supabase.from as jest.Mock).mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        lte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      });
+
+      const result = await fetchSystemMetrics();
+
+      expect(result).toEqual(mockMetrics);
+      expect(supabase.from).toHaveBeenCalledWith('system_metrics');
+    });
+
+    it('should apply metric type filter', async () => {
+      const mockFrom = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: [],
+          error: null,
+        }),
+      };
+
+      (supabase.from as jest.Mock).mockReturnValue(mockFrom);
+
+      await fetchSystemMetrics({ metricType: 'page_load_time' });
+
+      expect(mockFrom.eq).toHaveBeenCalledWith('metric_type', 'page_load_time');
+    });
+
+    it('should apply date range filters', async () => {
+      const mockFrom = {
+        select: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        lte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: [],
+          error: null,
+        }),
+      };
+
+      (supabase.from as jest.Mock).mockReturnValue(mockFrom);
+
+      await fetchSystemMetrics({
+        startDate: '2024-01-01',
+        endDate: '2024-01-31',
+      });
+
+      expect(mockFrom.gte).toHaveBeenCalledWith('recorded_at', '2024-01-01');
+      expect(mockFrom.lte).toHaveBeenCalledWith('recorded_at', '2024-01-31');
+    });
+
+    it('should handle database errors', async () => {
+      (supabase.from as jest.Mock).mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'Database error' },
+        }),
+      });
+
+      await expect(fetchSystemMetrics()).rejects.toThrow(AdminError);
+    });
+  });
+
+  describe('fetchSystemHealth', () => {
+    it('should fetch and calculate system health status', async () => {
+      const mockMetrics = [
+        {
+          metric_type: 'database_query_time',
+          metric_value: 50,
+        },
+        {
+          metric_type: 'storage_usage',
+          metric_value: 100,
+        },
+        {
+          metric_type: 'error_rate',
+          metric_value: 0.1,
+        },
+      ];
+
+      const mockFrom = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        lte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      };
+
+      (supabase.from as jest.Mock).mockReturnValue(mockFrom);
+
+      const result = await fetchSystemHealth();
+
+      expect(result).toHaveProperty('database');
+      expect(result).toHaveProperty('storage');
+      expect(result).toHaveProperty('api_health');
+      expect(result).toHaveProperty('error_rate');
+      expect(result).toHaveProperty('uptime');
+      expect(result.database.status).toBe('healthy');
+    });
+
+    it('should detect degraded database performance', async () => {
+      const mockMetrics = [
+        {
+          metric_type: 'database_query_time',
+          metric_value: 250, // Above 200ms threshold
+        },
+      ];
+
+      const mockFrom = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        lte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      };
+
+      (supabase.from as jest.Mock).mockReturnValue(mockFrom);
+
+      const result = await fetchSystemHealth();
+
+      expect(result.database.status).toBe('degraded');
+    });
+  });
+
+  describe('fetchPerformanceMetrics', () => {
+    it('should fetch and aggregate performance metrics', async () => {
+      const mockMetrics = [
+        { metric_type: 'page_load_time', metric_value: 1000 },
+        { metric_type: 'page_load_time', metric_value: 1500 },
+        { metric_type: 'page_load_time', metric_value: 2000 },
+        { metric_type: 'api_response_time', metric_value: 100 },
+        { metric_type: 'api_response_time', metric_value: 150 },
+        { metric_type: 'database_query_time', metric_value: 50 },
+        { metric_type: 'error_rate', metric_value: 0.2 },
+        { metric_type: 'cache_hit_rate', metric_value: 85 },
+      ];
+
+      const mockFrom = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        lte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      };
+
+      (supabase.from as jest.Mock).mockReturnValue(mockFrom);
+
+      const result = await fetchPerformanceMetrics(24);
+
+      expect(result).toHaveProperty('pageLoadTime');
+      expect(result).toHaveProperty('apiResponseTime');
+      expect(result).toHaveProperty('databaseQueryTime');
+      expect(result).toHaveProperty('errorRate');
+      expect(result).toHaveProperty('cacheHitRate');
+      expect(result.pageLoadTime.avg).toBeGreaterThan(0);
+      expect(result.pageLoadTime.p95).toBeGreaterThan(0);
+    });
+
+    it('should calculate percentiles correctly', async () => {
+      const mockMetrics = Array.from({ length: 100 }, (_, i) => ({
+        metric_type: 'page_load_time',
+        metric_value: i * 10, // 0, 10, 20, ..., 990
+      }));
+
+      const mockFrom = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        lte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      };
+
+      (supabase.from as jest.Mock).mockReturnValue(mockFrom);
+
+      const result = await fetchPerformanceMetrics();
+
+      expect(result.pageLoadTime.p95).toBeGreaterThan(result.pageLoadTime.avg);
+      expect(result.pageLoadTime.p99).toBeGreaterThan(result.pageLoadTime.p95);
+    });
+  });
+
+  describe('clearCache', () => {
+    it('should clear cache and log action', async () => {
+      (supabase.rpc as jest.Mock).mockResolvedValue({ error: null });
+
+      // Mock caches API
+      const mockCaches = {
+        keys: jest.fn().mockResolvedValue(['cache1', 'cache2']),
+        delete: jest.fn().mockResolvedValue(true),
+      };
+      global.caches = mockCaches as any;
+
+      // Mock localStorage
+      const mockLocalStorage = {
+        getItem: jest.fn(),
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+        clear: jest.fn(),
+        key: jest.fn(),
+        length: 0,
+      };
+      Object.defineProperty(window, 'localStorage', {
+        value: mockLocalStorage,
+        writable: true,
+      });
+      Object.keys = jest.fn().mockReturnValue(['cache_test', 'audio_cache_test', 'other_key']);
+
+      await clearCache();
+
+      expect(supabase.rpc).toHaveBeenCalledWith('log_admin_action', {
+        p_action_type: 'cache_cleared',
+        p_target_resource_type: 'system',
+        p_target_resource_id: null,
+        p_old_value: null,
+        p_new_value: expect.objectContaining({
+          timestamp: expect.any(String),
+        }),
+      });
+    });
+
+    it('should handle logging errors', async () => {
+      (supabase.rpc as jest.Mock).mockResolvedValue({
+        error: { message: 'Logging failed' },
+      });
+
+      // Mock caches API
+      const mockCaches = {
+        keys: jest.fn().mockResolvedValue([]),
+        delete: jest.fn().mockResolvedValue(true),
+      };
+      global.caches = mockCaches as unknown;
+
+      try {
+        await clearCache();
+        fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AdminError);
+        expect((error as AdminError).message).toContain('Failed to log cache clear action');
+      }
+    });
+  });
+
+  describe('fetchSlowQueries', () => {
+    it('should fetch and aggregate slow queries', async () => {
+      const mockMetrics = [
+        {
+          metadata: {
+            query: 'SELECT * FROM users',
+            duration: 1500,
+          },
+        },
+        {
+          metadata: {
+            query: 'SELECT * FROM users',
+            duration: 2000,
+          },
+        },
+        {
+          metadata: {
+            query: 'SELECT * FROM posts',
+            duration: 1200,
+          },
+        },
+      ];
+
+      (supabase.from as jest.Mock).mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        gt: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      });
+
+      const result = await fetchSlowQueries();
+
+      expect(result).toHaveLength(2); // Two unique queries
+      expect(result[0]).toHaveProperty('query');
+      expect(result[0]).toHaveProperty('avgDuration');
+      expect(result[0]).toHaveProperty('executionCount');
+      expect(result[0]).toHaveProperty('recommendation');
+    });
+
+    it('should provide recommendations for SELECT * queries', async () => {
+      const mockMetrics = [
+        {
+          metadata: {
+            query: 'SELECT * FROM users WHERE id = 1',
+            duration: 1500,
+          },
+        },
+      ];
+
+      (supabase.from as jest.Mock).mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        gt: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      });
+
+      const result = await fetchSlowQueries();
+
+      expect(result[0].recommendation).toContain('SELECT *');
+    });
+  });
+
+  describe('fetchErrorLogs', () => {
+    it('should fetch and aggregate error logs', async () => {
+      const mockMetrics = [
+        {
+          metadata: { error_message: 'Connection timeout' },
+          recorded_at: '2024-01-01T00:00:00Z',
+        },
+        {
+          metadata: { error_message: 'Connection timeout' },
+          recorded_at: '2024-01-01T01:00:00Z',
+        },
+        {
+          metadata: { error_message: 'Invalid input' },
+          recorded_at: '2024-01-01T02:00:00Z',
+        },
+      ];
+
+      (supabase.from as jest.Mock).mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      });
+
+      const result = await fetchErrorLogs(50);
+
+      expect(result).toHaveLength(2); // Two unique error messages
+      expect(result[0]).toHaveProperty('message');
+      expect(result[0]).toHaveProperty('count');
+      expect(result[0]).toHaveProperty('lastOccurrence');
+      expect(result[0]).toHaveProperty('severity');
+    });
+
+    it('should determine severity based on count', async () => {
+      const mockMetrics = Array.from({ length: 150 }, (_, i) => ({
+        metadata: { error_message: 'Critical error' },
+        recorded_at: `2024-01-01T${String(i % 24).padStart(2, '0')}:00:00Z`,
+      }));
+
+      (supabase.from as jest.Mock).mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: mockMetrics,
+          error: null,
+        }),
+      });
+
+      const result = await fetchErrorLogs();
+
+      expect(result[0].severity).toBe('critical'); // > 100 occurrences
+    });
+  });
+
+  describe('recordSystemMetric', () => {
+    it('should record system metric', async () => {
+      (supabase.rpc as jest.Mock).mockResolvedValue({ error: null });
+
+      await recordSystemMetric(
+        'page_load_time',
+        1500,
+        'ms',
+        { page: '/dashboard' }
+      );
+
+      expect(supabase.rpc).toHaveBeenCalledWith('record_system_metric', {
+        p_metric_type: 'page_load_time',
+        p_metric_value: 1500,
+        p_metric_unit: 'ms',
+        p_metadata: { page: '/dashboard' },
+      });
+    });
+
+    it('should handle recording errors', async () => {
+      (supabase.rpc as jest.Mock).mockResolvedValue({
+        error: { message: 'Recording failed' },
+      });
+
+      try {
+        await recordSystemMetric('page_load_time', 1500, 'ms');
+        fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AdminError);
+        expect((error as AdminError).message).toContain('Failed to record system metric');
+      }
+    });
+  });
+});

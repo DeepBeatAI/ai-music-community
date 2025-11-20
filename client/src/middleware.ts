@@ -30,8 +30,10 @@ const routeProtection: Record<string, RouteProtection> = {
   '/notifications': { requiresAuth: true },
   '/playlists': { requiresAuth: true },
   
-  // Admin-only routes (future)
+  // Admin-only routes
   '/admin': { requiresAuth: true, requiresAdmin: true },
+  '/analytics': { requiresAuth: true, requiresAdmin: true },
+  '/test-audio-compression': { requiresAuth: true, requiresAdmin: true },
   
   // Moderator routes (future)
   '/moderation': { requiresAuth: true, requiresModerator: true },
@@ -106,7 +108,8 @@ export async function middleware(request: NextRequest) {
         if (!isAdmin) {
           console.log('Middleware: Admin access required, redirecting to home');
           const url = new URL('/', request.url);
-          url.searchParams.set('error', 'admin_required');
+          url.searchParams.set('error', 'unauthorized');
+          url.searchParams.set('message', 'You do not have permission to access this page. Admin access required.');
           return NextResponse.redirect(url);
         }
       }
@@ -118,7 +121,8 @@ export async function middleware(request: NextRequest) {
         if (!isModerator && !isAdmin) {
           console.log('Middleware: Moderator access required, redirecting to home');
           const url = new URL('/', request.url);
-          url.searchParams.set('error', 'moderator_required');
+          url.searchParams.set('error', 'unauthorized');
+          url.searchParams.set('message', 'You do not have permission to access this page. Moderator access required.');
           return NextResponse.redirect(url);
         }
       }
@@ -130,7 +134,8 @@ export async function middleware(request: NextRequest) {
         if (!isTester && !isAdmin) {
           console.log('Middleware: Tester access required, redirecting to home');
           const url = new URL('/', request.url);
-          url.searchParams.set('error', 'tester_required');
+          url.searchParams.set('error', 'unauthorized');
+          url.searchParams.set('message', 'You do not have permission to access this page. Tester access required.');
           return NextResponse.redirect(url);
         }
       }

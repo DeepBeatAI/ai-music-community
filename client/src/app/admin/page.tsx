@@ -104,8 +104,17 @@ export default function AdminDashboard() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-6">
+            {/* Home Button */}
+            <button
+              onClick={() => router.push('/')}
+              className="mb-4 flex items-center space-x-2 text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              <span>←</span>
+              <span>Home</span>
+            </button>
+            
             <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-gray-700">
               Manage users, platform settings, security, and analytics
             </p>
           </div>
@@ -122,7 +131,7 @@ export default function AdminDashboard() {
                   ${
                     activeTab === tab.id
                       ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      : 'border-transparent text-gray-700 hover:text-gray-900 hover:border-gray-300'
                   }
                 `}
               >
@@ -140,35 +149,35 @@ export default function AdminDashboard() {
         <Suspense fallback={<TabLoadingFallback />}>
           {activeTab === 'users' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">User Management</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">User Management</h2>
               <UserManagementTab />
             </div>
           )}
 
           {activeTab === 'platform' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Platform Administration</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Platform Administration</h2>
               <PlatformAdminTab />
             </div>
           )}
 
           {activeTab === 'security' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Security</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Security</h2>
               <SecurityTab />
             </div>
           )}
 
           {activeTab === 'performance' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Performance & System Health</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Performance & System Health</h2>
               <PerformanceHealthTab />
             </div>
           )}
 
           {activeTab === 'analytics' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Analytics</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Analytics</h2>
               <AnalyticsTab />
             </div>
           )}

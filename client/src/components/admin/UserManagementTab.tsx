@@ -123,35 +123,37 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
 
           {/* Account Info */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Account Info</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Account Info</h3>
             <div className="space-y-2 text-sm">
-              <p>
-                <span className="font-medium">Email:</span> {user.email}
+              <p className="text-gray-900">
+                <span className="font-medium text-gray-900">Email:</span> {user.email}
               </p>
-              <div className="flex items-center space-x-2">
-                <span className="font-medium">Plan Tier:</span>
-                <select
-                  value={planTier}
-                  onChange={(e) => setPlanTier(e.target.value)}
-                  className="border border-gray-300 rounded px-2 py-1"
-                  disabled={loading}
-                >
-                  <option value="free_user">Free User</option>
-                  <option value="creator_pro">Creator Pro</option>
-                  <option value="creator_premium">Creator Premium</option>
-                </select>
-                {planTier !== user.plan_tier && (
-                  <button
-                    onClick={handleSavePlanTier}
+              {!user.roles.includes('admin') && (
+                <div className="flex items-center space-x-2">
+                  <span className="font-medium text-gray-900">Plan Tier:</span>
+                  <select
+                    value={planTier}
+                    onChange={(e) => setPlanTier(e.target.value)}
+                    className="border border-gray-300 rounded px-2 py-1 text-gray-900"
                     disabled={loading}
-                    className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
                   >
-                    Save
-                  </button>
-                )}
-              </div>
+                    <option value="free_user">Free User</option>
+                    <option value="creator_pro">Creator Pro</option>
+                    <option value="creator_premium">Creator Premium</option>
+                  </select>
+                  {planTier !== user.plan_tier && (
+                    <button
+                      onClick={handleSavePlanTier}
+                      disabled={loading}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              )}
               <div>
-                <span className="font-medium">Roles:</span>
+                <span className="font-medium text-gray-900">Roles:</span>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {['moderator', 'tester'].map((role) => (
                     <label key={role} className="flex items-center space-x-1">
@@ -162,13 +164,13 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
                         disabled={loading}
                         className="rounded"
                       />
-                      <span className="text-sm capitalize">{role}</span>
+                      <span className="text-sm text-gray-900 capitalize">{role}</span>
                     </label>
                   ))}
                 </div>
               </div>
               <p>
-                <span className="font-medium">Status:</span>{' '}
+                <span className="font-medium text-gray-900">Status:</span>{' '}
                 <span className={user.is_suspended ? 'text-red-600' : 'text-green-600'}>
                   {user.is_suspended ? 'Suspended' : 'Active'}
                 </span>
@@ -178,39 +180,39 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
 
           {/* Activity Summary */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Activity (Last 30 Days)</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Activity (Last 30 Days)</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-gray-600">Posts</p>
-                <p className="text-2xl font-bold">{user.activity_summary.posts_count}</p>
+                <p className="text-gray-700">Posts</p>
+                <p className="text-2xl font-bold text-gray-900">{user.activity_summary.posts_count}</p>
               </div>
               <div>
-                <p className="text-gray-600">Tracks</p>
-                <p className="text-2xl font-bold">{user.activity_summary.tracks_count}</p>
+                <p className="text-gray-700">Tracks</p>
+                <p className="text-2xl font-bold text-gray-900">{user.activity_summary.tracks_count}</p>
               </div>
               <div>
-                <p className="text-gray-600">Albums</p>
-                <p className="text-2xl font-bold">{user.activity_summary.albums_count}</p>
+                <p className="text-gray-700">Albums</p>
+                <p className="text-2xl font-bold text-gray-900">{user.activity_summary.albums_count}</p>
               </div>
               <div>
-                <p className="text-gray-600">Playlists</p>
-                <p className="text-2xl font-bold">{user.activity_summary.playlists_count}</p>
+                <p className="text-gray-700">Playlists</p>
+                <p className="text-2xl font-bold text-gray-900">{user.activity_summary.playlists_count}</p>
               </div>
               <div>
-                <p className="text-gray-600">Comments</p>
-                <p className="text-2xl font-bold">{user.activity_summary.comments_count}</p>
+                <p className="text-gray-700">Comments</p>
+                <p className="text-2xl font-bold text-gray-900">{user.activity_summary.comments_count}</p>
               </div>
               <div>
-                <p className="text-gray-600">Likes Given</p>
-                <p className="text-2xl font-bold">{user.activity_summary.likes_given}</p>
+                <p className="text-gray-700">Likes Given</p>
+                <p className="text-2xl font-bold text-gray-900">{user.activity_summary.likes_given}</p>
               </div>
               <div>
-                <p className="text-gray-600">Likes Received</p>
-                <p className="text-2xl font-bold">{user.activity_summary.likes_received}</p>
+                <p className="text-gray-700">Likes Received</p>
+                <p className="text-2xl font-bold text-gray-900">{user.activity_summary.likes_received}</p>
               </div>
               <div>
-                <p className="text-gray-600">Last Active</p>
-                <p className="text-sm font-medium">
+                <p className="text-gray-700">Last Active</p>
+                <p className="text-sm font-medium text-gray-900">
                   {new Date(user.activity_summary.last_active).toLocaleDateString()}
                 </p>
               </div>
@@ -219,7 +221,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
 
           {/* Admin Actions */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Admin Actions</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Admin Actions</h3>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={handleResetPassword}
@@ -228,7 +230,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
               >
                 Reset Password
               </button>
-              {!user.is_suspended && (
+              {!user.is_suspended && !user.roles.includes('admin') && (
                 <button
                   onClick={handleSuspend}
                   disabled={loading}
@@ -245,7 +247,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
         <div className="flex justify-end space-x-2 p-6 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-900"
           >
             Close
           </button>
@@ -339,7 +341,7 @@ export function UserManagementTab() {
         <select
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
         >
           <option value="all">All Plans</option>
           <option value="free_user">Free User</option>
@@ -349,7 +351,7 @@ export function UserManagementTab() {
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
         >
           <option value="all">All Roles</option>
           <option value="none">No Roles</option>
@@ -372,19 +374,19 @@ export function UserManagementTab() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Username
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Plan Tier
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Roles
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -392,13 +394,13 @@ export function UserManagementTab() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading && page === 1 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
                     Loading users...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
                     No users found
                   </td>
                 </tr>
@@ -409,15 +411,21 @@ export function UserManagementTab() {
                       <div className="text-sm font-medium text-gray-900">{user.username}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{user.email}</div>
+                      <div className="text-sm text-gray-700">{user.email}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {user.plan_tier.replace('_', ' ')}
-                      </span>
+                      {user.roles.includes('admin') ? (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                          Admin
+                        </span>
+                      ) : (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                          {user.plan_tier.replace('_', ' ')}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-gray-700">
                         {user.roles.length > 0 ? user.roles.join(', ') : '-'}
                       </div>
                     </td>
@@ -449,7 +457,7 @@ export function UserManagementTab() {
         )}
 
         {loading && page > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 text-center text-gray-500">
+          <div className="px-6 py-4 border-t border-gray-200 text-center text-gray-700">
             Loading more users...
           </div>
         )}

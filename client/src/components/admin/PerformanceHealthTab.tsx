@@ -85,7 +85,7 @@ export function PerformanceHealthTab() {
     return (
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading system health data...</p>
+        <p className="text-gray-700">Loading system health data...</p>
       </div>
     );
   }
@@ -100,7 +100,7 @@ export function PerformanceHealthTab() {
 
   if (!systemHealth) {
     return (
-      <div className="text-center py-8 text-gray-500">No system health data available</div>
+      <div className="text-center py-8 text-gray-700">No system health data available</div>
     );
   }
 
@@ -109,7 +109,7 @@ export function PerformanceHealthTab() {
       {/* System Health Overview */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">System Health Overview</h3>
+          <h3 className="text-lg font-semibold text-gray-900">System Health Overview</h3>
           <button
             onClick={loadData}
             className="text-blue-600 hover:text-blue-800 text-sm"
@@ -127,7 +127,7 @@ export function PerformanceHealthTab() {
                 Database
               </span>
             </div>
-            <div className="text-sm text-gray-600 space-y-1">
+            <div className="text-sm text-gray-700 space-y-1">
               <p>Connections: {systemHealth.database.connection_count}</p>
               <p>Avg Query Time: {systemHealth.database.avg_query_time}ms</p>
               <p>Slow Queries: {systemHealth.database.slow_queries}</p>
@@ -138,9 +138,9 @@ export function PerformanceHealthTab() {
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center space-x-2 mb-2">
               <span>💾</span>
-              <span className="font-medium">Storage</span>
+              <span className="font-medium text-gray-900">Storage</span>
             </div>
-            <div className="text-sm text-gray-600 space-y-1">
+            <div className="text-sm text-gray-700 space-y-1">
               <p>
                 Used: {systemHealth.storage.used_capacity_gb.toFixed(2)} GB /{' '}
                 {systemHealth.storage.total_capacity_gb.toFixed(2)} GB
@@ -159,9 +159,9 @@ export function PerformanceHealthTab() {
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center space-x-2 mb-2">
               <span>{getStatusIcon(systemHealth.api_health.supabase)}</span>
-              <span className="font-medium">API Services</span>
+              <span className="font-medium text-gray-900">API Services</span>
             </div>
-            <div className="text-sm text-gray-600 space-y-1">
+            <div className="text-sm text-gray-700 space-y-1">
               <p>
                 Supabase:{' '}
                 <span className={getStatusColor(systemHealth.api_health.supabase)}>
@@ -181,9 +181,9 @@ export function PerformanceHealthTab() {
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center space-x-2 mb-2">
               <span>{getStatusIcon(systemHealth.error_rate.status)}</span>
-              <span className="font-medium">Error Rate</span>
+              <span className="font-medium text-gray-900">Error Rate</span>
             </div>
-            <div className="text-sm text-gray-600 space-y-1">
+            <div className="text-sm text-gray-700 space-y-1">
               <p>Current: {(systemHealth.error_rate.current_rate * 100).toFixed(2)}%</p>
               <p>Threshold: {(systemHealth.error_rate.threshold * 100).toFixed(2)}%</p>
               <p>
@@ -199,9 +199,9 @@ export function PerformanceHealthTab() {
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center space-x-2 mb-2">
               <span>⏱️</span>
-              <span className="font-medium">Uptime</span>
+              <span className="font-medium text-gray-900">Uptime</span>
             </div>
-            <div className="text-sm text-gray-600 space-y-1">
+            <div className="text-sm text-gray-700 space-y-1">
               <p>Percentage: {systemHealth.uptime.percentage.toFixed(2)}%</p>
               {systemHealth.uptime.last_downtime && (
                 <p>
@@ -216,9 +216,9 @@ export function PerformanceHealthTab() {
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center space-x-2 mb-2">
               <span>🗄️</span>
-              <span className="font-medium">Cache</span>
+              <span className="font-medium text-gray-900">Cache</span>
             </div>
-            <div className="text-sm text-gray-600 space-y-2">
+            <div className="text-sm text-gray-700 space-y-2">
               <p>Manage application caches</p>
               <button
                 onClick={handleClearCache}
@@ -233,10 +233,10 @@ export function PerformanceHealthTab() {
 
       {/* Performance Metrics */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold mb-4">Recent Performance Metrics</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Performance Metrics</h3>
 
         {metrics.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No metrics available</p>
+          <p className="text-gray-700 text-center py-4">No metrics available</p>
         ) : (
           <div className="space-y-4">
             {/* Group metrics by type */}
@@ -252,23 +252,23 @@ export function PerformanceHealthTab() {
                 return (
                   <div key={metricType} className="p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium capitalize">
+                      <span className="font-medium text-gray-900 capitalize">
                         {metricType.replace(/_/g, ' ')}
                       </span>
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-gray-700">
                         {typeMetrics.length} samples
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <p className="text-gray-600">Latest</p>
-                        <p className="text-xl font-bold">
+                        <p className="text-gray-700">Latest</p>
+                        <p className="text-xl font-bold text-gray-900">
                           {latestMetric.metric_value.toFixed(2)} {latestMetric.metric_unit}
                         </p>
                       </div>
                       <div>
-                        <p className="text-gray-600">Average</p>
-                        <p className="text-xl font-bold">
+                        <p className="text-gray-700">Average</p>
+                        <p className="text-xl font-bold text-gray-900">
                           {avgValue.toFixed(2)} {latestMetric.metric_unit}
                         </p>
                       </div>
@@ -282,7 +282,7 @@ export function PerformanceHealthTab() {
       </div>
 
       {/* Auto-refresh indicator */}
-      <div className="text-center text-sm text-gray-500">
+      <div className="text-center text-sm text-gray-700">
         Auto-refreshing every 30 seconds
       </div>
     </div>

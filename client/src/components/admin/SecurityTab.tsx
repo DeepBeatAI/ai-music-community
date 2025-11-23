@@ -138,7 +138,7 @@ export function SecurityTab() {
           className={`px-4 py-2 font-medium border-b-2 transition-colors ${
             activeView === 'events'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              : 'border-transparent text-gray-700 hover:text-gray-900'
           }`}
         >
           Security Events
@@ -148,7 +148,7 @@ export function SecurityTab() {
           className={`px-4 py-2 font-medium border-b-2 transition-colors ${
             activeView === 'audit'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              : 'border-transparent text-gray-700 hover:text-gray-900'
           }`}
         >
           Audit Logs
@@ -158,7 +158,7 @@ export function SecurityTab() {
           className={`px-4 py-2 font-medium border-b-2 transition-colors ${
             activeView === 'sessions'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              : 'border-transparent text-gray-700 hover:text-gray-900'
           }`}
         >
           Active Sessions
@@ -180,7 +180,7 @@ export function SecurityTab() {
             <select
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg"
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
             >
               <option value="all">All Severities</option>
               <option value="critical">Critical</option>
@@ -191,7 +191,7 @@ export function SecurityTab() {
             <select
               value={resolvedFilter}
               onChange={(e) => setResolvedFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg"
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
             >
               <option value="all">All Events</option>
               <option value="unresolved">Unresolved Only</option>
@@ -202,9 +202,9 @@ export function SecurityTab() {
           {/* Events List */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             {loading ? (
-              <div className="p-8 text-center text-gray-500">Loading security events...</div>
+              <div className="p-8 text-center text-gray-700">Loading security events...</div>
             ) : securityEvents.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No security events found</div>
+              <div className="p-8 text-center text-gray-700">No security events found</div>
             ) : (
               <div className="divide-y divide-gray-200">
                 {securityEvents.map((event) => (
@@ -220,14 +220,14 @@ export function SecurityTab() {
                           >
                             {event.severity.toUpperCase()}
                           </span>
-                          <span className="font-medium">{event.event_type}</span>
+                          <span className="font-medium text-gray-900">{event.event_type}</span>
                           {event.resolved && (
                             <span className="px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-800">
                               RESOLVED
                             </span>
                           )}
                         </div>
-                        <div className="text-sm text-gray-600 space-y-1">
+                        <div className="text-sm text-gray-700 space-y-1">
                           {event.user_id && <p>User ID: {event.user_id}</p>}
                           {event.ip_address && <p>IP: {event.ip_address}</p>}
                           {event.details && (
@@ -235,7 +235,7 @@ export function SecurityTab() {
                               {JSON.stringify(event.details, null, 2)}
                             </pre>
                           )}
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-gray-600">
                             {new Date(event.created_at).toLocaleString()}
                           </p>
                         </div>
@@ -261,27 +261,27 @@ export function SecurityTab() {
       {activeView === 'audit' && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-gray-500">Loading audit logs...</div>
+            <div className="p-8 text-center text-gray-700">Loading audit logs...</div>
           ) : auditLogs.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No audit logs found</div>
+            <div className="p-8 text-center text-gray-700">No audit logs found</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Time
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Admin
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Action
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Resource
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Details
                     </th>
                   </tr>
@@ -289,7 +289,7 @@ export function SecurityTab() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {auditLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {new Date(log.created_at).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -298,11 +298,11 @@ export function SecurityTab() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {log.action_type}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {log.target_resource_type}
                         {log.target_resource_id && `: ${log.target_resource_id.substring(0, 8)}...`}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
+                      <td className="px-6 py-4 text-sm text-gray-700">
                         {log.new_value && (
                           <details className="cursor-pointer">
                             <summary className="text-blue-600 hover:text-blue-800">
@@ -327,27 +327,27 @@ export function SecurityTab() {
       {activeView === 'sessions' && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-gray-500">Loading active sessions...</div>
+            <div className="p-8 text-center text-gray-700">Loading active sessions...</div>
           ) : sessions.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No active sessions found</div>
+            <div className="p-8 text-center text-gray-700">No active sessions found</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       User ID
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       IP Address
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Last Activity
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Expires
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Actions
                     </th>
                   </tr>
@@ -358,13 +358,13 @@ export function SecurityTab() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {session.user_id.substring(0, 8)}...
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {session.ip_address || 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {new Date(session.last_activity).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {new Date(session.expires_at).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">

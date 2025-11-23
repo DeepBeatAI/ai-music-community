@@ -88,7 +88,7 @@ export async function middleware(request: NextRequest) {
     if (protection.requiresAuth && !session) {
       console.log('Middleware: No session found, redirecting to /login');
       const url = new URL('/login', request.url);
-      url.searchParams.set('redirectedFrom', pathname);
+      // Don't include redirect path in URL for security
       return NextResponse.redirect(url);
     }
 
@@ -108,8 +108,7 @@ export async function middleware(request: NextRequest) {
         if (!isAdmin) {
           console.log('Middleware: Admin access required, redirecting to home');
           const url = new URL('/', request.url);
-          url.searchParams.set('error', 'unauthorized');
-          url.searchParams.set('message', 'You do not have permission to access this page. Admin access required.');
+          // Don't include error details in URL for security
           return NextResponse.redirect(url);
         }
       }
@@ -121,8 +120,7 @@ export async function middleware(request: NextRequest) {
         if (!isModerator && !isAdmin) {
           console.log('Middleware: Moderator access required, redirecting to home');
           const url = new URL('/', request.url);
-          url.searchParams.set('error', 'unauthorized');
-          url.searchParams.set('message', 'You do not have permission to access this page. Moderator access required.');
+          // Don't include error details in URL for security
           return NextResponse.redirect(url);
         }
       }
@@ -134,8 +132,7 @@ export async function middleware(request: NextRequest) {
         if (!isTester && !isAdmin) {
           console.log('Middleware: Tester access required, redirecting to home');
           const url = new URL('/', request.url);
-          url.searchParams.set('error', 'unauthorized');
-          url.searchParams.set('message', 'You do not have permission to access this page. Tester access required.');
+          // Don't include error details in URL for security
           return NextResponse.redirect(url);
         }
       }

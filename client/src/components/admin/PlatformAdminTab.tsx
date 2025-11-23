@@ -75,7 +75,7 @@ export function PlatformAdminTab() {
     return (
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading platform configuration...</p>
+        <p className="text-gray-700">Loading platform configuration...</p>
       </div>
     );
   }
@@ -92,17 +92,17 @@ export function PlatformAdminTab() {
     <div className="space-y-8">
       {/* Feature Flags */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Feature Flags</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Feature Flags</h3>
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {featureFlags.length === 0 ? (
-            <div className="p-4 text-gray-500 text-center">No feature flags configured</div>
+            <div className="p-4 text-gray-700 text-center">No feature flags configured</div>
           ) : (
             featureFlags.map((config) => (
               <div key={config.id} className="p-4 flex items-center justify-between">
                 <div className="flex-1">
-                  <div className="font-medium">{config.config_key}</div>
+                  <div className="font-medium text-gray-900">{config.config_key}</div>
                   {config.description && (
-                    <div className="text-sm text-gray-500">{config.description}</div>
+                    <div className="text-sm text-gray-700">{config.description}</div>
                   )}
                 </div>
                 <label className="flex items-center space-x-2">
@@ -129,15 +129,15 @@ export function PlatformAdminTab() {
 
       {/* Upload Limits */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Upload Limits by Plan Tier</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Limits by Plan Tier</h3>
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {uploadLimits.length === 0 ? (
-            <div className="p-4 text-gray-500 text-center">No upload limits configured</div>
+            <div className="p-4 text-gray-700 text-center">No upload limits configured</div>
           ) : (
             uploadLimits.map((config) => (
               <div key={config.id} className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium">{config.config_key}</div>
+                  <div className="font-medium text-gray-900">{config.config_key}</div>
                   <button
                     onClick={() => handleEdit(config)}
                     className="text-blue-600 hover:text-blue-800 text-sm"
@@ -183,15 +183,15 @@ export function PlatformAdminTab() {
 
       {/* Rate Limiting */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Rate Limiting</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Rate Limiting</h3>
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {rateLimits.length === 0 ? (
-            <div className="p-4 text-gray-500 text-center">No rate limits configured</div>
+            <div className="p-4 text-gray-700 text-center">No rate limits configured</div>
           ) : (
             rateLimits.map((config) => (
               <div key={config.id} className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium">{config.config_key}</div>
+                  <div className="font-medium text-gray-900">{config.config_key}</div>
                   <button
                     onClick={() => handleEdit(config)}
                     className="text-blue-600 hover:text-blue-800 text-sm"
@@ -237,15 +237,15 @@ export function PlatformAdminTab() {
 
       {/* Email Templates */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Email Templates</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Email Templates</h3>
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {emailTemplates.length === 0 ? (
-            <div className="p-4 text-gray-500 text-center">No email templates configured</div>
+            <div className="p-4 text-gray-700 text-center">No email templates configured</div>
           ) : (
             emailTemplates.map((config) => (
               <div key={config.id} className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium">{config.config_key}</div>
+                  <div className="font-medium text-gray-900">{config.config_key}</div>
                   <button
                     onClick={() => handleEdit(config)}
                     className="text-blue-600 hover:text-blue-800 text-sm"
@@ -277,9 +277,9 @@ export function PlatformAdminTab() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-700">
                     {config.description && (
-                      <p className="mb-2 text-gray-500">{config.description}</p>
+                      <p className="mb-2 text-gray-700">{config.description}</p>
                     )}
                     <pre className="bg-gray-50 p-2 rounded overflow-x-auto text-xs">
                       {JSON.stringify(config.config_value, null, 2)}
@@ -295,12 +295,12 @@ export function PlatformAdminTab() {
       {/* System Settings */}
       {systemSettings.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-4">System Settings</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">System Settings</h3>
           <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
             {systemSettings.map((config) => (
               <div key={config.id} className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium">{config.config_key}</div>
+                  <div className="font-medium text-gray-900">{config.config_key}</div>
                   <button
                     onClick={() => handleEdit(config)}
                     className="text-blue-600 hover:text-blue-800 text-sm"
@@ -332,9 +332,9 @@ export function PlatformAdminTab() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-700">
                     {config.description && (
-                      <p className="mb-2 text-gray-500">{config.description}</p>
+                      <p className="mb-2 text-gray-700">{config.description}</p>
                     )}
                     <pre className="bg-gray-50 p-2 rounded overflow-x-auto">
                       {JSON.stringify(config.config_value, null, 2)}

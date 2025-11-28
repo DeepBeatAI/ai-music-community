@@ -1,11 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAdmin } from '@/contexts/AdminContext';
 import { serverAudioCompressor, CompressionOptions } from '@/utils/serverAudioCompression';
 
 export default function TestAudioCompressionPage() {
+  const router = useRouter();
+  const { isAdmin, loading } = useAdmin();
   const [results, setResults] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect non-admin users to home page
+  useEffect(() => {
+    if (!loading && !isAdmin) {
+      router.push('/');
+    }
+  }, [isAdmin, loading, router]);
+
+  // Show loading state while checking admin status
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render the page content if not admin
+  if (!isAdmin) {
+    return null;
+  }
 
   const runCompressionTest = async () => {
     setIsLoading(true);

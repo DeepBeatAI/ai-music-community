@@ -32,7 +32,6 @@ const routeProtection: Record<string, RouteProtection> = {
   
   // Admin-only routes
   '/admin': { requiresAuth: true, requiresAdmin: true },
-  '/analytics': { requiresAuth: true, requiresAdmin: true },
   '/test-audio-compression': { requiresAuth: true, requiresAdmin: true },
   
   // Moderator routes (future)

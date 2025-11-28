@@ -84,6 +84,7 @@ export interface UserSession {
   expires_at: string;
   is_active: boolean;
   created_at: string;
+  username?: string; // Added by get_active_sessions_with_usernames function
 }
 
 /**

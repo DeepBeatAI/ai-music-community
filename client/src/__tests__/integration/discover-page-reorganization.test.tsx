@@ -159,54 +159,21 @@ describe('Discover Page Reorganization - Integration Tests', () => {
     });
   });
 
-  describe('Task 11: Analytics Page', () => {
+  describe.skip('Task 11: Analytics Page (Removed - now part of Admin Dashboard)', () => {
     it('should not display TrendingSection component', async () => {
-      const AnalyticsPage = (await import('@/app/analytics/page')).default;
-      render(<AnalyticsPage />);
-
-      await waitFor(() => {
-        // TrendingSection should not be present
-        const trendingHeadings = screen.queryAllByRole('heading').filter(h =>
-          h.textContent?.includes('Trending This Week')
-        );
-        expect(trendingHeadings.length).toBe(0);
-      }, { timeout: 3000 });
+      // Analytics page removed - functionality moved to Admin Dashboard
     });
 
     it('should display MetricsGrid component', async () => {
-      const AnalyticsPage = (await import('@/app/analytics/page')).default;
-      render(<AnalyticsPage />);
-
-      await waitFor(() => {
-        // Look for analytics-related content
-        const container = document.querySelector('[class*="analytics"]') || 
-                         document.querySelector('[class*="metrics"]');
-        expect(container || document.body).toBeInTheDocument();
-      }, { timeout: 3000 });
+      // Analytics page removed - functionality moved to Admin Dashboard
     });
 
     it('should display ActivityChart component', async () => {
-      const AnalyticsPage = (await import('@/app/analytics/page')).default;
-      render(<AnalyticsPage />);
-
-      await waitFor(() => {
-        // Chart or analytics content should be present
-        const hasContent = document.body.textContent && document.body.textContent.length > 0;
-        expect(hasContent).toBe(true);
-      }, { timeout: 3000 });
+      // Analytics page removed - functionality moved to Admin Dashboard
     });
 
     it('should not have critical render errors on load', async () => {
-      const AnalyticsPage = (await import('@/app/analytics/page')).default;
-      
-      // Should render without throwing
-      expect(() => {
-        render(<AnalyticsPage />);
-      }).not.toThrow();
-
-      await waitFor(() => {
-        expect(document.body).toBeInTheDocument();
-      }, { timeout: 3000 });
+      // Analytics page removed - functionality moved to Admin Dashboard
     });
   });
 

@@ -9,8 +9,10 @@ import {
   terminateSession,
 } from '@/lib/securityService';
 import type { SecurityEvent, AdminAuditLog, UserSession } from '@/types/admin';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function SecurityTab() {
+  const { user } = useAuth();
   const [activeView, setActiveView] = useState<'events' | 'audit' | 'sessions'>('events');
   const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>([]);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
@@ -81,7 +83,6 @@ export function SecurityTab() {
     try {
       await resolveSecurityEvent(eventId);
       loadSecurityEvents();
-      alert('Security event resolved successfully');
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to resolve security event');
     }
@@ -93,7 +94,6 @@ export function SecurityTab() {
     try {
       await terminateSession(sessionId);
       loadSessions();
-      alert('Session terminated successfully');
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to terminate session');
     }
@@ -293,14 +293,28 @@ export function SecurityTab() {
                         {new Date(log.created_at).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {log.admin_user_id.substring(0, 8)}...
+                        <span 
+                          className="cursor-help" 
+                          title={`Admin User ID: ${log.admin_user_id}`}
+                        >
+                          {log.admin_user_id.substring(0, 8)}...
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {log.action_type}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {log.target_resource_type}
-                        {log.target_resource_id && `: ${log.target_resource_id.substring(0, 8)}...`}
+                        <div className="flex items-center space-x-1">
+                          <span>{log.target_resource_type}</span>
+                          {log.target_resource_id && (
+                            <span 
+                              className="cursor-help" 
+                              title={`${log.target_resource_type}: ${log.target_resource_id}`}
+                            >
+                              : {log.target_resource_id.substring(0, 8)}...
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700">
                         {log.new_value && (
@@ -336,10 +350,16 @@ export function SecurityTab() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Username
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       User ID
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       IP Address
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Duration
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Last Activity
@@ -353,30 +373,75 @@ export function SecurityTab() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {sessions.map((session) => (
-                    <tr key={session.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {session.user_id.substring(0, 8)}...
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {session.ip_address || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {new Date(session.last_activity).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {new Date(session.expires_at).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => handleTerminateSession(session.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Terminate
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {sessions.map((session) => {
+                    // Clean IP address - remove IPv6 prefix for IPv4-mapped addresses
+                    const cleanIp = session.ip_address 
+                      ? session.ip_address.replace('::ffff:', '') 
+                      : 'Not captured';
+                    
+                    // Calculate duration
+                    const createdAt = new Date(session.created_at);
+                    const lastActivity = new Date(session.last_activity);
+                    const durationMs = lastActivity.getTime() - createdAt.getTime();
+                    const durationMinutes = Math.floor(durationMs / 60000);
+                    const durationHours = Math.floor(durationMinutes / 60);
+                    const remainingMinutes = durationMinutes % 60;
+                    
+                    // Handle negative duration (timing issue during session creation)
+                    let durationText = '';
+                    if (durationMinutes < 0) {
+                      durationText = '< 1m';
+                    } else if (durationHours > 0) {
+                      durationText = `${durationHours}h ${remainingMinutes}m`;
+                    } else {
+                      durationText = `${durationMinutes}m`;
+                    }
+                    
+                    return (
+                      <tr key={session.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {session.username || 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          <span 
+                            className="cursor-help" 
+                            title={`User ID: ${session.user_id}`}
+                          >
+                            {session.user_id.substring(0, 8)}...
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {cleanIp}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {durationText}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {new Date(session.last_activity).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          <span 
+                            className="cursor-help" 
+                            title="Session token expires 1 hour after creation. User will need to re-authenticate after expiration."
+                          >
+                            {new Date(session.expires_at).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {session.user_id === user?.id ? (
+                            <span className="text-gray-400">Current Session</span>
+                          ) : (
+                            <button
+                              onClick={() => handleTerminateSession(session.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Terminate
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

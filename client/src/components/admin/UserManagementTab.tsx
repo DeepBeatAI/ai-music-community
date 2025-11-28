@@ -7,6 +7,7 @@ import {
   updateUserPlanTier,
   updateUserRoles,
   suspendUser,
+  unsuspendUser,
   resetUserPassword,
 } from '@/lib/adminService';
 import type { AdminUserData } from '@/types/admin';
@@ -32,7 +33,6 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     try {
       await updateUserPlanTier(user.user_id, planTier);
       onUpdate();
-      alert('Plan tier updated successfully');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update plan tier');
     } finally {
@@ -54,7 +54,6 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
       await updateUserRoles(user.user_id, rolesToAdd, rolesToRemove);
       setRoles(newRoles);
       onUpdate();
-      alert('Roles updated successfully');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update roles');
     } finally {
@@ -74,10 +73,26 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     try {
       await suspendUser(user.user_id, reason);
       onUpdate();
-      alert('User suspended successfully');
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to suspend user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnsuspend = async () => {
+    if (!confirm(`Are you sure you want to unsuspend ${user.username}?`)) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await unsuspendUser(user.user_id);
+      onUpdate();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unsuspend user');
     } finally {
       setLoading(false);
     }
@@ -91,7 +106,6 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
 
     try {
       await resetUserPassword(user.user_id, user.email);
-      alert('Password reset email sent successfully');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset password');
     } finally {
@@ -127,6 +141,17 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
             <div className="space-y-2 text-sm">
               <p className="text-gray-900">
                 <span className="font-medium text-gray-900">Email:</span> {user.email}
+              </p>
+              <p className="text-gray-900">
+                <span className="font-medium text-gray-900">Registered:</span>{' '}
+                {new Date(user.created_at).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  timeZoneName: 'short'
+                })}
               </p>
               {!user.roles.includes('admin') && (
                 <div className="flex items-center space-x-2">
@@ -230,14 +255,24 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
               >
                 Reset Password
               </button>
-              {!user.is_suspended && !user.roles.includes('admin') && (
+              {user.is_suspended ? (
                 <button
-                  onClick={handleSuspend}
+                  onClick={handleUnsuspend}
                   disabled={loading}
-                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
                 >
-                  Suspend Account
+                  Unsuspend Account
                 </button>
+              ) : (
+                !user.roles.includes('admin') && (
+                  <button
+                    onClick={handleSuspend}
+                    disabled={loading}
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+                  >
+                    Suspend Account
+                  </button>
+                )
               )}
             </div>
           </div>
@@ -317,7 +352,10 @@ export function UserManagementTab() {
       user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesPlan = planFilter === 'all' || user.plan_tier === planFilter;
+    // When filtering by plan tier, exclude admin users (they don't have traditional plan tiers)
+    const matchesPlan = 
+      planFilter === 'all' || 
+      (!user.roles.includes('admin') && user.plan_tier === planFilter);
 
     const matchesRole =
       roleFilter === 'all' ||
@@ -329,15 +367,48 @@ export function UserManagementTab() {
 
   return (
     <div className="space-y-6">
+      {/* Users Count */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <p className="text-sm text-blue-900">
+          <span className="font-semibold">Total Users:</span> {filteredUsers.length}
+          {searchQuery || planFilter !== 'all' || roleFilter !== 'all' ? (
+            <span className="text-blue-700"> (filtered from {users.length} total)</span>
+          ) : null}
+        </p>
+      </div>
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
-        <input
-          type="text"
-          placeholder="Search by username or email..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            placeholder="Search by username or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Clear search"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
         <select
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value)}
@@ -381,6 +452,9 @@ export function UserManagementTab() {
                   Email
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Registered
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Plan Tier
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -394,13 +468,13 @@ export function UserManagementTab() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading && page === 1 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
+                  <td colSpan={6} className="px-6 py-4 text-center text-gray-700">
                     Loading users...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
+                  <td colSpan={6} className="px-6 py-4 text-center text-gray-700">
                     No users found
                   </td>
                 </tr>
@@ -412,6 +486,15 @@ export function UserManagementTab() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-700">{user.email}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-700">
+                        {new Date(user.created_at).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {user.roles.includes('admin') ? (

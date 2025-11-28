@@ -242,23 +242,34 @@ export async function fetchCurrentMetrics(): Promise<CurrentMetrics> {
 }
 
 /**
- * Fetch activity data over time (last 30 days)
+ * Fetch activity data over time
+ * @param days - Number of days to look back (defaults to 30, null for all time)
  */
-export async function fetchActivityData(): Promise<ActivityDataPoint[]> {
+export async function fetchActivityData(days: number | null = 30): Promise<ActivityDataPoint[]> {
   try {
-    // Calculate date 30 days ago
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const startDate = thirtyDaysAgo.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+    // Calculate start date based on days parameter
+    let startDate: string | null = null;
+    
+    if (days !== null) {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - days);
+      startDate = daysAgo.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+    }
 
-    console.log('Fetching activity data from:', startDate);
+    console.log('Fetching activity data from:', startDate || 'all time');
 
-    // Fetch activity data from daily_metrics table for last 30 days
-    const { data, error } = await supabase
+    // Fetch activity data from daily_metrics table
+    const query = supabase
       .from('daily_metrics')
       .select('*')
-      .gte('metric_date', startDate)
       .order('metric_date', { ascending: true });
+    
+    // Only add date filter if startDate is specified
+    if (startDate) {
+      query.gte('metric_date', startDate);
+    }
+    
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching activity data:', {

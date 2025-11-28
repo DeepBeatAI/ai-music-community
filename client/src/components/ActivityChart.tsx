@@ -33,6 +33,21 @@ export default function ActivityChart({ data }: ActivityChartProps) {
     );
   }
 
+  // Validate data points have valid numbers
+  const validData = data.filter(d => 
+    typeof d.users === 'number' && !isNaN(d.users) &&
+    typeof d.posts === 'number' && !isNaN(d.posts) &&
+    typeof d.comments === 'number' && !isNaN(d.comments)
+  );
+
+  if (validData.length === 0) {
+    return (
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center">
+        <p className="text-gray-400">No valid activity data available</p>
+      </div>
+    );
+  }
+
   // Calculate chart dimensions
   const width = 800;
   const height = 300;
@@ -41,17 +56,25 @@ export default function ActivityChart({ data }: ActivityChartProps) {
   const chartHeight = height - padding.top - padding.bottom;
 
   // Find max values for scaling
-  const maxUsers = Math.max(...data.map((d) => d.users), 1);
-  const maxPosts = Math.max(...data.map((d) => d.posts), 1);
-  const maxComments = Math.max(...data.map((d) => d.comments), 1);
+  const maxUsers = Math.max(...validData.map((d) => d.users), 1);
+  const maxPosts = Math.max(...validData.map((d) => d.posts), 1);
+  const maxComments = Math.max(...validData.map((d) => d.comments), 1);
   const maxValue = Math.max(maxUsers, maxPosts, maxComments);
 
   // Scale functions
-  const xScale = (index: number) => (index / (data.length - 1)) * chartWidth;
-  const yScale = (value: number) => chartHeight - (value / maxValue) * chartHeight;
+  const xScale = (index: number) => {
+    // Handle single data point case
+    if (validData.length === 1) return chartWidth / 2;
+    return (index / (validData.length - 1)) * chartWidth;
+  };
+  const yScale = (value: number) => {
+    // Handle zero max value case
+    if (maxValue === 0) return chartHeight;
+    return chartHeight - (value / maxValue) * chartHeight;
+  };
 
   // Generate path for users line
-  const usersPath = data
+  const usersPath = validData
     .map((d, i) => {
       const x = padding.left + xScale(i);
       const y = padding.top + yScale(d.users);
@@ -60,7 +83,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
     .join(' ');
 
   // Generate path for posts line
-  const postsPath = data
+  const postsPath = validData
     .map((d, i) => {
       const x = padding.left + xScale(i);
       const y = padding.top + yScale(d.posts);
@@ -69,7 +92,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
     .join(' ');
 
   // Generate path for comments line
-  const commentsPath = data
+  const commentsPath = validData
     .map((d, i) => {
       const x = padding.left + xScale(i);
       const y = padding.top + yScale(d.comments);
@@ -140,9 +163,9 @@ export default function ActivityChart({ data }: ActivityChartProps) {
           })}
 
           {/* X-axis labels */}
-          {data.map((d, i) => {
+          {validData.map((d, i) => {
             // Show every other label to avoid crowding
-            if (i % Math.ceil(data.length / 7) !== 0) return null;
+            if (i % Math.ceil(validData.length / 7) !== 0) return null;
             const x = padding.left + xScale(i);
             return (
               <text
@@ -189,7 +212,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
           />
 
           {/* Invisible hover areas for better interaction */}
-          {data.map((d, i) => {
+          {validData.map((d, i) => {
             const x = padding.left + xScale(i);
             return (
               <rect
@@ -217,7 +240,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
           })}
 
           {/* Data points for users */}
-          {data.map((d, i) => {
+          {validData.map((d, i) => {
             const x = padding.left + xScale(i);
             const y = padding.top + yScale(d.users);
             return (
@@ -235,7 +258,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
           })}
 
           {/* Data points for posts */}
-          {data.map((d, i) => {
+          {validData.map((d, i) => {
             const x = padding.left + xScale(i);
             const y = padding.top + yScale(d.posts);
             return (
@@ -253,7 +276,7 @@ export default function ActivityChart({ data }: ActivityChartProps) {
           })}
 
           {/* Data points for comments */}
-          {data.map((d, i) => {
+          {validData.map((d, i) => {
             const x = padding.left + xScale(i);
             const y = padding.top + yScale(d.comments);
             return (

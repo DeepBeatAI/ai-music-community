@@ -335,10 +335,34 @@ export const getUnreadActivityCount = async (userId: string): Promise<number> =>
 
 export const updateLastActive = async (userId: string): Promise<void> => {
   try {
-    await supabase
+    const now = new Date().toISOString();
+    
+    // Use upsert to create the record if it doesn't exist
+    const { error } = await supabase
       .from('user_stats')
-      .update({ last_active: new Date().toISOString() })
-      .eq('user_id', userId);
+      .upsert(
+        { 
+          user_id: userId, 
+          last_active: now,
+          updated_at: now,
+          // Provide defaults for other columns when creating new record
+          posts_count: 0,
+          audio_posts_count: 0,
+          likes_given: 0,
+          likes_received: 0,
+          followers_count: 0,
+          following_count: 0,
+          total_plays: 0
+        },
+        { 
+          onConflict: 'user_id',
+          ignoreDuplicates: false 
+        }
+      );
+    
+    if (error) {
+      console.error('Error updating last active:', error);
+    }
   } catch (error) {
     console.error('Error updating last active:', error);
   }

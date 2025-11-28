@@ -14,6 +14,13 @@ export function PlatformAdminTab() {
   const [error, setError] = useState<string | null>(null);
   const [editingConfig, setEditingConfig] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    featureFlags: true,
+    uploadLimits: true,
+    rateLimits: true,
+    emailTemplates: true,
+    systemSettings: true,
+  });
 
   const loadConfigs = async () => {
     setLoading(true);
@@ -44,7 +51,6 @@ export function PlatformAdminTab() {
       await updatePlatformConfig(configKey, value);
       setEditingConfig(null);
       loadConfigs();
-      alert('Configuration updated successfully');
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update configuration');
     }
@@ -53,6 +59,13 @@ export function PlatformAdminTab() {
   const handleCancel = () => {
     setEditingConfig(null);
     setEditValue('');
+  };
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
   };
 
   const handleToggleFeatureFlag = async (flagKey: string, currentValue: boolean) => {
@@ -92,7 +105,16 @@ export function PlatformAdminTab() {
     <div className="space-y-8">
       {/* Feature Flags */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Feature Flags</h3>
+        <button
+          onClick={() => toggleSection('featureFlags')}
+          className="flex items-center space-x-2 text-lg font-semibold text-gray-900 mb-4 hover:text-blue-600 transition-colors"
+        >
+          <span className="transform transition-transform" style={{ transform: collapsedSections['featureFlags'] ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+            ▼
+          </span>
+          <span>Feature Flags</span>
+        </button>
+        {!collapsedSections['featureFlags'] && (
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {featureFlags.length === 0 ? (
             <div className="p-4 text-gray-700 text-center">No feature flags configured</div>
@@ -105,31 +127,47 @@ export function PlatformAdminTab() {
                     <div className="text-sm text-gray-700">{config.description}</div>
                   )}
                 </div>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={config.config_value?.enabled === true}
-                    onChange={() =>
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-gray-700">
+                    {config.config_value?.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                  <button
+                    onClick={() =>
                       handleToggleFeatureFlag(
                         config.config_key,
                         config.config_value?.enabled === true
                       )
                     }
-                    className="rounded"
-                  />
-                  <span className="text-sm">
-                    {config.config_value?.enabled ? 'Enabled' : 'Disabled'}
-                  </span>
-                </label>
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      config.config_value?.enabled ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        config.config_value?.enabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
             ))
           )}
         </div>
+        )}
       </div>
 
       {/* Upload Limits */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Limits by Plan Tier</h3>
+        <button
+          onClick={() => toggleSection('uploadLimits')}
+          className="flex items-center space-x-2 text-lg font-semibold text-gray-900 mb-4 hover:text-blue-600 transition-colors"
+        >
+          <span className="transform transition-transform" style={{ transform: collapsedSections['uploadLimits'] ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+            ▼
+          </span>
+          <span>Upload Limits by Plan Tier</span>
+        </button>
+        {!collapsedSections['uploadLimits'] && (
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {uploadLimits.length === 0 ? (
             <div className="p-4 text-gray-700 text-center">No upload limits configured</div>
@@ -150,7 +188,7 @@ export function PlatformAdminTab() {
                     <textarea
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm text-gray-900"
                       rows={5}
                     />
                     <div className="flex space-x-2">
@@ -179,11 +217,21 @@ export function PlatformAdminTab() {
             ))
           )}
         </div>
+        )}
       </div>
 
       {/* Rate Limiting */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Rate Limiting</h3>
+        <button
+          onClick={() => toggleSection('rateLimits')}
+          className="flex items-center space-x-2 text-lg font-semibold text-gray-900 mb-4 hover:text-blue-600 transition-colors"
+        >
+          <span className="transform transition-transform" style={{ transform: collapsedSections['rateLimits'] ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+            ▼
+          </span>
+          <span>Rate Limiting</span>
+        </button>
+        {!collapsedSections['rateLimits'] && (
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {rateLimits.length === 0 ? (
             <div className="p-4 text-gray-700 text-center">No rate limits configured</div>
@@ -204,7 +252,7 @@ export function PlatformAdminTab() {
                     <textarea
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm text-gray-900"
                       rows={5}
                     />
                     <div className="flex space-x-2">
@@ -233,11 +281,21 @@ export function PlatformAdminTab() {
             ))
           )}
         </div>
+        )}
       </div>
 
       {/* Email Templates */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Email Templates</h3>
+        <button
+          onClick={() => toggleSection('emailTemplates')}
+          className="flex items-center space-x-2 text-lg font-semibold text-gray-900 mb-4 hover:text-blue-600 transition-colors"
+        >
+          <span className="transform transition-transform" style={{ transform: collapsedSections['emailTemplates'] ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+            ▼
+          </span>
+          <span>Email Templates</span>
+        </button>
+        {!collapsedSections['emailTemplates'] && (
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {emailTemplates.length === 0 ? (
             <div className="p-4 text-gray-700 text-center">No email templates configured</div>
@@ -258,7 +316,7 @@ export function PlatformAdminTab() {
                     <textarea
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm text-gray-900"
                       rows={10}
                     />
                     <div className="flex space-x-2">
@@ -290,12 +348,22 @@ export function PlatformAdminTab() {
             ))
           )}
         </div>
+        )}
       </div>
 
       {/* System Settings */}
       {systemSettings.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">System Settings</h3>
+          <button
+            onClick={() => toggleSection('systemSettings')}
+            className="flex items-center space-x-2 text-lg font-semibold text-gray-900 mb-4 hover:text-blue-600 transition-colors"
+          >
+            <span className="transform transition-transform" style={{ transform: collapsedSections['systemSettings'] ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+              ▼
+            </span>
+            <span>System Settings</span>
+          </button>
+          {!collapsedSections['systemSettings'] && (
           <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
             {systemSettings.map((config) => (
               <div key={config.id} className="p-4">
@@ -313,7 +381,7 @@ export function PlatformAdminTab() {
                     <textarea
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm text-gray-900"
                       rows={5}
                     />
                     <div className="flex space-x-2">
@@ -344,6 +412,7 @@ export function PlatformAdminTab() {
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
     </div>

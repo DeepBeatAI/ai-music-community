@@ -91,6 +91,9 @@ export interface TopCreator {
   total_plays: number;
   total_tracks: number;
   engagement_rate: number;
+  total_likes: number;
+  creator_score: number;
+  avatar_url: string | null;
 }
 
 /**
@@ -233,11 +236,12 @@ export async function fetchUserGrowthMetrics(): Promise<UserGrowthMetrics> {
  * Fetch content metrics
  * Requirements: 7.2
  * Caching: 15 minute TTL
+ * @param days - Number of days to look back (optional, defaults to all time)
  */
-export async function fetchContentMetrics(): Promise<ContentMetrics> {
+export async function fetchContentMetrics(days?: number): Promise<ContentMetrics> {
   try {
     const now = new Date();
-    const dateRange = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    const dateRange = days ? `${days}days` : 'all';
     const cacheKey = ADMIN_CACHE_KEYS.ANALYTICS_CONTENT(dateRange);
 
     return await cachedFetch(
@@ -247,13 +251,28 @@ export async function fetchContentMetrics(): Promise<ContentMetrics> {
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
         const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        
+        // Calculate start date for filtering if days parameter is provided
+        const startDate = days ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000) : null;
 
-    // Fetch total counts
+    // Fetch total counts (filtered by date range if specified)
+    const tracksQuery = supabase.from('tracks').select('*', { count: 'exact', head: true });
+    const albumsQuery = supabase.from('albums').select('*', { count: 'exact', head: true });
+    const playlistsQuery = supabase.from('playlists').select('*', { count: 'exact', head: true });
+    const postsQuery = supabase.from('posts').select('*', { count: 'exact', head: true });
+    
+    if (startDate) {
+      tracksQuery.gte('created_at', startDate.toISOString());
+      albumsQuery.gte('created_at', startDate.toISOString());
+      playlistsQuery.gte('created_at', startDate.toISOString());
+      postsQuery.gte('created_at', startDate.toISOString());
+    }
+    
     const [tracks, albums, playlists, posts] = await Promise.all([
-      supabase.from('tracks').select('*', { count: 'exact', head: true }),
-      supabase.from('albums').select('*', { count: 'exact', head: true }),
-      supabase.from('playlists').select('*', { count: 'exact', head: true }),
-      supabase.from('posts').select('*', { count: 'exact', head: true }),
+      tracksQuery,
+      albumsQuery,
+      playlistsQuery,
+      postsQuery,
     ]);
 
     // Fetch uploads today (tracks + albums)
@@ -307,13 +326,23 @@ export async function fetchContentMetrics(): Promise<ContentMetrics> {
 /**
  * Fetch engagement metrics
  * Requirements: 7.3
+ * @param days - Number of days to look back (optional, defaults to all time)
  */
-export async function fetchEngagementMetrics(): Promise<EngagementMetrics> {
+export async function fetchEngagementMetrics(days?: number): Promise<EngagementMetrics> {
   try {
+    const now = new Date();
+    const startDate = days ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000) : null;
+    
     // Fetch total plays from tracks table
-    const { data: playData, error: playError } = await supabase
-      .from('tracks')
-      .select('play_count');
+    // Note: play_count is cumulative, so for time-filtered queries we'd need a plays history table
+    // For now, we'll fetch all tracks and filter by creation date as a proxy
+    const tracksQuery = supabase.from('tracks').select('play_count, created_at');
+    
+    if (startDate) {
+      tracksQuery.gte('created_at', startDate.toISOString());
+    }
+    
+    const { data: playData, error: playError } = await tracksQuery;
 
     if (playError) {
       throw new AdminError(
@@ -325,10 +354,12 @@ export async function fetchEngagementMetrics(): Promise<EngagementMetrics> {
 
     const totalPlays = (playData || []).reduce((sum, row: { play_count?: number }) => sum + (row.play_count || 0), 0);
 
-    // Fetch total likes
-    const { count: totalLikes, error: likesError } = await supabase
-      .from('post_likes')
-      .select('*', { count: 'exact', head: true });
+    // Fetch total likes (filtered by date if specified)
+    const likesQuery = supabase.from('post_likes').select('*', { count: 'exact', head: true });
+    if (startDate) {
+      likesQuery.gte('created_at', startDate.toISOString());
+    }
+    const { count: totalLikes, error: likesError } = await likesQuery;
 
     if (likesError) {
       throw new AdminError(
@@ -338,10 +369,12 @@ export async function fetchEngagementMetrics(): Promise<EngagementMetrics> {
       );
     }
 
-    // Fetch total comments
-    const { count: totalComments, error: commentsError } = await supabase
-      .from('comments')
-      .select('*', { count: 'exact', head: true });
+    // Fetch total comments (filtered by date if specified)
+    const commentsQuery = supabase.from('comments').select('*', { count: 'exact', head: true });
+    if (startDate) {
+      commentsQuery.gte('created_at', startDate.toISOString());
+    }
+    const { count: totalComments, error: commentsError } = await commentsQuery;
 
     if (commentsError) {
       throw new AdminError(
@@ -351,10 +384,12 @@ export async function fetchEngagementMetrics(): Promise<EngagementMetrics> {
       );
     }
 
-    // Fetch total follows
-    const { count: totalFollows, error: followsError } = await supabase
-      .from('user_follows')
-      .select('*', { count: 'exact', head: true });
+    // Fetch total follows (filtered by date if specified)
+    const followsQuery = supabase.from('user_follows').select('*', { count: 'exact', head: true });
+    if (startDate) {
+      followsQuery.gte('created_at', startDate.toISOString());
+    }
+    const { count: totalFollows, error: followsError } = await followsQuery;
 
     if (followsError) {
       throw new AdminError(
@@ -503,15 +538,12 @@ export async function fetchRevenueMetrics(): Promise<RevenueMetrics> {
  */
 export async function fetchTopCreators(limit = 10): Promise<TopCreator[]> {
   try {
-    // Fetch user stats with follower counts
-    const { data, error } = await supabase
-      .from('user_stats')
-      .select(`
-        user_id,
-        followers_count
-      `)
-      .order('followers_count', { ascending: false })
-      .limit(limit);
+    // Use the same database function as the discover page
+    // This ensures consistent ranking logic: creator_score = (total_plays × 0.6) + (total_likes × 0.4)
+    const { data, error } = await supabase.rpc('get_popular_creators', {
+      days_back: 0, // 0 means all time
+      result_limit: limit,
+    });
 
     if (error) {
       throw new AdminError(
@@ -521,55 +553,26 @@ export async function fetchTopCreators(limit = 10): Promise<TopCreator[]> {
       );
     }
 
-    // Fetch play counts and track counts for each user
-    const topCreators: TopCreator[] = await Promise.all(
-      (data || []).map(async (user: Record<string, unknown>) => {
-        const userId = user.user_id as string;
-        const followersCount = user.followers_count as number;
-        
-        // Fetch username separately
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('username')
-          .eq('user_id', userId)
-          .single();
-        
-        const username = profileData?.username || 'Unknown';
-
-        // Fetch total plays for user's tracks
-        const { data: trackData } = await supabase
-          .from('tracks')
-          .select('play_count')
-          .eq('user_id', userId);
-
-        const totalPlays = (trackData || []).reduce(
-          (sum, row: { play_count: number }) => sum + (row.play_count || 0),
-          0
-        );
-
-        // Fetch track count
-        const { count: trackCount } = await supabase
-          .from('tracks')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId);
-
-        // Calculate engagement rate (simplified)
-        const engagementRate = trackCount && trackCount > 0
-          ? (totalPlays / trackCount) / 100
-          : 0;
-
-        return {
-          user_id: userId,
-          username: username,
-          followers: followersCount || 0,
-          total_plays: totalPlays,
-          total_tracks: trackCount || 0,
-          engagement_rate: engagementRate,
-        };
-      })
-    );
-
-    return topCreators;
+    // Transform to TopCreator format
+    return (data || []).map((creator: {
+      user_id: string;
+      username: string;
+      avatar_url: string | null;
+      track_count: number;
+      total_plays: number;
+      total_likes: number;
+      creator_score: number;
+    }) => ({
+      user_id: creator.user_id,
+      username: creator.username,
+      followers: 0, // Not used in new display
+      total_plays: creator.total_plays,
+      total_tracks: creator.track_count,
+      engagement_rate: 0, // Not used in new display
+      total_likes: creator.total_likes,
+      creator_score: creator.creator_score,
+      avatar_url: creator.avatar_url,
+    }));
   } catch (error) {
     if (error instanceof AdminError) {
       throw error;

@@ -10,7 +10,6 @@ import CreatorFilterButton from "@/components/CreatorFilterButton";
 import CreatorFilterIndicator from "@/components/CreatorFilterIndicator";
 import CreatorFilterNoResults from "@/components/CreatorFilterNoResults";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import PerformanceMonitoringPanel from "@/components/PerformanceMonitoringPanel";
 import LoadMoreButton from "@/components/LoadMoreButton";
 import { TrackPicker } from "@/components/dashboard/TrackPicker";
 import type { SearchFilters } from "@/utils/search";
@@ -124,7 +123,6 @@ export default function Dashboard() {
   const [caption, setCaption] = useState(""); // Post caption (social commentary)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPerformancePanel, setShowPerformancePanel] = useState(false);
   const [isPostFormExpanded, setIsPostFormExpanded] = useState(false); // New state for expandable form
   
   // Refs for focus management
@@ -1818,14 +1816,6 @@ export default function Dashboard() {
 
 
       </div>
-
-      {/* Performance Monitoring Panel */}
-      {showPerformancePanel && (
-        <PerformanceMonitoringPanel
-          isVisible={showPerformancePanel}
-          onToggle={() => setShowPerformancePanel(!showPerformancePanel)}
-        />
-      )}
 
       {/* Floating Action Button for Mobile - Quick Post Creation */}
       <button

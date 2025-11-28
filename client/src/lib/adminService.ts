@@ -106,7 +106,7 @@ export async function fetchAllUsers(params: UserListParams = {}): Promise<Pagina
           roles: Array.isArray(user.roles) ? user.roles : [],
           created_at: user.created_at,
           last_active: new Date().toISOString(), // Will be populated from user_stats
-          is_suspended: false, // Will be populated from user profile
+          is_suspended: user.is_suspended || false,
           activity_summary: {
             posts_count: 0,
             tracks_count: 0,
@@ -209,7 +209,12 @@ export async function fetchUserDetails(userId: string): Promise<AdminUserData> {
           console.error('Failed to fetch activity summary:', activityError);
         }
 
-        const activity: UserActivitySummary = activityData || {
+        // The function returns a TABLE (array), so get the first row
+        const activityRow = Array.isArray(activityData) && activityData.length > 0 
+          ? activityData[0] 
+          : null;
+
+        const activity: UserActivitySummary = activityRow || {
           posts_count: 0,
           tracks_count: 0,
           albums_count: 0,
@@ -229,7 +234,7 @@ export async function fetchUserDetails(userId: string): Promise<AdminUserData> {
           roles: profile.roles || [],
           created_at: profile.created_at,
           last_active: activity.last_active,
-          is_suspended: false, // Will be populated from user profile
+          is_suspended: profile.is_suspended || false,
           activity_summary: activity,
         };
       }
@@ -255,12 +260,13 @@ export async function updateUserPlanTier(
   newPlanTier: string
 ): Promise<void> {
   try {
-    // Get current plan tier for audit log
+    // Get current active plan tier for audit log
     const { data: currentPlan, error: fetchError } = await supabase
       .from('user_plan_tiers')
       .select('plan_tier')
       .eq('user_id', userId)
-      .single();
+      .eq('is_active', true)
+      .maybeSingle();
 
     if (fetchError) {
       throw new AdminError(
@@ -351,7 +357,7 @@ export async function updateUserRoles(
     // Remove roles
     for (const roleType of rolesToRemove) {
       const { error: removeError } = await supabase.rpc('revoke_user_role', {
-        p_user_id: userId,
+        p_target_user_id: userId,
         p_role_type: roleType,
       });
 
@@ -422,6 +428,61 @@ export async function suspendUser(
     }
     throw new AdminError(
       'An unexpected error occurred while suspending user',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
+ * Unsuspend user account with audit logging
+ * Requirements: 3.7
+ */
+export async function unsuspendUser(userId: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('unsuspend_user_account', {
+      p_target_user_id: userId,
+    });
+
+    if (error) {
+      throw new AdminError(
+        'Failed to unsuspend user account',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
+        { originalError: error }
+      );
+    }
+
+    // Log the action by inserting directly into the audit log table
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) {
+        const { data, error: insertError } = await supabase.from('admin_audit_log').insert({
+          admin_user_id: userData.user.id,
+          action_type: 'user_unsuspended',
+          target_resource_type: 'user',
+          target_resource_id: userId,
+          new_value: { action: 'unsuspended' },
+        });
+        
+        if (insertError) {
+          console.error('Audit log insert error:', insertError);
+        } else {
+          console.log('Audit log created successfully:', data);
+        }
+      }
+    } catch (logError) {
+      // Don't fail the unsuspend if logging fails
+      console.error('Failed to log unsuspend action:', logError);
+    }
+
+    // Invalidate user caches
+    adminCache.invalidateUserCaches(userId);
+  } catch (error) {
+    if (error instanceof AdminError) {
+      throw error;
+    }
+    throw new AdminError(
+      'An unexpected error occurred while unsuspending user',
       ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );

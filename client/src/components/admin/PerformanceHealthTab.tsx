@@ -7,12 +7,15 @@ import {
   clearCache,
 } from '@/lib/systemHealthService';
 import type { SystemHealth, SystemMetric } from '@/types/admin';
+import { performanceAnalytics } from '@/utils/performanceAnalytics';
 
 export function PerformanceHealthTab() {
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [metrics, setMetrics] = useState<SystemMetric[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [clientMetrics, setClientMetrics] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'server' | 'client'>('server');
 
   const loadData = async () => {
     setError(null);
@@ -35,11 +38,22 @@ export function PerformanceHealthTab() {
   useEffect(() => {
     loadData();
 
-    // Auto-refresh every 30 seconds
+    // Auto-refresh every 30 seconds for server metrics
     const interval = setInterval(loadData, 30000);
+
+    // Auto-refresh every 5 seconds for client metrics
+    const clientInterval = setInterval(() => {
+      const analytics = performanceAnalytics.getDetailedAnalytics();
+      setClientMetrics(analytics);
+    }, 5000);
+
+    // Load client metrics immediately
+    const analytics = performanceAnalytics.getDetailedAnalytics();
+    setClientMetrics(analytics);
 
     return () => {
       if (interval) clearInterval(interval);
+      if (clientInterval) clearInterval(clientInterval);
     };
   }, []);
 
@@ -48,7 +62,6 @@ export function PerformanceHealthTab() {
 
     try {
       await clearCache();
-      alert('Cache cleared successfully');
       loadData();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to clear cache');
@@ -104,8 +117,65 @@ export function PerformanceHealthTab() {
     );
   }
 
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatTime = (ms: number) => {
+    if (ms < 1000) return `${ms.toFixed(0)}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const downloadClientData = () => {
+    const data = performanceAnalytics.exportData();
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `client-performance-${new Date().toISOString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex space-x-2 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('server')}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeTab === 'server'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-700 hover:text-gray-900'
+          }`}
+        >
+          Server Metrics
+        </button>
+        <button
+          onClick={() => setActiveTab('client')}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeTab === 'client'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-700 hover:text-gray-900'
+          }`}
+        >
+          Client Performance
+        </button>
+      </div>
+
+      {/* Server Metrics Tab */}
+      {activeTab === 'server' && (
+        <>
       {/* System Health Overview */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -131,6 +201,11 @@ export function PerformanceHealthTab() {
               <p>Connections: {systemHealth.database.connection_count}</p>
               <p>Avg Query Time: {systemHealth.database.avg_query_time}ms</p>
               <p>Slow Queries: {systemHealth.database.slow_queries}</p>
+              {systemHealth.database.avg_query_time === 0 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Not actively tracked. Deploy collect-performance-metrics to enable.
+                </p>
+              )}
             </div>
           </div>
 
@@ -152,6 +227,11 @@ export function PerformanceHealthTab() {
                   style={{ width: `${systemHealth.storage.usage_percentage}%` }}
                 ></div>
               </div>
+              {systemHealth.storage.used_capacity_gb === 0 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Not actively tracked. Deploy collect-performance-metrics to enable.
+                </p>
+              )}
             </div>
           </div>
 
@@ -174,6 +254,9 @@ export function PerformanceHealthTab() {
                   {systemHealth.api_health.vercel}
                 </span>
               </p>
+              <p className="text-xs text-amber-600 mt-2">
+                ⚠️ Hardcoded values. Not actively monitored.
+              </p>
             </div>
           </div>
 
@@ -192,6 +275,11 @@ export function PerformanceHealthTab() {
                   {systemHealth.error_rate.status}
                 </span>
               </p>
+              {systemHealth.error_rate.current_rate === 0 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Not actively tracked. Deploy collect-performance-metrics to enable.
+                </p>
+              )}
             </div>
           </div>
 
@@ -209,6 +297,9 @@ export function PerformanceHealthTab() {
                   {new Date(systemHealth.uptime.last_downtime).toLocaleString()}
                 </p>
               )}
+              <p className="text-xs text-amber-600 mt-2">
+                ⚠️ Hardcoded value. Not actively monitored.
+              </p>
             </div>
           </div>
 
@@ -236,7 +327,25 @@ export function PerformanceHealthTab() {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Performance Metrics</h3>
 
         {metrics.length === 0 ? (
-          <p className="text-gray-700 text-center py-4">No metrics available</p>
+          <div className="text-center py-8">
+            <p className="text-gray-700 mb-2">No metrics available</p>
+            <p className="text-sm text-gray-600 mb-4">
+              Performance metrics are not being collected yet.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-2xl mx-auto text-left">
+              <p className="text-sm text-blue-900 font-medium mb-2">
+                📊 To enable automatic metric collection:
+              </p>
+              <ol className="text-sm text-blue-800 space-y-1 ml-4 list-decimal">
+                <li>Deploy the <code className="bg-blue-100 px-1 rounded">collect-performance-metrics</code> Edge Function</li>
+                <li>Set up a cron schedule to run every minute</li>
+                <li>Metrics will appear here automatically</li>
+              </ol>
+              <p className="text-xs text-blue-700 mt-3">
+                See <code className="bg-blue-100 px-1 rounded">supabase/functions/collect-performance-metrics/DEPLOYMENT.md</code> for instructions.
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             {/* Group metrics by type */}
@@ -285,6 +394,209 @@ export function PerformanceHealthTab() {
       <div className="text-center text-sm text-gray-700">
         Auto-refreshing every 30 seconds
       </div>
+        </>
+      )}
+
+      {/* Client Performance Tab */}
+      {activeTab === 'client' && clientMetrics && (
+        <>
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={downloadClientData}
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors text-sm"
+            >
+              📥 Export Data
+            </button>
+          </div>
+
+          {/* Performance Overview Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="font-semibold text-gray-700 mb-2">Performance Score</h3>
+              <div className={`text-3xl font-bold ${getScoreColor(clientMetrics.summary.performanceScore)}`}>
+                {clientMetrics.summary.performanceScore.toFixed(0)}
+              </div>
+              <div className="text-sm text-gray-500">out of 100</div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="font-semibold text-gray-700 mb-2">Cache Hit Rate</h3>
+              <div className="text-3xl font-bold text-blue-600">
+                {(clientMetrics.metrics.cacheHitRate * 100).toFixed(1)}%
+              </div>
+              <div className="text-sm text-gray-500">
+                {clientMetrics.metrics.totalRequests} requests
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="font-semibold text-gray-700 mb-2">Bandwidth Saved</h3>
+              <div className="text-3xl font-bold text-green-600">
+                {formatBytes(clientMetrics.metrics.bandwidthSaved)}
+              </div>
+              <div className="text-sm text-gray-500">this session</div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="font-semibold text-gray-700 mb-2">Audio Load Time</h3>
+              <div className="text-3xl font-bold text-purple-600">
+                {formatTime(clientMetrics.metrics.audioLoadTime)}
+              </div>
+              <div className="text-sm text-gray-500">average</div>
+            </div>
+          </div>
+
+          {/* Core Web Vitals */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Core Web Vitals</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-blue-700 mb-1 text-sm">First Contentful Paint</h4>
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatTime(clientMetrics.metrics.fcp)}
+                </div>
+                <div className="text-xs text-gray-500">Target: &lt; 1.8s</div>
+              </div>
+
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-green-700 mb-1 text-sm">Largest Contentful Paint</h4>
+                <div className="text-2xl font-bold text-green-600">
+                  {formatTime(clientMetrics.metrics.lcp)}
+                </div>
+                <div className="text-xs text-gray-500">Target: &lt; 2.5s</div>
+              </div>
+
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-yellow-700 mb-1 text-sm">First Input Delay</h4>
+                <div className="text-2xl font-bold text-yellow-600">
+                  {formatTime(clientMetrics.metrics.fid)}
+                </div>
+                <div className="text-xs text-gray-500">Target: &lt; 100ms</div>
+              </div>
+
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-purple-700 mb-1 text-sm">Cumulative Layout Shift</h4>
+                <div className="text-2xl font-bold text-purple-600">
+                  {clientMetrics.metrics.cls.toFixed(3)}
+                </div>
+                <div className="text-xs text-gray-500">Target: &lt; 0.1</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Resource Summary */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Resource Usage Summary</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-gray-900 mb-3">Audio Resources</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Total Loads:</span>
+                    <span className="font-medium text-gray-900">{clientMetrics.summary.totalAudioLoads}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Average Size:</span>
+                    <span className="font-medium text-gray-900">{formatBytes(clientMetrics.summary.averageAudioSize)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Load Time:</span>
+                    <span className="font-medium text-gray-900">{formatTime(clientMetrics.metrics.audioLoadTime)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-gray-900 mb-3">Image Resources</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Total Loads:</span>
+                    <span className="font-medium text-gray-900">{clientMetrics.summary.totalImageLoads}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Cache Efficiency:</span>
+                    <span className="font-medium text-gray-900">{(clientMetrics.metrics.cacheHitRate * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Error Rate:</span>
+                    <span className="font-medium text-gray-900">{(clientMetrics.metrics.errorRate * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-gray-900 mb-3">Session Info</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Duration:</span>
+                    <span className="font-medium text-gray-900">{formatTime(clientMetrics.sessionDuration)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Total Bandwidth:</span>
+                    <span className="font-medium text-gray-900">{formatBytes(clientMetrics.summary.totalBandwidthUsed)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Bandwidth Saved:</span>
+                    <span className="font-medium text-green-600">{formatBytes(clientMetrics.metrics.bandwidthSaved)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recommendations */}
+          {clientMetrics.summary.recommendations.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance Recommendations</h3>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <ul className="space-y-2">
+                  {clientMetrics.summary.recommendations.map((rec: string, index: number) => (
+                    <li key={index} className="flex items-start">
+                      <span className="text-yellow-600 mr-2">⚠️</span>
+                      <span className="text-gray-700">{rec}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Recent Events */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Events (Last 20)</h3>
+            <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+              <div className="space-y-1 font-mono text-sm">
+                {clientMetrics.events.slice(-20).reverse().map((event: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-b-0">
+                    <div className="flex items-center space-x-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        event.type === 'error' ? 'bg-red-100 text-red-800' :
+                        event.type === 'cache_hit' ? 'bg-green-100 text-green-800' :
+                        event.type === 'cache_miss' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {event.type}
+                      </span>
+                      <span className="text-gray-600">
+                        {new Date(event.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="text-right text-xs text-gray-500">
+                      {event.duration && <span>{formatTime(event.duration)}</span>}
+                      {event.size && <span className="ml-2">{formatBytes(event.size)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Auto-refresh indicator */}
+          <div className="text-center text-sm text-gray-700 mt-4">
+            Auto-refreshing every 5 seconds
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -200,7 +200,7 @@ export async function resolveSecurityEvent(eventId: string): Promise<void> {
 
     // Log the action
     await supabase.rpc('log_admin_action', {
-      p_action_type: 'security_policy_changed',
+      p_action_type: 'security_event_resolved',
       p_target_resource_type: 'security',
       p_target_resource_id: eventId,
       p_old_value: { resolved: false },
@@ -319,12 +319,7 @@ export async function fetchAuditLogs(
  */
 export async function fetchActiveSessions(): Promise<UserSession[]> {
   try {
-    const { data, error } = await supabase
-      .from('user_sessions')
-      .select('*')
-      .eq('is_active', true)
-      .gt('expires_at', new Date().toISOString())
-      .order('last_activity', { ascending: false });
+    const { data, error } = await supabase.rpc('get_active_sessions_with_usernames');
 
     if (error) {
       throw new AdminError(

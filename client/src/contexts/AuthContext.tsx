@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { UserProfile, ApiResponse } from '@/types'
 import { UserTypeInfo, PlanTier, RoleType } from '@/types/userTypes'
 import { fetchUserAllTypes, clearUserTypeCache } from '@/lib/userTypeService'
+import { updateLastActive } from '@/utils/activity'
 
 interface AuthContextType {
   user: User | null
@@ -141,12 +142,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // Check if session was terminated by admin
+      try {
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('user_sessions')
+          .select('is_active')
+          .eq('session_token', currentSession.access_token)
+          .single();
+        
+        if (!sessionError && sessionData && !sessionData.is_active) {
+          // Session was terminated by admin - sign user out
+          await supabase.auth.signOut();
+          setProfile(null);
+          setUserTypeInfo(null);
+          setUserTypeError(null);
+          
+          alert('Your session has been terminated by an administrator.');
+          router.push('/login');
+          setLoading(false);
+          return;
+        }
+      } catch (sessionCheckError) {
+        console.error('Failed to check session status:', sessionCheckError);
+        // Continue anyway - don't block login if check fails
+      }
+
+      // Check if user is suspended
+      const { data: suspensionData, error: suspensionError } = await supabase
+        .rpc('check_user_suspension', { p_user_id: currentSession.user.id });
+      
+      if (!suspensionError && suspensionData && suspensionData.length > 0) {
+        const suspension = suspensionData[0];
+        
+        if (suspension.is_suspended) {
+          // User is suspended - sign them out
+          await supabase.auth.signOut();
+          setProfile(null);
+          setUserTypeInfo(null);
+          setUserTypeError(null);
+          
+          // Show suspension message
+          const message = suspension.suspended_until
+            ? `Your account has been suspended until ${new Date(suspension.suspended_until).toLocaleDateString()}. Reason: ${suspension.suspension_reason}`
+            : `Your account has been permanently suspended. Reason: ${suspension.suspension_reason}`;
+          
+          alert(message);
+          router.push('/login');
+          setLoading(false);
+          return;
+        }
+      }
+
       // Fetch user profile
       const profileData = await fetchUserProfile(currentSession.user.id);
       setProfile(profileData);
 
       // Fetch user type information
       await fetchUserTypeInfo(currentSession.user.id);
+
+      // Update last_active timestamp on login/session restore
+      updateLastActive(currentSession.user.id);
+
+      // Create or update user session tracking
+      try {
+        // Get user's IP address
+        let ipAddress = null;
+        try {
+          const ipResponse = await fetch('/api/get-ip');
+          const ipData = await ipResponse.json();
+          ipAddress = ipData.ip || null;
+        } catch (ipError) {
+          console.error('Failed to get IP address:', ipError);
+          // Fallback to localhost if API fails
+          ipAddress = '127.0.0.1';
+        }
+
+        const expiresAt = new Date(currentSession.expires_at! * 1000).toISOString();
+        await supabase.from('user_sessions').upsert({
+          user_id: currentSession.user.id,
+          session_token: currentSession.access_token,
+          expires_at: expiresAt,
+          is_active: true,
+          last_activity: new Date().toISOString(),
+          ip_address: ipAddress,
+          user_agent: navigator.userAgent,
+        }, {
+          onConflict: 'session_token',
+          ignoreDuplicates: false,
+        });
+      } catch (error) {
+        console.error('Failed to track session:', error);
+      }
 
       // Redirect logic for authenticated users
       if (['/login', '/signup'].includes(pathname)) {
@@ -187,6 +273,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     subscription.unsubscribe();
   };
 }, [router, pathname]);
+
+  // Update last_active and session activity periodically while user is active (every 5 minutes)
+  useEffect(() => {
+    if (!user || !session) return;
+
+    const updateInterval = setInterval(async () => {
+      updateLastActive(user.id);
+      
+      // Update session last_activity
+      try {
+        await supabase
+          .from('user_sessions')
+          .update({ last_activity: new Date().toISOString() })
+          .eq('session_token', session.access_token)
+          .eq('is_active', true);
+      } catch (error) {
+        console.error('Failed to update session activity:', error);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(updateInterval);
+  }, [user, session]);
+
+  // Automatic session refresh - refresh token 10 minutes before expiration
+  useEffect(() => {
+    if (!session) return;
+
+    const expiresAt = new Date(session.expires_at! * 1000);
+    const now = new Date();
+    const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+    
+    // If session is already expired or expires in less than 1 minute, don't set timer
+    if (timeUntilExpiry < 60000) {
+      console.log('Session expired or expiring soon, skipping auto-refresh');
+      return;
+    }
+    
+    // Refresh 10 minutes before expiration (or immediately if less than 10 minutes remain)
+    const refreshTime = Math.max(0, timeUntilExpiry - (10 * 60 * 1000));
+    
+    console.log(`Auto-refresh scheduled in ${Math.round(refreshTime / 60000)} minutes`);
+    
+    const refreshTimer = setTimeout(async () => {
+      console.log('Auto-refreshing session...');
+      try {
+        const { data, error } = await supabase.auth.refreshSession();
+        
+        if (error) {
+          console.error('Failed to auto-refresh session:', error);
+          // Don't show error to user - they'll be redirected to login on next action
+        } else if (data.session) {
+          console.log('Session auto-refreshed successfully');
+          // Update the session in user_sessions table
+          try {
+            const newExpiresAt = new Date(data.session.expires_at! * 1000).toISOString();
+            await supabase
+              .from('user_sessions')
+              .update({ 
+                expires_at: newExpiresAt,
+                last_activity: new Date().toISOString()
+              })
+              .eq('session_token', session.access_token);
+          } catch (updateError) {
+            console.error('Failed to update session expiration:', updateError);
+          }
+        }
+      } catch (refreshError) {
+        console.error('Error during auto-refresh:', refreshError);
+      }
+    }, refreshTime);
+
+    return () => {
+      clearTimeout(refreshTimer);
+    };
+  }, [session]);
 
   const signIn = async (email: string, password: string): Promise<ApiResponse<any>> => {
     try {
@@ -301,6 +462,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
   const signOut = async () => {
     try {
+      // Mark current session as inactive before signing out
+      if (session?.access_token) {
+        try {
+          await supabase.rpc('mark_session_inactive', {
+            p_session_token: session.access_token
+          });
+        } catch (sessionError) {
+          console.error('Failed to mark session as inactive:', sessionError);
+        }
+      }
+      
       // Clear user type cache before signing out
       if (user) {
         clearUserTypeCache(user.id);

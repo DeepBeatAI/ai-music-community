@@ -5,6 +5,7 @@ import { serverAudioCompressor, CompressionResult, CompressionOptions } from '@/
 import { compressionAnalytics, memoryMonitor } from '@/utils/compressionAnalytics';
 import { uploadTrack } from '@/lib/tracks';
 import { useAuth } from '@/contexts/AuthContext';
+import { clearTrackPickerCache } from '@/utils/trackPickerCache';
 import type { TrackUploadData } from '@/types/track';
 
 interface UploadedTrack {
@@ -239,6 +240,9 @@ export default function AudioUpload({
         
         // Show post creation form after successful track upload
         setShowPostForm(true);
+        
+        // CRITICAL: Clear TrackPicker cache so new track appears immediately
+        clearTrackPickerCache(user.id);
         
         // Notify parent component
         if (onTrackUploaded) {

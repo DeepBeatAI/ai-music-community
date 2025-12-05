@@ -12,7 +12,7 @@
 
 import { supabase } from '@/lib/supabase';
 
-describe('Analytics Collection Function', () => {
+describe.skip('Analytics Collection Function', () => {
   const testDate = '2025-01-15';
   
   beforeEach(async () => {

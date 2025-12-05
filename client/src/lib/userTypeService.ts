@@ -1,241 +1,142 @@
-/**
- * User Type Service
- * 
- * This service provides API functions for fetching user type information
- * with caching, error handling, and retry logic.
- */
-
-import { supabase } from '@/lib/supabase';
-import {
-  PlanTier,
-  RoleType,
-  UserTypeError,
-  USER_TYPE_ERROR_CODES,
-} from '@/types/userTypes';
+import { supabase } from './supabase';
+import { PlanTier, RoleType } from '@/types/userTypes';
 
 /**
- * Cache for user type data to reduce database queries
- */
-interface UserTypeCache {
-  planTier: { data: PlanTier; timestamp: number } | null;
-  roles: { data: RoleType[]; timestamp: number } | null;
-}
-
-const userTypeCache = new Map<string, UserTypeCache>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Clears the cache for a specific user
- * 
- * @param userId - The user ID to clear cache for
- */
-export function clearUserTypeCache(userId: string): void {
-  userTypeCache.delete(userId);
-}
-
-/**
- * Clears all user type caches
- */
-export function clearAllUserTypeCaches(): void {
-  userTypeCache.clear();
-}
-
-/**
- * Checks if cached data is still valid
- * 
- * @param timestamp - The timestamp when data was cached
- * @returns true if cache is still valid, false otherwise
- */
-function isCacheValid(timestamp: number): boolean {
-  return Date.now() - timestamp < CACHE_TTL;
-}
-
-/**
- * Retries a function with exponential backoff
- * 
- * @param fn - The function to retry
- * @param maxRetries - Maximum number of retries (default: 3)
- * @param baseDelay - Base delay in milliseconds (default: 1000)
- * @returns The result of the function
- */
-async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelay: number = 1000
-): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error as Error;
-      
-      // Don't retry on certain error types
-      if (error instanceof UserTypeError) {
-        if (
-          error.code === USER_TYPE_ERROR_CODES.UNAUTHORIZED ||
-          error.code === USER_TYPE_ERROR_CODES.NOT_FOUND
-        ) {
-          throw error;
-        }
-      }
-
-      // Wait before retrying (exponential backoff)
-      if (attempt < maxRetries - 1) {
-        const delay = baseDelay * Math.pow(2, attempt);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
-
-  throw lastError || new Error('Retry failed with unknown error');
-}
-
-/**
- * Fetches the user's plan tier from the database
- * 
- * @param userId - The user ID to fetch plan tier for
- * @param useCache - Whether to use cached data (default: true)
- * @returns The user's plan tier
- * @throws UserTypeError if the fetch fails
- */
-export async function fetchUserPlanTier(
-  userId: string,
-  useCache: boolean = true
-): Promise<PlanTier> {
-  // Check cache first
-  if (useCache) {
-    const cached = userTypeCache.get(userId);
-    if (cached?.planTier && isCacheValid(cached.planTier.timestamp)) {
-      return cached.planTier.data;
-    }
-  }
-
-  try {
-    const planTier = await retryWithBackoff(async () => {
-      const { data, error } = await supabase
-        .from('user_plan_tiers')
-        .select('plan_tier')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (error) {
-        throw new UserTypeError(
-          'Failed to fetch user plan tier',
-          USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-          { originalError: error }
-        );
-      }
-
-      // Default to free_user if no plan tier found
-      return (data?.plan_tier as PlanTier) || PlanTier.FREE_USER;
-    });
-
-    // Update cache
-    const cached = userTypeCache.get(userId) || { planTier: null, roles: null };
-    cached.planTier = { data: planTier, timestamp: Date.now() };
-    userTypeCache.set(userId, cached);
-
-    return planTier;
-  } catch (error) {
-    if (error instanceof UserTypeError) {
-      throw error;
-    }
-    throw new UserTypeError(
-      'Unexpected error fetching user plan tier',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-      { originalError: error }
-    );
-  }
-}
-
-/**
- * Fetches the user's roles from the database
- * 
- * @param userId - The user ID to fetch roles for
- * @param useCache - Whether to use cached data (default: true)
- * @returns Array of the user's roles
- * @throws UserTypeError if the fetch fails
- */
-export async function fetchUserRoles(
-  userId: string,
-  useCache: boolean = true
-): Promise<RoleType[]> {
-  // Check cache first
-  if (useCache) {
-    const cached = userTypeCache.get(userId);
-    if (cached?.roles && isCacheValid(cached.roles.timestamp)) {
-      return cached.roles.data;
-    }
-  }
-
-  try {
-    const roles = await retryWithBackoff(async () => {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role_type')
-        .eq('user_id', userId)
-        .eq('is_active', true);
-
-      if (error) {
-        throw new UserTypeError(
-          'Failed to fetch user roles',
-          USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-          { originalError: error }
-        );
-      }
-
-      return (data || []).map(r => r.role_type as RoleType);
-    });
-
-    // Update cache
-    const cached = userTypeCache.get(userId) || { planTier: null, roles: null };
-    cached.roles = { data: roles, timestamp: Date.now() };
-    userTypeCache.set(userId, cached);
-
-    return roles;
-  } catch (error) {
-    if (error instanceof UserTypeError) {
-      throw error;
-    }
-    throw new UserTypeError(
-      'Unexpected error fetching user roles',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-      { originalError: error }
-    );
-  }
-}
-
-/**
- * Fetches all user type information (plan tier and roles) in a single call
- * 
- * @param userId - The user ID to fetch type information for
- * @param useCache - Whether to use cached data (default: true)
- * @returns Object containing plan tier and roles
- * @throws UserTypeError if the fetch fails
+ * Fetch all user type information (plan tier and roles)
  */
 export async function fetchUserAllTypes(
   userId: string,
-  useCache: boolean = true
+  forceRefresh: boolean = false
 ): Promise<{ planTier: PlanTier; roles: RoleType[] }> {
   try {
-    // Fetch both in parallel for better performance
-    const [planTier, roles] = await Promise.all([
-      fetchUserPlanTier(userId, useCache),
-      fetchUserRoles(userId, useCache),
-    ]);
+    // Fetch plan tier
+    const { data: planTierData, error: planTierError } = await supabase
+      .from('user_plan_tiers')
+      .select('plan_tier')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .single();
+
+    if (planTierError && planTierError.code !== 'PGRST116') {
+      console.error('Error fetching plan tier:', planTierError);
+    }
+
+    // Fetch roles
+    const { data: rolesData, error: rolesError } = await supabase
+      .from('user_roles')
+      .select('role_type')
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    if (rolesError) {
+      console.error('Error fetching roles:', rolesError);
+    }
+
+    const planTier = (planTierData?.plan_tier as PlanTier) || PlanTier.FREE_USER;
+    const roles = (rolesData?.map((r) => r.role_type as RoleType) || []);
 
     return { planTier, roles };
-  } catch (error) {
-    if (error instanceof UserTypeError) {
-      throw error;
+  } catch (err) {
+    console.error('Exception fetching user types:', err);
+    return { planTier: PlanTier.FREE_USER, roles: [] };
+  }
+}
+
+/**
+ * Clear user type cache (placeholder for future caching implementation)
+ */
+export function clearUserTypeCache(userId: string): void {
+  // Placeholder function for future caching implementation
+  // Currently does nothing as we don't have caching implemented
+  console.log('Clearing user type cache for user:', userId);
+}
+
+/**
+ * Check if a user has moderator role
+ */
+export async function isUserModerator(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role_type')
+      .eq('user_id', userId)
+      .eq('role_type', 'moderator')
+      .eq('is_active', true)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 is "no rows returned" which is expected when user is not a moderator
+      console.error('Error checking moderator status:', error);
+      return false;
     }
-    throw new UserTypeError(
-      'Unexpected error fetching all user types',
-      USER_TYPE_ERROR_CODES.DATABASE_ERROR,
-      { originalError: error }
-    );
+
+    return !!data;
+  } catch (err) {
+    console.error('Exception checking moderator status:', err);
+    return false;
+  }
+}
+
+/**
+ * Check if a user has admin role
+ */
+export async function isUserAdmin(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .rpc('is_user_admin', { p_user_id: userId });
+
+    if (error) {
+      console.error('Error checking admin status:', error);
+      return false;
+    }
+
+    return data || false;
+  } catch (err) {
+    console.error('Exception checking admin status:', err);
+    return false;
+  }
+}
+
+/**
+ * Check if a user has moderator OR admin role
+ */
+export async function isUserModeratorOrAdmin(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role_type')
+      .eq('user_id', userId)
+      .in('role_type', ['moderator', 'admin'])
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('Error checking moderator/admin status:', error);
+      return false;
+    }
+
+    return (data && data.length > 0) || false;
+  } catch (err) {
+    console.error('Exception checking moderator/admin status:', err);
+    return false;
+  }
+}
+
+/**
+ * Get all active roles for a user
+ */
+export async function getUserRoles(userId: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_user_roles', { p_user_id: userId });
+
+    if (error) {
+      console.error('Error getting user roles:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Exception getting user roles:', err);
+    return [];
   }
 }

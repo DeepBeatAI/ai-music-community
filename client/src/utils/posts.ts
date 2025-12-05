@@ -228,6 +228,20 @@ export async function createTextPost(
   content: string
 ): Promise<Post> {
   try {
+    // Check if user is allowed to post (Requirements 6.1, 6.6)
+    const { data: canPost, error: restrictionError } = await supabase
+      .rpc('can_user_post', { p_user_id: userId });
+
+    if (restrictionError) {
+      logger.error('Error checking post restrictions:', restrictionError);
+      throw new Error('Failed to verify posting permissions');
+    }
+
+    if (!canPost) {
+      logger.warn(`User ${userId} attempted to post while restricted`);
+      throw new Error('You are currently restricted from creating posts. Please contact support for more information.');
+    }
+
     const { data, error } = await supabase
       .from('posts')
       .insert({
@@ -286,6 +300,20 @@ export async function createAudioPost(
   caption?: string
 ): Promise<Post> {
   try {
+    // 0. Check if user is allowed to post (Requirements 6.1, 6.6)
+    const { data: canPost, error: restrictionError } = await supabase
+      .rpc('can_user_post', { p_user_id: userId });
+
+    if (restrictionError) {
+      logger.error('Error checking post restrictions:', restrictionError);
+      throw new Error('Failed to verify posting permissions');
+    }
+
+    if (!canPost) {
+      logger.warn(`User ${userId} attempted to post while restricted`);
+      throw new Error('You are currently restricted from creating posts. Please contact support for more information.');
+    }
+
     // 1. Verify track exists and get track data
     const { data: track, error: trackError } = await supabase
       .from('tracks')

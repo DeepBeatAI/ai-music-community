@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import NotificationCenter from '../NotificationCenter';
 import { useState, useRef, useEffect } from 'react';
+import { isUserModeratorOrAdmin } from '@/lib/userTypeService';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -16,11 +17,26 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isAvatarDropdownOpen, setIsAvatarDropdownOpen] = useState(false);
+  const [isModeratorOrAdmin, setIsModeratorOrAdmin] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleSignOut = async () => {
     await signOut();
   };
+
+  // Check if user is moderator or admin
+  useEffect(() => {
+    const checkModeratorStatus = async () => {
+      if (user) {
+        const isModerator = await isUserModeratorOrAdmin(user.id);
+        setIsModeratorOrAdmin(isModerator);
+      } else {
+        setIsModeratorOrAdmin(false);
+      }
+    };
+
+    checkModeratorStatus();
+  }, [user]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -208,32 +224,46 @@ export default function MainLayout({ children }: MainLayoutProps) {
                               Manage my Account
                             </button>
                             
+                            {/* Moderation and Admin Links - Only visible to moderators/admins */}
+                            {(isModeratorOrAdmin || isAdmin) && (
+                              <div className="border-t border-gray-600 my-1"></div>
+                            )}
+                            
+                            {/* Moderation Link - Visible to moderators and admins */}
+                            {isModeratorOrAdmin && (
+                              <button
+                                onClick={() => handleDropdownItemClick('/moderation')}
+                                className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                                role="menuitem"
+                              >
+                                <span className="text-lg mr-3">🛡️</span>
+                                Moderation
+                              </button>
+                            )}
+                            
                             {/* Admin Dashboard Link - Only visible to admins */}
                             {isAdmin && (
-                              <>
-                                <div className="border-t border-gray-600 my-1"></div>
-                                <button
-                                  onClick={() => handleDropdownItemClick('/admin')}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                                  role="menuitem"
+                              <button
+                                onClick={() => handleDropdownItemClick('/admin')}
+                                className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                                role="menuitem"
+                              >
+                                <svg
+                                  className="w-5 h-5 mr-3"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  xmlns="http://www.w3.org/2000/svg"
                                 >
-                                  <svg
-                                    className="w-5 h-5 mr-3"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                                    />
-                                  </svg>
-                                  Admin Dashboard
-                                </button>
-                              </>
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                                  />
+                                </svg>
+                                Admin Dashboard
+                              </button>
                             )}
                           </div>
                         </div>

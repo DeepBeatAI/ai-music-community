@@ -126,13 +126,14 @@ export interface Notification {
   id: string;
   created_at: string;
   user_id: string;
-  type: 'like' | 'follow' | 'comment' | 'post' | 'mention' | 'system';
+  type: 'like' | 'follow' | 'comment' | 'post' | 'mention' | 'system' | 'moderation';
   title: string;
   message?: string;
   read: boolean;
   related_post_id?: string;
   related_user_id?: string;
   related_username?: string; // Username of the related user
+  related_notification_id?: string; // References original notification for reversals
   action_url?: string;
   icon?: string;
   priority?: number;
@@ -201,3 +202,6 @@ export * from './pagination';
 
 // Re-export playlist types
 export * from './playlist';
+
+// Re-export moderation types
+export * from './moderation';

@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { queryCache } from '@/utils/queryCache';
 import { updateComment } from '@/utils/comments';
 import EditedBadge from '@/components/EditedBadge';
+import { ReportButton } from './moderation/ReportButton';
+import { ModeratorFlagButton } from './moderation/ModeratorFlagButton';
 import { useToast } from '@/contexts/ToastContext';
 
 /**
@@ -485,6 +487,26 @@ export default function Comment({
                 <span className="mr-1" aria-hidden="true">🗑️</span>
                 <span className="hidden md:inline">{isDeleting ? 'Deleting...' : 'Delete'}</span>
               </button>
+            )}
+
+            {/* Report Button - Only for non-owners */}
+            {!isOwner && currentUserId && (
+              <ReportButton
+                reportType="comment"
+                targetId={comment.id}
+                contentCreatorId={comment.user_id}
+                iconOnly={true}
+              />
+            )}
+            
+            {/* Moderator Flag Button */}
+            {currentUserId && (
+              <ModeratorFlagButton
+                reportType="comment"
+                targetId={comment.id}
+                contentCreatorId={comment.user_id}
+                iconOnly={true}
+              />
             )}
           </div>
         )}

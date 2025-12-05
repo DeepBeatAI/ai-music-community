@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, forwardRef, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TrackPickerCard } from './TrackPickerCard';
+import { clearTrackPickerCache as clearCacheUtil } from '@/utils/trackPickerCache';
 import type { TrackPickerProps, Track } from '@/types/track';
 
 /**
@@ -263,6 +264,16 @@ export const TrackPicker = forwardRef<HTMLDivElement, TrackPickerProps>(function
     fetchTracks(1, false); // Force fresh fetch on retry
   }, [fetchTracks]);
 
+  // Handle manual refresh
+  const handleRefresh = useCallback(() => {
+    // Clear cache using utility function
+    clearCacheUtil(userId);
+    setPage(1);
+    setTracks([]);
+    fetchTracks(1, false); // Force fresh fetch
+    console.log('🔄 TrackPicker manually refreshed');
+  }, [userId, fetchTracks]);
+
   // Memoize skeleton items to avoid recreating on every render
   const skeletonItems = useMemo(() => Array.from({ length: 8 }), []);
 
@@ -359,9 +370,32 @@ export const TrackPicker = forwardRef<HTMLDivElement, TrackPickerProps>(function
   // Tracks grid
   return (
     <div className="space-y-4">
-      <p className="text-gray-400">
-        Select a track from your library to create an audio post
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-gray-400">
+          Select a track from your library to create an audio post
+        </p>
+        <button
+          onClick={handleRefresh}
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Refresh track list"
+        >
+          <svg 
+            className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+            />
+          </svg>
+          Refresh
+        </button>
+      </div>
       
       <div
         ref={ref}

@@ -5,6 +5,8 @@ import { getUserStats, getActivityFeed } from '@/utils/activity';
 import { formatTimeAgo } from '@/utils/format';
 import { UserProfile, UserStats, ActivityFeedItem } from '@/types';
 import FollowButton from './FollowButton';
+import { ReportButton } from './moderation/ReportButton';
+import { ModeratorFlagButton } from './moderation/ModeratorFlagButton';
 
 interface UserProfileProps {
   profile: UserProfile;
@@ -85,12 +87,30 @@ export default function UserProfileComponent({ profile, isOwnProfile = false }: 
           </div>
           
           {!isOwnProfile && user && (
-            <FollowButton
-              userId={profile.user_id}
-              username={profile.username}
-              size="md"
-              variant="primary"
-            />
+            <div className="flex flex-col gap-2">
+              <FollowButton
+                userId={profile.user_id}
+                username={profile.username}
+                size="md"
+                variant="primary"
+              />
+              
+              {/* Moderation Actions */}
+              <div className="flex items-center gap-2">
+                <ReportButton
+                  reportType="user"
+                  targetId={profile.user_id}
+                  contentCreatorId={profile.user_id}
+                  iconOnly={false}
+                />
+                <ModeratorFlagButton
+                  reportType="user"
+                  targetId={profile.user_id}
+                  contentCreatorId={profile.user_id}
+                  iconOnly={false}
+                />
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -1,20 +1,32 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   fetchPlatformConfig,
   updatePlatformConfig,
   updateFeatureFlag,
 } from '@/lib/platformConfigService';
 import type { PlatformConfig } from '@/types/admin';
+import { supabase } from '@/lib/supabase';
+
+interface ModerationStats {
+  pending_reports: number;
+  total_reports_today: number;
+  total_actions_today: number;
+}
 
 export function PlatformAdminTab() {
+  const router = useRouter();
   const [configs, setConfigs] = useState<PlatformConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingConfig, setEditingConfig] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [moderationStats, setModerationStats] = useState<ModerationStats | null>(null);
+  const [moderationLoading, setModerationLoading] = useState(true);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    moderation: false,
     featureFlags: true,
     uploadLimits: true,
     rateLimits: true,
@@ -36,8 +48,49 @@ export function PlatformAdminTab() {
     }
   };
 
+  const loadModerationStats = async () => {
+    setModerationLoading(true);
+    try {
+      // Get pending reports count
+      const { count: pendingCount } = await supabase
+        .from('moderation_reports')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['pending', 'under_review']);
+
+      // Get today's reports count
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count: todayReportsCount } = await supabase
+        .from('moderation_reports')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today.toISOString());
+
+      // Get today's actions count
+      const { count: todayActionsCount } = await supabase
+        .from('moderation_actions')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today.toISOString());
+
+      setModerationStats({
+        pending_reports: pendingCount || 0,
+        total_reports_today: todayReportsCount || 0,
+        total_actions_today: todayActionsCount || 0,
+      });
+    } catch (err) {
+      console.error('Failed to load moderation stats:', err);
+      setModerationStats({
+        pending_reports: 0,
+        total_reports_today: 0,
+        total_actions_today: 0,
+      });
+    } finally {
+      setModerationLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadConfigs();
+    loadModerationStats();
   }, []);
 
   const handleEdit = (config: PlatformConfig) => {
@@ -103,6 +156,68 @@ export function PlatformAdminTab() {
 
   return (
     <div className="space-y-8">
+      {/* Moderation Summary */}
+      <div>
+        <button
+          onClick={() => toggleSection('moderation')}
+          className="flex items-center space-x-2 text-lg font-semibold text-gray-900 mb-4 hover:text-blue-600 transition-colors"
+        >
+          <span className="transform transition-transform" style={{ transform: collapsedSections['moderation'] ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+            ▼
+          </span>
+          <span>🛡️ Moderation System</span>
+        </button>
+        {!collapsedSections['moderation'] && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            {moderationLoading ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-700">Loading moderation stats...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="text-sm text-yellow-800 font-medium mb-1">Pending Reports</div>
+                    <div className="text-3xl font-bold text-yellow-900">
+                      {moderationStats?.pending_reports || 0}
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="text-sm text-blue-800 font-medium mb-1">Reports Today</div>
+                    <div className="text-3xl font-bold text-blue-900">
+                      {moderationStats?.total_reports_today || 0}
+                    </div>
+                  </div>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="text-sm text-green-800 font-medium mb-1">Actions Today</div>
+                    <div className="text-3xl font-bold text-green-900">
+                      {moderationStats?.total_actions_today || 0}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Link to Moderation Dashboard */}
+                <div className="pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => router.push('/moderation')}
+                    className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                  >
+                    <span>🛡️</span>
+                    <span>Open Moderation Dashboard</span>
+                    <span>→</span>
+                  </button>
+                  <p className="text-sm text-gray-700 mt-2 text-center">
+                    Access the full moderation dashboard to review reports, take actions, and view detailed metrics
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Feature Flags */}
       <div>
         <button

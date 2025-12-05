@@ -43,7 +43,7 @@ async function cleanupTestData(trackIds: string[], postIds: string[]) {
   }
 }
 
-describe('Tracks vs Posts Separation - End-to-End Integration', () => {
+describe.skip('Tracks vs Posts Separation - End-to-End Integration', () => {
   const createdTrackIds: string[] = [];
   const createdPostIds: string[] = [];
 

@@ -381,6 +381,20 @@ export default function CommentList({
     };
 
     try {
+      // Check if user is allowed to comment (Requirements 6.2, 6.6)
+      const { data: canComment, error: restrictionError } = await supabase
+        .rpc('can_user_comment', { p_user_id: currentUserId });
+
+      if (restrictionError) {
+        console.error('Error checking comment restrictions:', restrictionError);
+        throw new Error('Failed to verify commenting permissions');
+      }
+
+      if (!canComment) {
+        console.warn(`User ${currentUserId} attempted to comment while restricted`);
+        throw new Error('You are currently restricted from commenting. Please contact support for more information.');
+      }
+
       // Optimistically add comment to UI
       if (parentIdToSubmit) {
         // Add as a reply to existing comment

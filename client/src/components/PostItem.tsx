@@ -11,6 +11,8 @@ import CommentList from './CommentList';
 import { AddToPlaylist } from './playlists/AddToPlaylist';
 import { ShareModal } from './library/ShareModal';
 import { PostShareButtons } from './posts/PostShareButtons';
+import { ReportButton } from './moderation/ReportButton';
+import { ModeratorFlagButton } from './moderation/ModeratorFlagButton';
 import { supabase } from '@/lib/supabase';
 import { queryCache } from '@/utils/queryCache';
 import { useToast } from '@/contexts/ToastContext';
@@ -477,6 +479,24 @@ const PostItem = memo(({ post, currentUserId, onDelete, showWaveform = true, edi
               username={username}
               postType={post.post_type}
               trackTitle={post.track?.title}
+            />
+            
+            {/* Report Button */}
+            {!isOwner && (
+              <ReportButton
+                reportType="post"
+                targetId={post.id}
+                contentCreatorId={post.user_id}
+                iconOnly={true}
+              />
+            )}
+            
+            {/* Moderator Flag Button */}
+            <ModeratorFlagButton
+              reportType="post"
+              contentCreatorId={post.user_id}
+              targetId={post.id}
+              iconOnly={true}
             />
           </div>
           

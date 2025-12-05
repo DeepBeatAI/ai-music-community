@@ -398,7 +398,13 @@ export async function updateUserRoles(
 
 /**
  * Suspend user account with audit logging
- * Requirements: 3.7
+ * Requirements: 3.7, 12.1, 12.2, 12.7
+ * 
+ * This function now integrates with the moderation system by:
+ * - Creating a moderation_actions record
+ * - Creating a user_restrictions record
+ * - Updating user_profiles with suspension details
+ * - Logging to admin_audit_log
  */
 export async function suspendUser(
   userId: string,
@@ -436,7 +442,12 @@ export async function suspendUser(
 
 /**
  * Unsuspend user account with audit logging
- * Requirements: 3.7
+ * Requirements: 3.7, 12.2, 12.3
+ * 
+ * This function now integrates with the moderation system by:
+ * - Removing suspension from user_profiles
+ * - Deactivating user_restrictions records
+ * - Logging to admin_audit_log
  */
 export async function unsuspendUser(userId: string): Promise<void> {
   try {
@@ -450,29 +461,6 @@ export async function unsuspendUser(userId: string): Promise<void> {
         ADMIN_ERROR_CODES.DATABASE_ERROR,
         { originalError: error }
       );
-    }
-
-    // Log the action by inserting directly into the audit log table
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData.user) {
-        const { data, error: insertError } = await supabase.from('admin_audit_log').insert({
-          admin_user_id: userData.user.id,
-          action_type: 'user_unsuspended',
-          target_resource_type: 'user',
-          target_resource_id: userId,
-          new_value: { action: 'unsuspended' },
-        });
-        
-        if (insertError) {
-          console.error('Audit log insert error:', insertError);
-        } else {
-          console.log('Audit log created successfully:', data);
-        }
-      }
-    } catch (logError) {
-      // Don't fail the unsuspend if logging fails
-      console.error('Failed to log unsuspend action:', logError);
     }
 
     // Invalidate user caches

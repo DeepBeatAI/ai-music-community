@@ -11,6 +11,8 @@ const customJestConfig = {
   testEnvironment: 'jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^isows/(.*)$': '<rootDir>/node_modules/isows/_cjs/$1',
+    '^isows$': '<rootDir>/node_modules/isows/_cjs/index.js',
   },
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',
@@ -22,8 +24,20 @@ const customJestConfig = {
     '<rootDir>/src/**/*.{test,spec}.{js,jsx,ts,tsx}',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!(isows|@supabase|@supabase/.*)/)',
+    'node_modules/(?!(isows|@supabase)/)',
   ],
+  // Limit parallel test execution to prevent hanging
+  maxWorkers: 1,
+  // Set global test timeout
+  testTimeout: 30000,
+  // Bail after first test failure to prevent hanging
+  bail: false,
+  // Clear mocks between tests
+  clearMocks: true,
+  // Reset mocks between tests
+  resetMocks: true,
+  // Restore mocks between tests
+  restoreMocks: true,
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

@@ -47,6 +47,8 @@ const DeleteConfirmationModal = lazy(() =>
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logSingleTrackPageError } from "@/utils/errorLogging";
 import { deleteTrack } from "@/lib/tracks";
+import { ReportButton } from "@/components/moderation/ReportButton";
+import { ModeratorFlagButton } from "@/components/moderation/ModeratorFlagButton";
 
 /**
  * Extended track type that includes all related data needed for the single track page
@@ -1196,6 +1198,27 @@ export default function SingleTrackPageClient() {
                   </span>
                 )}
               </div>
+              
+              {/* Moderation Actions */}
+              {user && (
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-700">
+                  {/* Report Button - Only for non-owners */}
+                  {user.id !== track.user_id && (
+                    <ReportButton
+                      reportType="track"
+                      targetId={track.id}
+                      iconOnly={false}
+                    />
+                  )}
+                  
+                  {/* Moderator Flag Button */}
+                  <ModeratorFlagButton
+                    reportType="track"
+                    targetId={track.id}
+                    iconOnly={false}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Waveform Player Section - Full Width on All Screens */}

@@ -109,6 +109,42 @@ export async function uploadTrack(
   const startTime = Date.now();
   
   try {
+    // Check if user is allowed to upload tracks (Requirements 6.3, 6.6)
+    const { data: canUpload, error: restrictionError } = await supabase
+      .rpc('can_user_upload', { p_user_id: userId });
+
+    if (restrictionError) {
+      console.error('Error checking upload restrictions:', restrictionError);
+      const errorDetails = createTrackError(TrackUploadError.VALIDATION_ERROR, 'Failed to verify upload permissions');
+      logTrackError('uploadTrack:restriction:check', errorDetails, {
+        userId,
+        fileName: uploadData.file.name,
+      });
+      
+      return {
+        success: false,
+        error: 'Failed to verify upload permissions',
+        errorCode: TrackUploadError.VALIDATION_ERROR,
+        details: restrictionError.message,
+      };
+    }
+
+    if (!canUpload) {
+      console.warn(`User ${userId} attempted to upload while restricted`);
+      const errorDetails = createTrackError(TrackUploadError.VALIDATION_ERROR, 'Upload restricted');
+      logTrackError('uploadTrack:restriction:blocked', errorDetails, {
+        userId,
+        fileName: uploadData.file.name,
+      });
+      
+      return {
+        success: false,
+        error: 'You are currently restricted from uploading tracks. Please contact support for more information.',
+        errorCode: TrackUploadError.VALIDATION_ERROR,
+        details: 'User has active upload restriction',
+      };
+    }
+
     // Validate author field (mandatory)
     if (!uploadData.author || uploadData.author.trim().length === 0) {
       const errorDetails = createTrackError(TrackUploadError.VALIDATION_ERROR, 'Author is required');

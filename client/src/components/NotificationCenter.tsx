@@ -354,6 +354,10 @@ interface NotificationItemProps {
 function NotificationItem({ notification, onNotificationClick }: NotificationItemProps) {
   const colorClass = getNotificationColor(notification.type, notification.priority || 1);
   const timeAgo = formatNotificationTime(notification.created_at);
+  
+  // Check if this is a reversal notification
+  const isReversal = notification.related_notification_id && 
+                     notification.data?.moderation_action === 'action_reversed';
 
   return (
     <div 
@@ -378,6 +382,15 @@ function NotificationItem({ notification, onNotificationClick }: NotificationIte
               <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
             )}
           </div>
+          
+          {/* Show reversal badge if this is a reversal notification */}
+          {isReversal && (
+            <div className="mt-1 mb-1">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900/30 text-green-400 border border-green-700">
+                ✓ Action Reversed
+              </span>
+            </div>
+          )}
           
           {notification.message && (
             <p className="text-gray-400 text-sm mt-1 line-clamp-2">

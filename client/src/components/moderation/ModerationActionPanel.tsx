@@ -10,6 +10,8 @@ import {
   STATUS_LABELS,
   ACTION_TYPE_LABELS,
   RESTRICTION_TYPE_LABELS,
+  ModerationError,
+  MODERATION_ERROR_CODES,
 } from '@/types/moderation';
 import { takeModerationAction, isAdmin, revokeAction } from '@/lib/moderationService';
 import { supabase } from '@/lib/supabase';
@@ -27,6 +29,7 @@ interface UserViolationHistory {
   recent_actions: Array<{
     action_type: string;
     reason: string;
+    internal_notes: string;
     created_at: string;
   }>;
 }
@@ -48,13 +51,14 @@ export function ModerationActionPanel({
   const [reportedUsername, setReportedUsername] = useState<string>('Unknown User');
   const [reporterUsername, setReporterUsername] = useState<string>('Anonymous');
   const [contentPreview, setContentPreview] = useState<string | null>(null);
+  const [contentCreatedAt, setContentCreatedAt] = useState<string | null>(null);
   const [userHistory, setUserHistory] = useState<UserViolationHistory | null>(null);
   
   // Action form state
   const [selectedAction, setSelectedAction] = useState<ModerationActionType | ''>('');
   const [suspensionDuration, setSuspensionDuration] = useState<number>(7);
   const [restrictionType, setRestrictionType] = useState<RestrictionType>('posting_disabled');
-  const [restrictionDuration, setRestrictionDuration] = useState<number | ''>('');
+  const [restrictionDuration, setRestrictionDuration] = useState<number>(1);
   const [internalNotes, setInternalNotes] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -162,17 +166,23 @@ export function ModerationActionPanel({
         .select('id', { count: 'exact', head: true })
         .eq('reported_user_id', userId);
 
-      // Fetch recent moderation actions
+      // Count total moderation actions (no cap)
+      const { count: actionCount } = await supabase
+        .from('moderation_actions')
+        .select('id', { count: 'exact', head: true })
+        .eq('target_user_id', userId);
+
+      // Fetch recent moderation actions (limited to 5)
       const { data: actions } = await supabase
         .from('moderation_actions')
-        .select('action_type, reason, created_at')
+        .select('action_type, reason, internal_notes, created_at')
         .eq('target_user_id', userId)
         .order('created_at', { ascending: false })
         .limit(5);
 
       setUserHistory({
         total_reports: reportCount || 0,
-        total_actions: actions?.length || 0,
+        total_actions: actionCount || 0,
         recent_actions: actions || [],
       });
     } catch (error) {
@@ -213,6 +223,13 @@ export function ModerationActionPanel({
         .maybeSingle();
 
       if (data) {
+        // Store the created_at timestamp
+        const contentData = data as unknown as { created_at?: string };
+        if (contentData.created_at) {
+          setContentCreatedAt(contentData.created_at);
+        }
+
+        // Set the content preview
         if (report.report_type === 'track') {
           const trackData = data as unknown as { title: string; description?: string };
           setContentPreview(`Title: ${trackData.title}\n${trackData.description || 'No description'}`);
@@ -225,10 +242,12 @@ export function ModerationActionPanel({
         }
       } else {
         setContentPreview('Content has been deleted or is unavailable');
+        setContentCreatedAt(null);
       }
     } catch (error) {
       console.error('Failed to load content preview:', error);
       setContentPreview('Failed to load content');
+      setContentCreatedAt(null);
     }
   };
 
@@ -270,11 +289,12 @@ export function ModerationActionPanel({
         targetType?: 'post' | 'comment' | 'track' | 'user';
         targetId?: string;
         durationDays?: number;
+        restrictionType?: RestrictionType;
       } = {
         reportId: report.id,
         actionType: selectedAction,
         targetUserId: report.reported_user_id || report.reporter_id,
-        reason: internalNotes,
+        reason: REASON_LABELS[report.reason], // Use the user-friendly label
         internalNotes,
         notificationMessage: notificationMessage || undefined,
       };
@@ -290,13 +310,13 @@ export function ModerationActionPanel({
         actionParams.durationDays = suspensionDuration;
       }
 
-      await takeModerationAction(actionParams);
-
-      // If restriction is being applied, handle it separately
+      // Add restriction type and duration for restrictions
       if (selectedAction === 'restriction_applied') {
-        // The restriction would be applied through a separate function
-        // For now, we'll include it in the action metadata
+        actionParams.restrictionType = restrictionType;
+        actionParams.durationDays = restrictionDuration;
       }
+
+      await takeModerationAction(actionParams);
 
       setSuccess(true);
       setTimeout(() => {
@@ -304,22 +324,34 @@ export function ModerationActionPanel({
         onClose();
       }, 1500);
     } catch (err) {
-      console.error('Failed to take moderation action:', err);
-      
-      // Handle specific error codes with user-friendly messages
-      if (err && typeof err === 'object' && 'code' in err) {
-        const errorCode = (err as { code: string }).code;
+      // Handle ModerationError instances
+      if (err instanceof ModerationError) {
+        // Only log unexpected errors to console (not validation errors)
+        if (err.code !== MODERATION_ERROR_CODES.VALIDATION_ERROR) {
+          console.error('Failed to take moderation action:', err);
+        }
         
-        if (errorCode === 'MODERATION_INSUFFICIENT_PERMISSIONS') {
-          setError('You do not have permission to take action on this user. Moderators cannot take actions on admin accounts.');
-        } else if (errorCode === 'MODERATION_UNAUTHORIZED') {
-          setError('You are not authorized to perform this action. Please contact an administrator.');
-        } else if (errorCode === 'MODERATION_RATE_LIMIT_EXCEEDED') {
-          setError('You have exceeded the rate limit for moderation actions. Please try again later.');
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to take action');
+        // Handle specific error codes with user-friendly messages
+        switch (err.code) {
+          case MODERATION_ERROR_CODES.INSUFFICIENT_PERMISSIONS:
+            setError('You do not have permission to take action on this user. Moderators cannot take actions on admin accounts.');
+            break;
+          case MODERATION_ERROR_CODES.UNAUTHORIZED:
+            setError('You are not authorized to perform this action. Please contact an administrator.');
+            break;
+          case MODERATION_ERROR_CODES.RATE_LIMIT_EXCEEDED:
+            setError('You have exceeded the rate limit for moderation actions. Please try again later.');
+            break;
+          case MODERATION_ERROR_CODES.VALIDATION_ERROR:
+            // For validation errors, just show the error message (it's already user-friendly)
+            setError(err.message);
+            break;
+          default:
+            setError(err.message || 'Failed to take action');
         }
       } else {
+        // Handle non-ModerationError exceptions
+        console.error('Unexpected error taking moderation action:', err);
         setError(err instanceof Error ? err.message : 'Failed to take action');
       }
     } finally {
@@ -436,9 +468,9 @@ export function ModerationActionPanel({
             <h3 className="text-lg font-semibold text-white mb-3">Report Details</h3>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+              <div className="sm:col-span-2">
                 <span className="text-sm text-gray-400">Report ID:</span>
-                <p className="text-white font-mono text-sm">{report.id.substring(0, 16)}...</p>
+                <p className="text-white font-mono text-sm break-all">{report.id}</p>
               </div>
               <div>
                 <span className="text-sm text-gray-400">Created:</span>
@@ -491,6 +523,12 @@ export function ModerationActionPanel({
                   <p className="text-white text-sm">{reportedUsername}</p>
                 </div>
               )}
+              {contentCreatedAt && (
+                <div>
+                  <span className="text-sm text-gray-400">Content Date/Time:</span>
+                  <p className="text-white text-sm">{formatDate(contentCreatedAt)}</p>
+                </div>
+              )}
             </div>
 
             {contentPreview && (
@@ -516,14 +554,14 @@ export function ModerationActionPanel({
                   <p className="text-white text-lg font-semibold">{userHistory.total_reports}</p>
                 </div>
                 <div>
-                  <span className="text-sm text-gray-400">Past Actions:</span>
+                  <span className="text-sm text-gray-400">Past Actions (total):</span>
                   <p className="text-white text-lg font-semibold">{userHistory.total_actions}</p>
                 </div>
               </div>
 
               {userHistory.recent_actions.length > 0 && (
                 <div>
-                  <span className="text-sm text-gray-400 block mb-2">Recent Actions:</span>
+                  <span className="text-sm text-gray-400 block mb-2">Recent Actions (last 5):</span>
                   <div className="space-y-2">
                     {userHistory.recent_actions.map((action, index) => (
                       <div key={index} className="bg-gray-800 rounded p-2 text-sm">
@@ -535,7 +573,7 @@ export function ModerationActionPanel({
                             {formatDate(action.created_at)}
                           </span>
                         </div>
-                        <p className="text-gray-300 text-xs mt-1">{action.reason}</p>
+                        <p className="text-gray-300 text-xs mt-1">{action.internal_notes}</p>
                       </div>
                     ))}
                   </div>
@@ -564,8 +602,8 @@ export function ModerationActionPanel({
                 <option value="content_approved">Dismiss Report (Approve Content)</option>
                 <option value="content_removed">Remove Content</option>
                 <option value="user_warned">Warn User</option>
-                <option value="user_suspended">Suspend User</option>
                 <option value="restriction_applied">Apply Restriction</option>
+                <option value="user_suspended">Suspend User</option>
                 {isAdminUser && <option value="user_banned">Ban User (Admin Only)</option>}
               </select>
               {selectedAction && (
@@ -618,18 +656,19 @@ export function ModerationActionPanel({
 
                 <div>
                   <label htmlFor="restriction-duration" className="block text-sm font-medium text-gray-300 mb-2">
-                    Restriction Duration (days, leave empty for permanent)
+                    Restriction Duration
                   </label>
-                  <input
+                  <select
                     id="restriction-duration"
-                    type="number"
-                    min="1"
                     value={restrictionDuration}
-                    onChange={(e) => setRestrictionDuration(e.target.value ? Number(e.target.value) : '')}
-                    placeholder="Leave empty for permanent"
+                    onChange={(e) => setRestrictionDuration(Number(e.target.value))}
                     className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={loading || success}
-                  />
+                  >
+                    <option value={1}>1 Day</option>
+                    <option value={7}>7 Days</option>
+                    <option value={30}>30 Days</option>
+                  </select>
                 </div>
               </>
             )}

@@ -1164,7 +1164,17 @@ async function executeAction(params: ModerationActionParams): Promise<void> {
       break;
 
     case 'restriction_applied':
-      // Restrictions are handled separately through applyRestriction
+      // Apply the restriction to the user
+      if (targetUserId && params.restrictionType) {
+        await applyRestriction(
+          targetUserId,
+          params.restrictionType,
+          params.reason,
+          durationDays,
+          undefined, // relatedActionId will be set after action is created
+          false // Don't send notification here - it's handled by takeModerationAction
+        );
+      }
       break;
 
     default:
@@ -1312,6 +1322,23 @@ export async function takeModerationAction(
       );
     }
 
+    // Link restriction to action if this was a restriction_applied action
+    // Requirements: 13.5
+    if (params.actionType === 'restriction_applied' && params.restrictionType && params.targetUserId) {
+      const { error: linkError } = await supabase
+        .from('user_restrictions')
+        .update({ related_action_id: action.id })
+        .eq('user_id', params.targetUserId)
+        .eq('restriction_type', params.restrictionType)
+        .eq('is_active', true)
+        .is('related_action_id', null);
+
+      if (linkError) {
+        console.error('Failed to link restriction to action:', linkError);
+        // Don't throw - action was already taken
+      }
+    }
+
     // Update report status
     const newStatus = params.actionType === 'content_approved' ? 'dismissed' : 'resolved';
     const { error: updateError } = await supabase
@@ -1339,10 +1366,11 @@ export async function takeModerationAction(
         const notificationId = await sendModerationNotification(params.targetUserId, {
           actionType: params.actionType,
           targetType: params.targetType,
-          reason: params.reason,
+          reason: params.reason, // Always use the actual reason
           durationDays: params.durationDays,
           expiresAt: expiresAt || undefined,
-          customMessage: params.notificationMessage,
+          customMessage: params.notificationMessage, // Use notification message as additional info
+          restrictionType: params.restrictionType,
         });
 
         // Update notification_sent flag and notification_id
@@ -1529,6 +1557,41 @@ export async function applyRestriction(
       throw new ModerationError(
         'Only moderators and admins can apply restrictions',
         MODERATION_ERROR_CODES.UNAUTHORIZED
+      );
+    }
+
+    // Check for existing active restriction of the same type
+    // Requirements: Database constraint enforcement
+    const { data: existingRestriction, error: checkError } = await supabase
+      .from('user_restrictions')
+      .select('id, expires_at, reason')
+      .eq('user_id', userId)
+      .eq('restriction_type', restrictionType)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error('Error checking for existing restriction:', checkError);
+      throw new ModerationError(
+        'Failed to check for existing restrictions',
+        MODERATION_ERROR_CODES.DATABASE_ERROR,
+        { originalError: checkError }
+      );
+    }
+
+    if (existingRestriction) {
+      const expirationInfo = existingRestriction.expires_at
+        ? ` (expires ${new Date(existingRestriction.expires_at).toLocaleString()})`
+        : ' (permanent)';
+      
+      throw new ModerationError(
+        `This user already has an active ${restrictionType.replace('_', ' ')} restriction${expirationInfo}. Please remove the existing restriction before applying a new one.`,
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        { 
+          existingRestrictionId: existingRestriction.id,
+          existingReason: existingRestriction.reason,
+          expiresAt: existingRestriction.expires_at
+        }
       );
     }
 

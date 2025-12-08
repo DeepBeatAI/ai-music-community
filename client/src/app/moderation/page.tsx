@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { isUserModeratorOrAdmin } from '@/lib/userTypeService';
+import { isAdmin } from '@/lib/moderationService';
 import { ModerationQueue } from '@/components/moderation/ModerationQueue';
 import { ModerationLogs } from '@/components/moderation/ModerationLogs';
 import { ModerationMetrics } from '@/components/moderation/ModerationMetrics';
@@ -14,6 +15,7 @@ export default function ModerationPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'queue' | 'logs' | 'myActions' | 'metrics' | 'settings'>('queue');
 
@@ -38,6 +40,10 @@ export default function ModerationPage() {
         router.push('/?error=unauthorized');
         return;
       }
+
+      // Check if user is admin (for Settings tab access)
+      const adminStatus = await isAdmin(user.id);
+      setIsAdminUser(adminStatus);
 
       setIsAuthorized(true);
       setLoading(false);
@@ -66,6 +72,27 @@ export default function ModerationPage() {
   return (
     <div className="min-h-screen bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Back to Home Button */}
+        <button
+          onClick={() => router.push('/')}
+          className="mb-6 flex items-center text-gray-400 hover:text-white transition-colors"
+        >
+          <svg
+            className="w-5 h-5 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+          Home
+        </button>
+
         {/* Page Header */}
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-2">
@@ -124,17 +151,19 @@ export default function ModerationPage() {
             >
               Metrics
             </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'settings'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
-              }`}
-              aria-current={activeTab === 'settings' ? 'page' : undefined}
-            >
-              Settings
-            </button>
+            {isAdminUser && (
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'settings'
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+                aria-current={activeTab === 'settings' ? 'page' : undefined}
+              >
+                Settings
+              </button>
+            )}
           </nav>
         </div>
 
@@ -169,7 +198,7 @@ export default function ModerationPage() {
 
           {activeTab === 'metrics' && <ModerationMetrics />}
 
-          {activeTab === 'settings' && <ModerationSettings />}
+          {activeTab === 'settings' && isAdminUser && <ModerationSettings />}
         </div>
       </div>
     </div>

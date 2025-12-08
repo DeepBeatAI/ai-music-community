@@ -20,9 +20,10 @@ jest.mock('../supabase', () => ({
 import { supabase } from '../supabase';
 
 describe('verifyNotAdminTarget', () => {
-  const mockCurrentUserId = 'current-user-id';
-  const mockTargetUserId = 'target-user-id';
-  const mockAdminUserId = 'admin-user-id';
+  // Use valid UUID format for test IDs
+  const mockCurrentUserId = '11111111-1111-1111-1111-111111111111';
+  const mockTargetUserId = '22222222-2222-2222-2222-222222222222';
+  const mockAdminUserId = '33333333-3333-3333-3333-333333333333';
 
   beforeEach(() => {
     jest.clearAllMocks();

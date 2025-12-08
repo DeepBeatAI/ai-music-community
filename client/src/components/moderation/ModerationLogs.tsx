@@ -12,12 +12,18 @@ import {
 import {
   ModerationAction,
   ACTION_TYPE_LABELS,
+  REASON_LABELS,
 } from '@/types/moderation';
 import { ActionStateBadge } from './ActionStateBadge';
-import { ReversalTooltip } from './ReversalTooltip';
+import { supabase } from '@/lib/supabase';
 
 interface ModerationLogsProps {
   onActionSelect?: (action: ModerationAction) => void;
+}
+
+interface ActionWithUsernames extends ModerationAction {
+  targetUsername?: string;
+  moderatorUsername?: string;
 }
 
 export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
@@ -25,7 +31,7 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
   const { showToast } = useToast();
 
   // State
-  const [actions, setActions] = useState<ModerationAction[]>([]);
+  const [actions, setActions] = useState<ActionWithUsernames[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
@@ -62,7 +68,47 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
         setLoading(true);
         const offset = (currentPage - 1) * itemsPerPage;
         const result = await fetchModerationLogs(filters, itemsPerPage, offset);
-        setActions(result.actions);
+        
+        // Fetch usernames for all actions
+        const actionsWithUsernames = await Promise.all(
+          result.actions.map(async (action) => {
+            const actionWithUsernames: ActionWithUsernames = { ...action };
+
+            // Fetch target username
+            if (action.target_user_id) {
+              const { data: targetProfile, error: targetError } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('user_id', action.target_user_id)
+                .maybeSingle();
+              
+              if (targetError) {
+                console.error('Error fetching target username:', targetError);
+              }
+              
+              actionWithUsernames.targetUsername = targetProfile?.username || 'Unknown User';
+            }
+
+            // Fetch moderator username
+            if (action.moderator_id) {
+              const { data: moderatorProfile, error: moderatorError } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('user_id', action.moderator_id)
+                .maybeSingle();
+              
+              if (moderatorError) {
+                console.error('Error fetching moderator username:', moderatorError);
+              }
+              
+              actionWithUsernames.moderatorUsername = moderatorProfile?.username || 'Unknown Moderator';
+            }
+
+            return actionWithUsernames;
+          })
+        );
+
+        setActions(actionsWithUsernames);
         setTotal(result.total);
       } catch (error) {
         console.error('Failed to fetch moderation logs:', error);
@@ -567,7 +613,7 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[1000px]">
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -586,6 +632,9 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                     Reason
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Internal Notes
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                     Duration
                   </th>
                 </tr>
@@ -596,13 +645,13 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                   const reversalInfo = reversed ? getReversalInfo(action) : null;
 
                   return (
-                    <ReversalTooltip key={action.id} action={action} position="top">
-                      <tr
-                        onClick={() => onActionSelect?.(action)}
-                        className={`hover:bg-gray-700 cursor-pointer transition-colors ${
-                          reversed ? 'opacity-75' : ''
-                        }`}
-                      >
+                    <tr
+                      key={action.id}
+                      onClick={() => onActionSelect?.(action)}
+                      className={`hover:bg-gray-700 cursor-pointer transition-colors ${
+                        reversed ? 'opacity-75' : ''
+                      }`}
+                    >
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <span className={reversed ? 'line-through' : ''}>
                           {formatDate(action.created_at)}
@@ -622,25 +671,30 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                           <ActionStateBadge action={action} />
                         </div>
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <span className={reversed ? 'line-through' : ''}>
-                          {action.target_user_id.substring(0, 8)}...
+                          {action.targetUsername || 'Unknown User'}
                         </span>
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <span className={reversed ? 'line-through' : ''}>
-                          {action.moderator_id.substring(0, 8)}...
+                          {action.moderatorUsername || 'Unknown Moderator'}
                         </span>
                       </td>
-                      <td className="px-4 sm:px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
-                        <span className={reversed ? 'line-through' : ''}>
-                          {action.reason}
-                        </span>
+                      <td className="px-4 sm:px-6 py-4 text-sm text-gray-300 max-w-xs">
+                        <div className={reversed ? 'line-through' : ''}>
+                          {REASON_LABELS[action.reason as keyof typeof REASON_LABELS] || action.reason}
+                        </div>
                         {reversed && reversalInfo && (
                           <div className="text-xs text-gray-400 mt-1">
                             Reversed: {reversalInfo.reason}
                           </div>
                         )}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 text-sm text-gray-300 max-w-xs">
+                        <div className={reversed ? 'line-through' : ''}>
+                          {action.internal_notes || '-'}
+                        </div>
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <span className={reversed ? 'line-through' : ''}>
@@ -652,7 +706,6 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                         </span>
                       </td>
                     </tr>
-                    </ReversalTooltip>
                   );
                 })}
               </tbody>

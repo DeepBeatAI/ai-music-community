@@ -29,6 +29,13 @@ interface ReversalMetricsSummary {
   }>;
 }
 
+interface ModeratorPerformanceWithUsername {
+  moderatorId: string;
+  moderatorUsername: string;
+  actionsCount: number;
+  averageResolutionTime: number;
+}
+
 export function ModerationMetrics() {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -44,6 +51,7 @@ export function ModerationMetrics() {
   const [refreshInterval, setRefreshInterval] = useState(30); // seconds
   const [reversalMetrics, setReversalMetrics] = useState<ReversalMetricsSummary | null>(null);
   const [reversalLoading, setReversalLoading] = useState(true);
+  const [moderatorPerformanceWithUsernames, setModeratorPerformanceWithUsernames] = useState<ModeratorPerformanceWithUsername[]>([]);
 
   // Check if user is admin
   useEffect(() => {
@@ -63,6 +71,32 @@ export function ModerationMetrics() {
         setLoading(true);
         const data = await calculateModerationMetrics(dateRange, includeSLA, includeTrends);
         setMetrics(data);
+
+        // Fetch usernames for moderator performance if available
+        if (data.moderatorPerformance && data.moderatorPerformance.length > 0) {
+          const performanceWithUsernames = await Promise.all(
+            data.moderatorPerformance.map(async (mod) => {
+              const { data: moderatorProfile, error } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('user_id', mod.moderatorId)
+                .maybeSingle();
+
+              if (error) {
+                console.error('Error fetching moderator username:', error);
+              }
+
+              return {
+                ...mod,
+                moderatorUsername: moderatorProfile?.username || 'Unknown Moderator',
+              };
+            })
+          );
+
+          setModeratorPerformanceWithUsernames(performanceWithUsernames);
+        } else {
+          setModeratorPerformanceWithUsernames([]);
+        }
       } catch (error) {
         console.error('Failed to fetch moderation metrics:', error);
         showToast('Failed to load metrics', 'error');
@@ -96,7 +130,18 @@ export function ModerationMetrics() {
         );
 
         if (metricsError) {
+          console.error('Reversal metrics error:', {
+            message: metricsError.message,
+            details: metricsError.details,
+            hint: metricsError.hint,
+            code: metricsError.code,
+          });
           throw metricsError;
+        }
+
+        if (!metricsData) {
+          console.error('No data returned from get_reversal_metrics');
+          throw new Error('No data returned from get_reversal_metrics');
         }
 
         // Fetch recent reversals (last 5)
@@ -124,10 +169,10 @@ export function ModerationMetrics() {
         }));
 
         setReversalMetrics({
-          overallReversalRate: metricsData.overall_reversal_rate || 0,
-          totalReversals: metricsData.total_reversals || 0,
-          totalActions: metricsData.total_actions || 0,
-          averageTimeToReversalHours: metricsData.time_to_reversal_stats?.average_hours || 0,
+          overallReversalRate: metricsData.overallReversalRate || 0,
+          totalReversals: metricsData.totalReversals || 0,
+          totalActions: metricsData.totalActions || 0,
+          averageTimeToReversalHours: metricsData.timeToReversalStats?.averageHours || 0,
           recentReversals,
         });
       } catch (error) {
@@ -617,55 +662,49 @@ export function ModerationMetrics() {
       </div>
 
       {/* Moderator Performance (Admin Only) */}
-      {isAdminUser && metrics.moderatorPerformance && (
+      {isAdminUser && moderatorPerformanceWithUsernames.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
           <h3 className="text-lg font-semibold text-white mb-4">
             Moderator Performance Comparison
           </h3>
-          {metrics.moderatorPerformance.length === 0 ? (
-            <p className="text-gray-400 text-center py-8">
-              No moderator actions in the last 30 days
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Moderator ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Actions Taken
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Avg Resolution Time
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {metrics.moderatorPerformance
-                    .sort((a, b) => b.actionsCount - a.actionsCount)
-                    .map((mod) => (
-                      <tr key={mod.moderatorId} className="hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">
-                          {mod.moderatorId.substring(0, 8)}...
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900 text-blue-200">
-                            {mod.actionsCount} actions
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {mod.averageResolutionTime > 0
-                            ? `${mod.averageResolutionTime.toFixed(1)}h`
-                            : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Moderator
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Actions Taken
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Avg Resolution Time
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {moderatorPerformanceWithUsernames
+                  .sort((a, b) => b.actionsCount - a.actionsCount)
+                  .map((mod) => (
+                    <tr key={mod.moderatorId} className="hover:bg-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {mod.moderatorUsername}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900 text-blue-200">
+                          {mod.actionsCount} actions
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {mod.averageResolutionTime > 0
+                          ? `${mod.averageResolutionTime.toFixed(1)}h`
+                          : 'N/A'}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -1,10 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  eslint: {
-    ignoreDuringBuilds: false,
-    dirs: ['src'],
-  },
   images: {
     domains: ['your-supabase-project.supabase.co'],
     formats: ['image/webp', 'image/avif'],

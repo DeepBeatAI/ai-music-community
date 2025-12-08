@@ -376,7 +376,10 @@ function NotificationItem({ notification, onNotificationClick }: NotificationIte
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <p className="text-white text-sm font-medium">
-              {notification.title}
+              {notification.type === 'moderation' 
+                ? notification.title.replace(/<[^>]*>/g, '')
+                : notification.title
+              }
             </p>
             {!notification.read && (
               <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
@@ -394,7 +397,10 @@ function NotificationItem({ notification, onNotificationClick }: NotificationIte
           
           {notification.message && (
             <p className="text-gray-400 text-sm mt-1 line-clamp-2">
-              {notification.message}
+              {notification.type === 'moderation'
+                ? notification.message.replace(/<[^>]*>/g, '')
+                : notification.message
+              }
             </p>
           )}
           

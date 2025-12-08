@@ -204,7 +204,7 @@ describe('Moderation Service - Property-Based Tests', () => {
             reason: fc.string({ minLength: 1, maxLength: 500 }).filter(s => s.trim().length > 0),
             durationDays: fc.option(fc.integer({ min: 1, max: 365 }), { nil: undefined }),
             expiresAt: fc.option(
-              fc.date({ min: new Date(), max: new Date('2025-12-31') }).map(d => d.toISOString()),
+              fc.date({ min: new Date(), max: new Date('2026-12-31') }).map(d => d.toISOString()),
               { nil: undefined }
             ),
             customMessage: fc.option(fc.string({ maxLength: 500 }), { nil: undefined }),
@@ -223,7 +223,7 @@ describe('Moderation Service - Property-Based Tests', () => {
             expect(notification.title.trim()).not.toBe('');
             expect(notification.message).toBeDefined();
             expect(notification.message.trim()).not.toBe('');
-            expect(notification.type).toBe('system');
+            expect(notification.type).toBe('moderation');
             expect(notification.priority).toBeGreaterThanOrEqual(1);
             expect(notification.priority).toBeLessThanOrEqual(3);
 
@@ -298,7 +298,7 @@ describe('Moderation Service - Property-Based Tests', () => {
             expect(notification.title.trim()).not.toBe('');
             expect(notification.message).toBeDefined();
             expect(notification.message.trim()).not.toBe('');
-            expect(notification.type).toBe('system');
+            expect(notification.type).toBe('moderation');
             expect(notification.priority).toBe(2);
 
             // Verify title indicates expiration or lifting
@@ -408,7 +408,7 @@ describe('Moderation Service - Property-Based Tests', () => {
             expect(notification).toBeDefined();
             expect(notification.title).toBeDefined();
             expect(notification.message).toBeDefined();
-            expect(notification.type).toBe('system');
+            expect(notification.type).toBe('moderation');
 
             // Verify reason is included even if very short or very long
             expect(notification.message).toContain(params.reason);

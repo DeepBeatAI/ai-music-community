@@ -27,7 +27,7 @@ describe('Moderation Notifications', () => {
         expect(notification.message).toContain('post');
         expect(notification.message).toContain('Spam content');
         expect(notification.message).toContain('appeal');
-        expect(notification.type).toBe('system');
+        expect(notification.type).toBe('moderation');
         expect(notification.priority).toBe(2);
       });
 
@@ -69,7 +69,7 @@ describe('Moderation Notifications', () => {
         expect(notification.title).toBe('Content Removed');
         expect(notification.message).toContain('removed');
         expect(notification.message).toContain('Violates guidelines');
-        expect(notification.type).toBe('system');
+        expect(notification.type).toBe('moderation');
       });
     });
 
@@ -85,7 +85,7 @@ describe('Moderation Notifications', () => {
         expect(notification.message).toContain('Inappropriate behavior');
         expect(notification.message).toContain('community guidelines');
         expect(notification.message).toContain('appeal');
-        expect(notification.type).toBe('system');
+        expect(notification.type).toBe('moderation');
         expect(notification.priority).toBe(1);
       });
 
@@ -116,7 +116,7 @@ describe('Moderation Notifications', () => {
         expect(notification.message).toContain('7 days');
         expect(notification.message).toContain('1/15/2025');
         expect(notification.message).toContain('appeal');
-        expect(notification.type).toBe('system');
+        expect(notification.type).toBe('moderation');
         expect(notification.priority).toBe(3);
       });
 
@@ -155,7 +155,7 @@ describe('Moderation Notifications', () => {
         expect(notification.message).toContain('Severe repeated violations');
         expect(notification.message).toContain('permanent ban');
         expect(notification.message).toContain('appeal');
-        expect(notification.type).toBe('system');
+        expect(notification.type).toBe('moderation');
         expect(notification.priority).toBe(3);
       });
     });
@@ -176,7 +176,7 @@ describe('Moderation Notifications', () => {
         expect(notification.message).toContain('3 days');
         expect(notification.message).toContain('not be able to create new posts');
         expect(notification.message).toContain('1/10/2025');
-        expect(notification.type).toBe('system');
+        expect(notification.type).toBe('moderation');
         expect(notification.priority).toBe(2);
       });
 
@@ -226,7 +226,7 @@ describe('Moderation Notifications', () => {
       expect(notification.message).toContain('Create posts');
       expect(notification.message).toContain('Upload tracks');
       expect(notification.message).toContain('community guidelines');
-      expect(notification.type).toBe('system');
+      expect(notification.type).toBe('moderation');
       expect(notification.priority).toBe(2);
     });
 
@@ -320,7 +320,7 @@ describe('Moderation Notifications', () => {
         reason: 'Test',
       });
 
-      expect(notification.type).toBe('system');
+      expect(notification.type).toBe('moderation');
     });
 
     it('should handle missing optional parameters gracefully', () => {
@@ -369,3 +369,4 @@ describe('Moderation Notifications', () => {
     });
   });
 });
+

@@ -97,6 +97,11 @@ export default function NotificationsPage() {
       return notification.title;
     }
 
+    // Don't add username links for moderation notifications
+    if (notification.type === 'moderation') {
+      return notification.title;
+    }
+
     const username = extractUsername(notification);
     const title = notification.title;
     
@@ -327,10 +332,16 @@ export default function NotificationsPage() {
                         </div>
                         
                         {notification.message && (
-                          <p className="text-gray-400 text-sm mt-1 line-clamp-2">
+                          <p className="text-gray-400 text-sm mt-1 break-words">
                             {(() => {
-                              const username = extractUsername(notification);
                               const message = notification.message || '';
+                              
+                              // Don't add username links for moderation notifications
+                              if (notification.type === 'moderation') {
+                                return message;
+                              }
+                              
+                              const username = extractUsername(notification);
                               
                               if (username && message.includes(username)) {
                                 const parts = message.split(username);

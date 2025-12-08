@@ -10,12 +10,17 @@ import {
 import {
   ModerationAction,
   ACTION_TYPE_LABELS,
+  REASON_LABELS,
 } from '@/types/moderation';
 import { ActionStateBadge } from './ActionStateBadge';
-import { ReversalTooltip } from './ReversalTooltip';
+import { supabase } from '@/lib/supabase';
 
 interface MyActionsViewProps {
   onActionSelect?: (action: ModerationAction) => void;
+}
+
+interface ActionWithUsernames extends ModerationAction {
+  targetUsername?: string;
 }
 
 export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
@@ -23,7 +28,7 @@ export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
   const { showToast } = useToast();
 
   // State
-  const [actions, setActions] = useState<ModerationAction[]>([]);
+  const [actions, setActions] = useState<ActionWithUsernames[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,8 +78,32 @@ export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
           );
         }
 
-        setActions(filteredActions);
-        setTotal(showSelfReversedOnly ? filteredActions.length : result.total);
+        // Fetch usernames for all actions
+        const actionsWithUsernames = await Promise.all(
+          filteredActions.map(async (action) => {
+            const actionWithUsernames: ActionWithUsernames = { ...action };
+
+            // Fetch target username
+            if (action.target_user_id) {
+              const { data: targetProfile, error: targetError } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('user_id', action.target_user_id)
+                .maybeSingle();
+              
+              if (targetError) {
+                console.error('Error fetching target username:', targetError);
+              }
+              
+              actionWithUsernames.targetUsername = targetProfile?.username || 'Unknown User';
+            }
+
+            return actionWithUsernames;
+          })
+        );
+
+        setActions(actionsWithUsernames);
+        setTotal(showSelfReversedOnly ? actionsWithUsernames.length : result.total);
 
         // Calculate reversal statistics
         const reversedActions = result.actions.filter((action) => action.revoked_at);
@@ -382,7 +411,7 @@ export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[1000px]">
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -396,6 +425,9 @@ export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                     Reason
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Internal Notes
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                     Duration
@@ -412,13 +444,13 @@ export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
                   const reversalInfo = reversed ? getReversalInfo(action) : null;
 
                   return (
-                    <ReversalTooltip key={action.id} action={action} position="top">
-                      <tr
-                        onClick={() => onActionSelect?.(action)}
-                        className={`hover:bg-gray-700 cursor-pointer transition-colors ${
-                          selfReversed ? 'bg-yellow-900 bg-opacity-20' : reversed ? 'opacity-75' : ''
-                        }`}
-                      >
+                    <tr
+                      key={action.id}
+                      onClick={() => onActionSelect?.(action)}
+                      className={`hover:bg-gray-700 cursor-pointer transition-colors ${
+                        selfReversed ? 'bg-yellow-900 bg-opacity-20' : reversed ? 'opacity-75' : ''
+                      }`}
+                    >
                         <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                           <span className={reversed ? 'line-through' : ''}>
                             {formatDate(action.created_at)}
@@ -443,20 +475,25 @@ export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                           <span className={reversed ? 'line-through' : ''}>
-                            {action.target_user_id.substring(0, 8)}...
+                            {action.targetUsername || 'Unknown User'}
                           </span>
                         </td>
-                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
-                          <span className={reversed ? 'line-through' : ''}>
-                            {action.reason}
-                          </span>
+                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-300 max-w-xs">
+                          <div className={reversed ? 'line-through' : ''}>
+                            {REASON_LABELS[action.reason as keyof typeof REASON_LABELS] || action.reason}
+                          </div>
                           {reversed && reversalInfo && (
                             <div className="text-xs text-gray-400 mt-1">
                               Reversed: {reversalInfo.reason}
                             </div>
                           )}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-300 max-w-xs">
+                          <div className={reversed ? 'line-through' : ''}>
+                            {action.internal_notes || '-'}
+                          </div>
                         </td>
                         <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                           <span className={reversed ? 'line-through' : ''}>
@@ -483,7 +520,6 @@ export function MyActionsView({ onActionSelect }: MyActionsViewProps) {
                           )}
                         </td>
                       </tr>
-                    </ReversalTooltip>
                   );
                 })}
               </tbody>

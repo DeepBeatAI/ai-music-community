@@ -20,6 +20,7 @@ export function ModerationQueue({ onReportSelect }: ModerationQueueProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<QueueFilters>({});
+  const [selectedTimeframe, setSelectedTimeframe] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [actionIdToReverse, setActionIdToReverse] = useState<string | undefined>(undefined);
@@ -86,6 +87,7 @@ export function ModerationQueue({ onReportSelect }: ModerationQueueProps) {
 
   const clearFilters = () => {
     setFilters({});
+    setSelectedTimeframe('');
     setCurrentPage(1);
   };
 
@@ -201,6 +203,63 @@ export function ModerationQueue({ onReportSelect }: ModerationQueueProps) {
               <option value="comment">Comment</option>
               <option value="track">Track</option>
               <option value="user">User</option>
+            </select>
+          </div>
+
+          {/* Timeframe Filter */}
+          <div>
+            <label htmlFor="timeframe-filter" className="block text-sm font-medium text-gray-300 mb-1">
+              Timeframe
+            </label>
+            <select
+              id="timeframe-filter"
+              value={selectedTimeframe}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedTimeframe(value);
+                
+                if (!value) {
+                  setFilters((prev) => ({
+                    ...prev,
+                    startDate: undefined,
+                    endDate: undefined,
+                  }));
+                } else {
+                  const now = new Date();
+                  let startDate: Date;
+                  
+                  switch (value) {
+                    case 'today':
+                      startDate = new Date(now.setHours(0, 0, 0, 0));
+                      break;
+                    case 'week':
+                      startDate = new Date(now.setDate(now.getDate() - 7));
+                      break;
+                    case 'month':
+                      startDate = new Date(now.setMonth(now.getMonth() - 1));
+                      break;
+                    case '3months':
+                      startDate = new Date(now.setMonth(now.getMonth() - 3));
+                      break;
+                    default:
+                      return;
+                  }
+                  
+                  setFilters((prev) => ({
+                    ...prev,
+                    startDate: startDate.toISOString(),
+                    endDate: new Date().toISOString(),
+                  }));
+                }
+                setCurrentPage(1);
+              }}
+              className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+              <option value="3months">Last 3 Months</option>
             </select>
           </div>
 

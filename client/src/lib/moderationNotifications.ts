@@ -582,15 +582,26 @@ export async function sendModerationNotification(
     // Generate notification content
     const notification = generateModerationNotification(params);
     
-    // Insert notification into database
-    const { data, error } = await supabase
-      .from('notifications')
-      .insert({
-        user_id: userId,
-        type: notification.type,
+    // Get current session for authorization
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new ModerationError(
+        'No active session',
+        MODERATION_ERROR_CODES.UNAUTHORIZED
+      );
+    }
+    
+    // Send notification via API route (uses service role key to bypass RLS)
+    const response = await fetch('/api/moderation/send-notification', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        userId,
         title: notification.title,
         message: notification.message,
-        read: false,
         data: {
           moderation_action: params.actionType,
           target_type: params.targetType,
@@ -599,20 +610,21 @@ export async function sendModerationNotification(
           expires_at: params.expiresAt,
           restriction_type: params.restrictionType,
         },
-      })
-      .select('id')
-      .single();
+      }),
+    });
     
-    if (error) {
-      console.error('Failed to send moderation notification:', error);
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Failed to send moderation notification:', errorData);
       throw new ModerationError(
         'Failed to send notification',
         MODERATION_ERROR_CODES.DATABASE_ERROR,
-        { originalError: error }
+        { originalError: errorData }
       );
     }
     
-    return data?.id || null;
+    const result = await response.json();
+    return result.notificationId || null;
   } catch (error) {
     if (error instanceof ModerationError) {
       throw error;
@@ -660,6 +672,9 @@ export async function sendExpirationNotification(
     
     if (error) {
       console.error('Failed to send expiration notification:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
       throw new ModerationError(
         'Failed to send expiration notification',
         MODERATION_ERROR_CODES.DATABASE_ERROR,
@@ -722,6 +737,9 @@ export async function sendReversalNotification(
     
     if (error) {
       console.error('Failed to send reversal notification:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
       throw new ModerationError(
         'Failed to send reversal notification',
         MODERATION_ERROR_CODES.DATABASE_ERROR,

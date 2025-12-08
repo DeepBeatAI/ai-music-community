@@ -22,6 +22,7 @@ interface ReportCardProps {
 export function ReportCard({ report, onSelect, showActions = true, onReversalRequested }: ReportCardProps) {
   const [reporterUsername, setReporterUsername] = useState<string>('Anonymous');
   const [reportedUsername, setReportedUsername] = useState<string | null>(null);
+  const [reviewerUsername, setReviewerUsername] = useState<string | null>(null);
   const [contentPreview, setContentPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [relatedAction, setRelatedAction] = useState<ModerationAction | null>(null);
@@ -72,33 +73,95 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
   const loadReportDetails = useCallback(async () => {
     setLoading(true);
     try {
-      // In a real implementation, we would fetch:
-      // 1. Reporter username (if moderator viewing)
-      // 2. Reported user username
-      // 3. Content preview based on report_type and target_id
+      // Fetch reporter username
+      const { data: reporterData } = await supabase
+        .from('user_profiles')
+        .select('username')
+        .eq('user_id', report.reporter_id)
+        .single();
       
-      // For now, we'll use placeholder data
-      // TODO: Implement actual data fetching
-      
-      setReporterUsername('User' + report.reporter_id.substring(0, 6));
+      if (reporterData) {
+        setReporterUsername(reporterData.username);
+      } else {
+        setReporterUsername('Unknown User');
+      }
+
+      // Fetch reported user username
       if (report.reported_user_id) {
-        setReportedUsername('User' + report.reported_user_id.substring(0, 6));
+        const { data: reportedUserData } = await supabase
+          .from('user_profiles')
+          .select('username')
+          .eq('user_id', report.reported_user_id)
+          .single();
+        
+        if (reportedUserData) {
+          setReportedUsername(reportedUserData.username);
+        } else {
+          setReportedUsername('Unknown User');
+        }
+      }
+
+      // Fetch reviewer username if report has been reviewed
+      if (report.reviewed_by) {
+        const { data: reviewerData } = await supabase
+          .from('user_profiles')
+          .select('username')
+          .eq('user_id', report.reviewed_by)
+          .single();
+        
+        if (reviewerData) {
+          setReviewerUsername(reviewerData.username);
+        } else {
+          setReviewerUsername('Unknown Reviewer');
+        }
       }
       
-      // Mock content preview based on type
-      switch (report.report_type) {
-        case 'post':
-          setContentPreview('Post content preview would appear here...');
-          break;
-        case 'comment':
-          setContentPreview('Comment content preview would appear here...');
-          break;
-        case 'track':
-          setContentPreview('Track information would appear here...');
-          break;
-        case 'user':
-          setContentPreview('User profile information would appear here...');
-          break;
+      // Fetch actual content preview
+      if (report.target_id) {
+        let tableName: string;
+        let selectFields: string;
+
+        switch (report.report_type) {
+          case 'post':
+            tableName = 'posts';
+            selectFields = 'content, created_at';
+            break;
+          case 'comment':
+            tableName = 'comments';
+            selectFields = 'content, created_at';
+            break;
+          case 'track':
+            tableName = 'tracks';
+            selectFields = 'title, description, created_at';
+            break;
+          case 'user':
+            tableName = 'user_profiles';
+            selectFields = 'username, bio, created_at';
+            break;
+          default:
+            return;
+        }
+
+        const { data: contentData } = await supabase
+          .from(tableName)
+          .select(selectFields)
+          .eq('id', report.target_id)
+          .maybeSingle();
+
+        if (contentData) {
+          if (report.report_type === 'track') {
+            const trackData = contentData as unknown as { title: string; description?: string };
+            setContentPreview(`Title: ${trackData.title}\n${trackData.description || 'No description'}`);
+          } else if (report.report_type === 'user') {
+            const userData = contentData as unknown as { username: string; bio?: string };
+            setContentPreview(`Username: ${userData.username}\nBio: ${userData.bio || 'No bio'}`);
+          } else {
+            const postCommentData = contentData as unknown as { content?: string };
+            setContentPreview(postCommentData.content || 'No content available');
+          }
+        } else {
+          setContentPreview('Content has been deleted or is unavailable');
+        }
       }
     } catch (error) {
       console.error('Failed to load report details:', error);
@@ -273,7 +336,7 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
         {report.reviewed_by && report.reviewed_at && (
           <div className="text-xs text-gray-400">
             <span className="text-gray-500">Reviewed by:</span>{' '}
-            <span className="text-gray-300">{report.reviewed_by.substring(0, 8)}...</span>
+            <span className="text-gray-300">{reviewerUsername || 'Loading...'}</span>
             {' on '}
             {formatDate(report.reviewed_at)}
           </div>
@@ -352,8 +415,8 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
       {/* Footer Section with Actions */}
       {showActions && (
         <div className="mt-4 pt-4 border-t border-gray-600 flex items-center justify-between">
-          <div className="text-xs text-gray-500 font-mono">
-            ID: {report.id.substring(0, 8)}...
+          <div className="text-xs text-gray-500 font-mono break-all">
+            ID: {report.id}
           </div>
           <div className="flex items-center space-x-2">
             {/* Show reversal button if action exists and hasn't been reversed */}

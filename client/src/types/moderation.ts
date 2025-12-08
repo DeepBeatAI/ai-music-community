@@ -131,6 +131,7 @@ export interface ModerationActionParams {
   durationDays?: number;
   internalNotes?: string;
   notificationMessage?: string;
+  restrictionType?: RestrictionType;
 }
 
 // ============================================================================

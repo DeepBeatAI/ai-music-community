@@ -153,7 +153,7 @@ export function ReversalTooltip({
         ref={triggerRef}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`inline-block ${className}`}
+        className={`block ${className}`}
       >
         {children}
       </div>

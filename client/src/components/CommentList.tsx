@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CommentWithProfile } from '@/types';
+import { UserFacingError } from '@/types/errors';
 import Comment from '@/components/Comment';
 import { queryCache } from '@/utils/queryCache';
 
@@ -387,12 +388,12 @@ export default function CommentList({
 
       if (restrictionError) {
         console.error('Error checking comment restrictions:', restrictionError);
-        throw new Error('Failed to verify commenting permissions');
+        throw new UserFacingError('Failed to verify commenting permissions');
       }
 
       if (!canComment) {
         console.warn(`User ${currentUserId} attempted to comment while restricted`);
-        throw new Error('You are currently restricted from commenting. Please contact support for more information.');
+        throw new UserFacingError('You are currently restricted from commenting. Please contact support for more information.');
       }
 
       // Optimistically add comment to UI
@@ -457,7 +458,13 @@ export default function CommentList({
         queryCache.invalidatePattern(`comments-${postId}`);
       }
     } catch (err) {
-      console.error('Failed to create comment:', err);
+      // Handle UserFacingError specially - don't log to console to avoid Next.js error overlay
+      if (err instanceof UserFacingError) {
+        setSubmitError(err.message);
+      } else {
+        console.error('Failed to create comment:', err);
+        setSubmitError('Failed to post comment. Please try again.');
+      }
       
       // Rollback optimistic update
       if (parentIdToSubmit) {
@@ -474,9 +481,6 @@ export default function CommentList({
       // Restore form content
       setNewCommentContent(contentToSubmit);
       setReplyingTo(parentIdToSubmit);
-      
-      // Show error
-      setSubmitError('Failed to post comment. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

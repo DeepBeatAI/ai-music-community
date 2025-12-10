@@ -130,12 +130,8 @@ export async function uploadTrack(
     }
 
     if (!canUpload) {
+      // Log warning but don't use logTrackError to avoid Next.js error overlay
       console.warn(`User ${userId} attempted to upload while restricted`);
-      const errorDetails = createTrackError(TrackUploadError.VALIDATION_ERROR, 'Upload restricted');
-      logTrackError('uploadTrack:restriction:blocked', errorDetails, {
-        userId,
-        fileName: uploadData.file.name,
-      });
       
       return {
         success: false,

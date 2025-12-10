@@ -6,6 +6,20 @@
  */
 
 /**
+ * Custom error class for user-facing errors that shouldn't trigger Next.js error overlay.
+ * These are expected validation errors that should be displayed to users gracefully
+ * without showing the development error overlay.
+ * 
+ * Examples: restriction violations, permission errors, validation failures
+ */
+export class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UserFacingError';
+  }
+}
+
+/**
  * Base error interface for all Load More errors
  */
 export interface LoadMoreError {

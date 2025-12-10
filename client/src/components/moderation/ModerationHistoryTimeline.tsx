@@ -5,7 +5,7 @@ import {
   getUserModerationHistory,
   ModerationHistoryEntry,
 } from '@/lib/moderationService';
-import { ACTION_TYPE_LABELS } from '@/types/moderation';
+import { ACTION_TYPE_LABELS, REASON_LABELS, ReportReason } from '@/types/moderation';
 import { ReversalTooltip } from './ReversalTooltip';
 
 interface ModerationHistoryTimelineProps {
@@ -130,15 +130,15 @@ export function ModerationHistoryTimeline({ userId }: ModerationHistoryTimelineP
         <div className="flex flex-wrap gap-4 text-xs">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-600"></div>
-            <span className="text-gray-600">Active Action (Red #DC2626)</span>
+            <span className="text-gray-600">Active Action</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-            <span className="text-gray-600">Reversed Action (Gray #6B7280)</span>
+            <span className="text-gray-600">Reversed Action</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-600"></div>
-            <span className="text-gray-600">Expired Action (Blue #2563EB)</span>
+            <span className="text-gray-600">Expired Action</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-yellow-500 ring-2 ring-yellow-300"></div>
@@ -237,125 +237,148 @@ function TimelineEntry({ entry, isLast }: TimelineEntryProps) {
     }
   };
 
-  return (
-    <ReversalTooltip action={action} position="right">
-      <div className="relative pl-12">
-        {/* Timeline marker - Requirements: 15.7 - Different marker style for self-reversals */}
-        <div
-          className={`absolute left-2 top-2 w-4 h-4 rounded-full ${
-            isSelfReversal ? 'bg-yellow-500 ring-4 ring-yellow-300' : `${colors.marker} ring-4 ${colors.ring}`
-          } z-10 cursor-help`}
-          title={isSelfReversal ? 'Self-Reversal: Moderator reversed their own action' : state.charAt(0).toUpperCase() + state.slice(1)}
-        ></div>
+  // Helper function to get full reason label
+  const getReasonLabel = (reason: string): string => {
+    // Check if reason is a key in REASON_LABELS
+    if (reason in REASON_LABELS) {
+      return REASON_LABELS[reason as ReportReason];
+    }
+    // Otherwise return the reason as-is (might be custom text)
+    return reason;
+  };
 
-        {/* Action card */}
+  return (
+    <div className="relative pl-12">
+      {/* Timeline marker - Requirements: 15.7 - Different marker style for self-reversals */}
+      <div
+        className={`absolute left-2 top-2 w-4 h-4 rounded-full ${
+          isSelfReversal ? 'bg-yellow-500 ring-4 ring-yellow-300' : `${colors.marker} ring-4 ${colors.ring}`
+        } z-10 cursor-help`}
+        title={isSelfReversal ? 'Self-Reversal: Moderator reversed their own action' : state.charAt(0).toUpperCase() + state.slice(1)}
+      ></div>
+
+      {/* Action card */}
+      <ReversalTooltip action={action} position="right">
         <div className={`border ${colors.border} ${colors.bg} rounded-lg p-4 ${
           isRevoked ? 'opacity-75 cursor-help' : ''
         }`}>
-        {/* Action header */}
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h4
-                className={`font-semibold ${colors.text} ${
-                  isRevoked ? 'line-through' : ''
-                }`}
-              >
-                {ACTION_TYPE_LABELS[action.action_type]}
-              </h4>
+          {/* Action header */}
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4
+                  className={`font-semibold ${colors.text} ${
+                    isRevoked ? 'line-through' : ''
+                  }`}
+                >
+                  {ACTION_TYPE_LABELS[action.action_type]}
+                </h4>
 
-              {/* State badges */}
-              {isRevoked && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-700">
-                  REVERSED
-                </span>
-              )}
-              {isSelfReversal && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-200 text-yellow-800">
-                  SELF-REVERSAL
-                </span>
-              )}
-              {isExpired && !isRevoked && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-200 text-blue-800">
-                  EXPIRED
-                </span>
-              )}
-            </div>
-
-            <p className="text-xs text-gray-500 mt-1">
-              {formatDate(action.created_at)}
-            </p>
-          </div>
-        </div>
-
-        {/* Action details */}
-        <div className="space-y-1 text-sm">
-          {action.reason && (
-            <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
-              <span className="font-medium">Reason:</span> {action.reason}
-            </p>
-          )}
-
-          {action.duration_days && (
-            <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
-              <span className="font-medium">Duration:</span>{' '}
-              {formatDuration(action.duration_days)}
-            </p>
-          )}
-
-          {action.expires_at && (
-            <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
-              <span className="font-medium">Expires:</span>{' '}
-              {formatDate(action.expires_at)}
-            </p>
-          )}
-
-          {action.internal_notes && (
-            <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
-              <span className="font-medium">Notes:</span> {action.internal_notes}
-            </p>
-          )}
-        </div>
-
-        {/* Reversal information */}
-        {isRevoked && revokedAt && (
-          <div className="mt-3 pt-3 border-t border-gray-300">
-            <div className="flex items-start gap-2">
-              <span className="text-lg">↩️</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">
-                  {isSelfReversal ? 'Reversed by same moderator' : 'Action Reversed'}
-                </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {formatDate(revokedAt)}
-                </p>
-                {/* Requirements: 15.6 - Show time between action and reversal */}
-                {timeBetweenActionAndReversal && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    <span className="font-medium">Time to reversal:</span> {formatTimeBetween(timeBetweenActionAndReversal)}
-                  </p>
-                )}
-                {reversalReason && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    <span className="font-medium">Reversal reason:</span> {reversalReason}
-                  </p>
+                {/* State badges */}
+                {isRevoked && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-700">
+                    REVERSED
+                  </span>
                 )}
                 {isSelfReversal && (
-                  <p className="text-xs text-yellow-700 mt-1 italic">
-                    Moderator corrected their own action
-                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-200 text-yellow-800">
+                    SELF-REVERSAL
+                  </span>
+                )}
+                {isExpired && !isRevoked && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-200 text-blue-800">
+                    EXPIRED
+                  </span>
                 )}
               </div>
+
+              <p className="text-xs text-gray-500 mt-1">
+                {formatDate(action.created_at)}
+              </p>
             </div>
           </div>
-        )}
-      </div>
 
-        {/* Connection line to next entry */}
-        {!isLast && (
-          <div className="absolute left-4 top-6 w-0.5 h-6 bg-gray-200"></div>
-        )}
-      </div>
-    </ReversalTooltip>
+          {/* Action details */}
+          <div className="space-y-1 text-sm">
+            {action.reason && (
+              <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
+                <span className="font-medium">Reason:</span> {getReasonLabel(action.reason)}
+              </p>
+            )}
+
+            {action.duration_days && (
+              <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
+                <span className="font-medium">Duration:</span>{' '}
+                {formatDuration(action.duration_days)}
+              </p>
+            )}
+
+            {action.expires_at && (
+              <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
+                <span className="font-medium">Expires:</span>{' '}
+                {formatDate(action.expires_at)}
+              </p>
+            )}
+
+            {action.internal_notes && (
+              <p className={`${colors.text} ${isRevoked ? 'line-through' : ''}`}>
+                <span className="font-medium">Notes:</span> {action.internal_notes}
+              </p>
+            )}
+          </div>
+
+          {/* Reversal information - inside the action card */}
+          {isRevoked && revokedAt && (
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <div className="flex items-start gap-3">
+                <span className="text-lg flex-shrink-0">↩️</span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">
+                    Action Reversed
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    {formatDate(revokedAt)}
+                  </p>
+                  {/* Requirements: 15.6 - Show time between action and reversal */}
+                  {timeBetweenActionAndReversal && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      <span className="font-medium">Time to reversal:</span> {formatTimeBetween(timeBetweenActionAndReversal)}
+                    </p>
+                  )}
+                  {reversalReason && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      <span className="font-medium">Reversal reason:</span> {reversalReason}
+                    </p>
+                  )}
+                  
+                  {/* Self-reversal note - inside reversal section */}
+                  {isSelfReversal && (
+                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                      <div className="flex items-start gap-2">
+                        <span className="text-sm flex-shrink-0">⚠️</span>
+                        <div className="flex-1">
+                          <p className="text-xs text-yellow-800 font-semibold">
+                            Self-Reversal
+                          </p>
+                          <p className="text-xs text-yellow-700 mt-0.5">
+                            Moderator corrected their own action
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </ReversalTooltip>
+
+      {/* Connection line to next entry */}
+      {!isLast && (
+        <div className="absolute left-4 top-6 w-0.5 h-6 bg-gray-200"></div>
+      )}
+    </div>
   );
 }

@@ -21,6 +21,7 @@ import {
   createAudioPost,
   deletePost,
 } from "@/utils/posts";
+import { UserFacingError } from "@/types/errors";
 import { searchContent } from "@/utils/search";
 import { createUnifiedPaginationState } from "@/utils/unifiedPaginationState";
 import { 
@@ -1001,8 +1002,14 @@ export default function Dashboard() {
       paginationManager.reset();
       await loadPosts(1, false);
     } catch (error) {
-      console.error("Error creating text post:", error);
-      setError("Failed to create post. Please try again.");
+      // Handle UserFacingError specially - don't log to console to avoid Next.js error overlay
+      if (error instanceof Error && error.name === 'UserFacingError') {
+        setError(error.message);
+      } else {
+        console.error("Error creating text post:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to create post. Please try again.";
+        setError(errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1050,9 +1057,14 @@ export default function Dashboard() {
       paginationManager.reset();
       await loadPosts(1, false);
     } catch (error) {
-      console.error("Error creating audio post:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to create audio post. Please try again.";
-      setError(errorMessage);
+      // Handle UserFacingError specially - don't log to console to avoid Next.js error overlay
+      if (error instanceof Error && error.name === 'UserFacingError') {
+        setError(error.message);
+      } else {
+        console.error("Error creating audio post:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to create audio post. Please try again.";
+        setError(errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }

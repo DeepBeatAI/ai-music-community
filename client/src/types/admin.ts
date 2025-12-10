@@ -12,7 +12,7 @@
 export interface AdminAuditLog {
   id: string;
   admin_user_id: string;
-  action_type: 'user_role_changed' | 'user_plan_changed' | 'user_suspended' | 'user_password_reset' | 'config_updated' | 'cache_cleared' | 'security_policy_changed';
+  action_type: 'user_role_changed' | 'user_plan_changed' | 'user_banned' | 'user_password_reset' | 'config_updated' | 'cache_cleared' | 'security_policy_changed';
   target_resource_type: 'user' | 'config' | 'system' | 'security';
   target_resource_id: string | null;
   old_value: Record<string, unknown> | null;
@@ -115,7 +115,7 @@ export interface AdminUserData {
   roles: string[];
   created_at: string;
   last_active: string;
-  is_suspended: boolean;
+  is_banned: boolean;
   activity_summary: UserActivitySummary;
 }
 

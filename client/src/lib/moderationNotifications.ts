@@ -64,7 +64,7 @@ function generateNotificationTitle(actionType: ModerationActionType): string {
     case 'user_suspended':
       return 'Account Suspended';
     case 'user_banned':
-      return 'Account Banned';
+      return 'Account Suspended Permanently';
     case 'restriction_applied':
       return 'Account Restriction Applied';
     default:
@@ -162,7 +162,7 @@ function generateSuspensionMessage(params: NotificationTemplateParams): string {
 }
 
 /**
- * Generate notification message for account ban
+ * Generate notification message for permanent account suspension
  * Requirements: 7.2
  * 
  * @param params - Notification parameters
@@ -171,15 +171,15 @@ function generateSuspensionMessage(params: NotificationTemplateParams): string {
 function generateBanMessage(params: NotificationTemplateParams): string {
   const { reason, customMessage } = params;
   
-  let message = 'Your account has been permanently banned for severe or repeated violations of our community guidelines.\n\n';
+  let message = 'Your account has been permanently suspended for severe or repeated violations of our community guidelines.\n\n';
   message += `Reason: ${reason}\n\n`;
   
   if (customMessage) {
     message += `Additional information: ${customMessage}\n\n`;
   }
   
-  message += 'This is a permanent ban. Your account will not be restored.\n\n';
-  message += 'If you believe this ban was issued in error, you may appeal this decision within 30 days.';
+  message += 'This is a permanent suspension. Your account will not be restored.\n\n';
+  message += 'If you believe this suspension was issued in error, you may appeal this decision within 30 days.';
   
   return message;
 }
@@ -332,7 +332,7 @@ function generateSuspensionLiftedMessage(params: ReversalNotificationParams): st
 }
 
 /**
- * Generate notification message for ban removed
+ * Generate notification message for permanent suspension removed
  * Requirements: 13.6, 13.15
  * 
  * @param params - Reversal notification parameters
@@ -341,13 +341,13 @@ function generateSuspensionLiftedMessage(params: ReversalNotificationParams): st
 function generateBanRemovedMessage(params: ReversalNotificationParams): string {
   const { moderatorName, reason, originalAction } = params;
   
-  let message = 'Your account ban has been removed by an administrator.\n\n';
+  let message = 'Your permanent account suspension has been removed by an administrator.\n\n';
   
   message += `Removed by: ${moderatorName}\n`;
   message += `Reason for reversal: ${reason}\n\n`;
   
   if (originalAction) {
-    message += 'Original Ban Details:\n';
+    message += 'Original Permanent Suspension Details:\n';
     message += `• Reason: ${originalAction.reason}\n`;
     message += `• Applied by: ${originalAction.appliedBy}\n`;
     message += `• Applied on: ${new Date(originalAction.appliedAt).toLocaleDateString()}\n`;
@@ -500,7 +500,7 @@ export function generateReversalNotification(
       title = 'Suspension Lifted';
       break;
     case 'ban_removed':
-      title = 'Ban Removed';
+      title = 'Permanent Suspension Removed';
       break;
     case 'restriction_removed':
       title = 'Restriction Removed';

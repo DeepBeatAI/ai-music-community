@@ -30,8 +30,7 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
   const [error, setError] = useState<string | null>(null);
   const [suspensionStatus, setSuspensionStatus] = useState<UserSuspensionStatus | null>(null);
   const [activeRestrictions, setActiveRestrictions] = useState<UserRestriction[]>([]);
-  const [moderationHistory, setModerationHistory] = useState<ModerationHistoryEntry[]>([]);
-  const [showFullHistory, setShowFullHistory] = useState(false);
+  const [fullHistory, setFullHistory] = useState<ModerationHistoryEntry[]>([]); // Store full history for stats and display
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -66,41 +65,14 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
       const restrictions = await getUserActiveRestrictions(userId);
       setActiveRestrictions(restrictions);
 
-      // Load moderation history (only active by default)
-      // Requirements: 15.2 - Show only active (non-reversed, non-expired) actions by default
-      const history = await getUserModerationHistory(userId, false);
-      
-      // Filter out expired actions from the default view
-      // An action is expired if it has an expires_at date in the past
-      const now = new Date();
-      const activeHistory = history.filter(entry => {
-        // If action has no expiration, it's always active (unless revoked, which is already filtered)
-        if (!entry.action.expires_at) {
-          return true;
-        }
-        // Check if expiration date is in the future
-        const expiresAt = new Date(entry.action.expires_at);
-        return expiresAt > now;
-      });
-      
-      setModerationHistory(activeHistory);
+      // Load full moderation history (includes all action types)
+      const fullHistoryData = await getUserModerationHistory(userId, true);
+      setFullHistory(fullHistoryData);
     } catch (err) {
       console.error('Failed to load user status:', err);
       setError(err instanceof Error ? err.message : 'Failed to load user status');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadFullHistory = async () => {
-    try {
-      // Requirements: 15.3 - Show all actions including reversed and expired when toggled
-      const history = await getUserModerationHistory(userId, true);
-      setModerationHistory(history);
-      setShowFullHistory(true);
-    } catch (err) {
-      console.error('Failed to load full history:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load full history');
     }
   };
 
@@ -127,25 +99,25 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
     );
   }
 
-  // Calculate action counts
+  // Calculate action counts from FULL history (not filtered view)
   // Requirements: 15.8 - Show summary counts for active, reversed, and expired actions
   const now = new Date();
   
-  const activeActionsCount = moderationHistory.filter(h => {
+  const activeActionsCount = fullHistory.filter(h => {
     if (h.isRevoked) return false;
     if (!h.action.expires_at) return true;
     return new Date(h.action.expires_at) > now;
   }).length;
   
-  const revokedActionsCount = moderationHistory.filter(h => h.isRevoked).length;
+  const revokedActionsCount = fullHistory.filter(h => h.isRevoked).length;
   
-  const expiredActionsCount = moderationHistory.filter(h => {
+  const expiredActionsCount = fullHistory.filter(h => {
     if (h.isRevoked) return false;
     if (!h.action.expires_at) return false;
     return new Date(h.action.expires_at) <= now;
   }).length;
   
-  const totalActionsCount = moderationHistory.length;
+  const totalActionsCount = fullHistory.length;
 
   return (
     <div className="bg-white rounded-lg shadow">
@@ -202,16 +174,7 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
 
         {/* Recent Moderation History */}
         <ModerationHistorySection
-          history={moderationHistory}
-          showFullHistory={showFullHistory}
-          onToggleFullHistory={() => {
-            if (!showFullHistory) {
-              loadFullHistory();
-            } else {
-              setShowFullHistory(false);
-              loadUserStatus();
-            }
-          }}
+          history={fullHistory}
         />
 
         {/* Timeline Visualization - Requirements: 15.6 */}
@@ -634,31 +597,11 @@ function ActionSummary({ activeCount, revokedCount, expiredCount, totalCount }: 
 
 interface ModerationHistorySectionProps {
   history: ModerationHistoryEntry[];
-  showFullHistory: boolean;
-  onToggleFullHistory: () => void;
 }
 
 function ModerationHistorySection({
   history,
-  showFullHistory,
-  onToggleFullHistory,
 }: ModerationHistorySectionProps) {
-  // State for collapsed/expanded reversed actions
-  // Requirements: 15.3 - Display reversed actions in collapsed/dimmed state
-  const [expandedReversedActions, setExpandedReversedActions] = useState<Set<string>>(new Set());
-
-  const toggleReversedAction = (actionId: string) => {
-    setExpandedReversedActions(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(actionId)) {
-        newSet.delete(actionId);
-      } else {
-        newSet.add(actionId);
-      }
-      return newSet;
-    });
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -685,42 +628,19 @@ function ModerationHistorySection({
     return null;
   }
 
-  // Separate active and reversed/expired actions
-  const now = new Date();
-  const activeActions = history.filter(entry => {
-    if (entry.isRevoked) return false;
-    if (!entry.action.expires_at) return true;
-    return new Date(entry.action.expires_at) > now;
-  });
-
-  const reversedOrExpiredActions = history.filter(entry => {
-    if (entry.isRevoked) return true;
-    if (!entry.action.expires_at) return false;
-    return new Date(entry.action.expires_at) <= now;
-  });
-
-  // Determine which actions to display
-  const displayActions = showFullHistory ? history : activeActions;
+  // Show last 5 entries from full history (includes all action types)
+  const recentHistory = history.slice(0, 5);
 
   return (
     <div className="border border-gray-200 rounded-lg">
-      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Recent Moderation History</h3>
-        <button
-          onClick={onToggleFullHistory}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-        >
-          {showFullHistory ? 'Show Active Only' : 'Show Full History'}
-        </button>
+      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+        <h3 className="text-sm font-semibold text-gray-700">Recent Moderation History (last 5)</h3>
       </div>
 
       <div className="divide-y divide-gray-200">
-        {displayActions.slice(0, 5).map((entry) => {
+        {recentHistory.map((entry) => {
           // Check if action is expired
-          // Requirements: 15.4 - Color coding for expired actions (blue)
           const isExpired = entry.action.expires_at && new Date(entry.action.expires_at) <= new Date();
-          const isReversedOrExpired = entry.isRevoked || isExpired;
-          const isExpanded = expandedReversedActions.has(entry.action.id);
           
           return (
             <ReversalTooltip key={entry.action.id} action={entry.action} position="right">
@@ -733,76 +653,55 @@ function ModerationHistorySection({
                     : 'bg-white'
                 }`}
               >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  {/* Header - Always visible */}
-                  <div className="flex items-center gap-2">
-                    <p className={`text-sm font-medium ${
-                      entry.isRevoked 
-                        ? 'line-through text-gray-500' 
-                        : isExpired 
-                        ? 'text-blue-600' 
-                        : 'text-gray-900'
-                    }`}>
-                      {getActionTypeLabel(entry.action.action_type)}
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    {/* Header - Always visible */}
+                    <div className="flex items-center gap-2">
+                      <p className={`text-sm font-medium ${
+                        entry.isRevoked 
+                          ? 'line-through text-gray-500' 
+                          : isExpired 
+                          ? 'text-blue-600' 
+                          : 'text-gray-900'
+                      }`}>
+                        {getActionTypeLabel(entry.action.action_type)}
+                      </p>
+                      {entry.isRevoked && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-700">
+                          REVERSED
+                        </span>
+                      )}
+                      {!entry.isRevoked && isExpired && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-200 text-blue-700">
+                          EXPIRED
+                        </span>
+                      )}
+                    </div>
+                    
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formatDate(entry.action.created_at)}
                     </p>
-                    {entry.isRevoked && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-700">
-                        REVERSED
-                      </span>
-                    )}
-                    {!entry.isRevoked && isExpired && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-200 text-blue-700">
-                        EXPIRED
-                      </span>
+                    
+                    {entry.action.expires_at && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Expires: {formatDate(entry.action.expires_at)}
+                      </p>
                     )}
                     
-                    {/* Expand/Collapse button for reversed/expired actions */}
-                    {/* Requirements: 15.3 - Display reversed actions in collapsed/dimmed state */}
-                    {showFullHistory && isReversedOrExpired && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleReversedAction(entry.action.id);
-                        }}
-                        className="ml-2 text-xs text-gray-500 hover:text-gray-700 focus:outline-none"
-                        aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
-                      >
-                        {isExpanded ? '▼' : '▶'}
-                      </button>
+                    {entry.action.reason && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        <span className="font-medium">Reason:</span> {entry.action.reason}
+                      </p>
+                    )}
+                    
+                    {entry.isRevoked && entry.reversalReason && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        <span className="font-medium">Reversal reason:</span> {entry.reversalReason}
+                      </p>
                     )}
                   </div>
-                  
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formatDate(entry.action.created_at)}
-                  </p>
-                  
-                  {/* Collapsible details for reversed/expired actions */}
-                  {/* Requirements: 15.3 - Maintain visual distinction */}
-                  {(!showFullHistory || !isReversedOrExpired || isExpanded) && (
-                    <>
-                      {entry.action.expires_at && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Expires: {formatDate(entry.action.expires_at)}
-                        </p>
-                      )}
-                      
-                      {entry.action.reason && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          <span className="font-medium">Reason:</span> {entry.action.reason}
-                        </p>
-                      )}
-                      
-                      {entry.isRevoked && entry.reversalReason && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          <span className="font-medium">Reversal reason:</span> {entry.reversalReason}
-                        </p>
-                      )}
-                    </>
-                  )}
                 </div>
               </div>
-            </div>
             </ReversalTooltip>
           );
         })}
@@ -811,12 +710,7 @@ function ModerationHistorySection({
       {history.length > 5 && (
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-center">
           <p className="text-xs text-gray-600">
-            Showing {Math.min(5, displayActions.length)} of {displayActions.length} actions
-            {showFullHistory && reversedOrExpiredActions.length > 0 && (
-              <span className="ml-2 text-gray-500">
-                ({reversedOrExpiredActions.length} reversed/expired)
-              </span>
-            )}
+            Showing 5 of {history.length} total actions
           </p>
         </div>
       )}

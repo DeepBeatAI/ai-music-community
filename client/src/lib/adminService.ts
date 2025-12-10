@@ -106,7 +106,7 @@ export async function fetchAllUsers(params: UserListParams = {}): Promise<Pagina
           roles: Array.isArray(user.roles) ? user.roles : [],
           created_at: user.created_at,
           last_active: new Date().toISOString(), // Will be populated from user_stats
-          is_suspended: user.is_suspended || false,
+          is_banned: user.is_suspended || false,
           activity_summary: {
             posts_count: 0,
             tracks_count: 0,
@@ -234,7 +234,7 @@ export async function fetchUserDetails(userId: string): Promise<AdminUserData> {
           roles: profile.roles || [],
           created_at: profile.created_at,
           last_active: activity.last_active,
-          is_suspended: profile.is_suspended || false,
+          is_banned: profile.is_suspended || false,
           activity_summary: activity,
         };
       }
@@ -397,30 +397,32 @@ export async function updateUserRoles(
 }
 
 /**
- * Suspend user account with audit logging
+ * Ban user account with audit logging
  * Requirements: 3.7, 12.1, 12.2, 12.7
  * 
  * This function now integrates with the moderation system by:
  * - Creating a moderation_actions record
  * - Creating a user_restrictions record
- * - Updating user_profiles with suspension details
+ * - Updating user_profiles with ban details
  * - Logging to admin_audit_log
  */
 export async function suspendUser(
   userId: string,
   reason: string,
-  durationDays?: number
+  durationDays?: number,
+  existingActionId?: string
 ): Promise<void> {
   try {
     const { error } = await supabase.rpc('suspend_user_account', {
       p_target_user_id: userId,
       p_reason: reason,
       p_duration_days: durationDays || null,
+      p_existing_action_id: existingActionId || null,
     });
 
     if (error) {
       throw new AdminError(
-        'Failed to suspend user account',
+        'Failed to ban user account',
         ADMIN_ERROR_CODES.DATABASE_ERROR,
         { originalError: error }
       );
@@ -433,7 +435,7 @@ export async function suspendUser(
       throw error;
     }
     throw new AdminError(
-      'An unexpected error occurred while suspending user',
+      'An unexpected error occurred while banning user',
       ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );
@@ -441,11 +443,11 @@ export async function suspendUser(
 }
 
 /**
- * Unsuspend user account with audit logging
+ * Unban user account with audit logging
  * Requirements: 3.7, 12.2, 12.3
  * 
  * This function now integrates with the moderation system by:
- * - Removing suspension from user_profiles
+ * - Removing ban from user_profiles
  * - Deactivating user_restrictions records
  * - Logging to admin_audit_log
  */
@@ -457,7 +459,7 @@ export async function unsuspendUser(userId: string): Promise<void> {
 
     if (error) {
       throw new AdminError(
-        'Failed to unsuspend user account',
+        'Failed to unban user account',
         ADMIN_ERROR_CODES.DATABASE_ERROR,
         { originalError: error }
       );
@@ -470,7 +472,7 @@ export async function unsuspendUser(userId: string): Promise<void> {
       throw error;
     }
     throw new AdminError(
-      'An unexpected error occurred while unsuspending user',
+      'An unexpected error occurred while unbanning user',
       ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );

@@ -10,6 +10,8 @@ import { ModerationLogs } from '@/components/moderation/ModerationLogs';
 import { ModerationMetrics } from '@/components/moderation/ModerationMetrics';
 import { ModerationSettings } from '@/components/moderation/ModerationSettings';
 import { MyActionsView } from '@/components/moderation/MyActionsView';
+import { UserStatusPanel } from '@/components/moderation/UserStatusPanel';
+import { supabase } from '@/lib/supabase';
 
 export default function ModerationPage() {
   const { user, loading: authLoading } = useAuth();
@@ -17,7 +19,13 @@ export default function ModerationPage() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'queue' | 'logs' | 'myActions' | 'metrics' | 'settings'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'logs' | 'myActions' | 'userStatus' | 'metrics' | 'settings'>('queue');
+  
+  // User Status tab state
+  const [searchUsername, setSearchUsername] = useState('');
+  const [searchedUserId, setSearchedUserId] = useState<string | null>(null);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [userSearchError, setUserSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -51,6 +59,59 @@ export default function ModerationPage() {
 
     checkAccess();
   }, [user, authLoading, router]);
+
+  // Handle user search for User Status tab
+  const handleUserSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!searchUsername.trim()) {
+      setUserSearchError('Please enter a username');
+      return;
+    }
+
+    try {
+      setUserSearchLoading(true);
+      setUserSearchError(null);
+      setSearchedUserId(null);
+
+      // Search for user by username
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('user_id, username')
+        .ilike('username', searchUsername.trim())
+        .limit(1)
+        .single();
+
+      if (error || !data) {
+        setUserSearchError(`User "${searchUsername}" not found`);
+        return;
+      }
+
+      // Check if the searched user is an admin
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role_type')
+        .eq('user_id', data.user_id)
+        .eq('role_type', 'admin')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      const targetIsAdmin = !!roleData;
+
+      // Only admins can look up other admin users
+      if (targetIsAdmin && !isAdminUser) {
+        setUserSearchError('Only admins can look up admin users');
+        return;
+      }
+
+      setSearchedUserId(data.user_id);
+    } catch (error) {
+      console.error('User search error:', error);
+      setUserSearchError('Failed to search for user');
+    } finally {
+      setUserSearchLoading(false);
+    }
+  };
 
   // Show loading state while checking authorization
   if (loading || authLoading) {
@@ -141,6 +202,17 @@ export default function ModerationPage() {
               My Actions
             </button>
             <button
+              onClick={() => setActiveTab('userStatus')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'userStatus'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+              }`}
+              aria-current={activeTab === 'userStatus' ? 'page' : undefined}
+            >
+              User Status
+            </button>
+            <button
               onClick={() => setActiveTab('metrics')}
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'metrics'
@@ -194,6 +266,68 @@ export default function ModerationPage() {
                 console.log('Selected action:', action);
               }}
             />
+          )}
+
+          {activeTab === 'userStatus' && (
+            <div>
+              {/* User Search Form */}
+              <div className="bg-gray-800 rounded-lg p-6 mb-6">
+                <h2 className="text-xl font-semibold text-white mb-4">Look Up User</h2>
+                <form onSubmit={handleUserSearch} className="flex gap-4">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={searchUsername}
+                      onChange={(e) => setSearchUsername(e.target.value)}
+                      placeholder="Enter username..."
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={userSearchLoading}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                  >
+                    {userSearchLoading ? 'Searching...' : 'Search'}
+                  </button>
+                </form>
+                {userSearchError && (
+                  <p className="mt-2 text-red-400 text-sm">{userSearchError}</p>
+                )}
+              </div>
+
+              {/* User Status Panel */}
+              {searchedUserId ? (
+                <UserStatusPanel
+                  userId={searchedUserId}
+                  onActionComplete={() => {
+                    // Reload user status after action
+                    console.log('Action completed, reloading user status');
+                  }}
+                />
+              ) : (
+                <div className="bg-gray-800 rounded-lg p-12 text-center">
+                  <div className="text-gray-400 mb-2">
+                    <svg
+                      className="w-16 h-16 mx-auto mb-4 opacity-50"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-gray-400 text-lg">
+                    Search for a user to view their status and moderation history
+                  </p>
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'metrics' && <ModerationMetrics />}

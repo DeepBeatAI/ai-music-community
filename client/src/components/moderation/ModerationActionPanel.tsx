@@ -56,7 +56,7 @@ export function ModerationActionPanel({
   
   // Action form state
   const [selectedAction, setSelectedAction] = useState<ModerationActionType | ''>('');
-  const [suspensionDuration, setSuspensionDuration] = useState<number>(7);
+  const [suspensionDuration, setSuspensionDuration] = useState<number>(1);
   const [restrictionType, setRestrictionType] = useState<RestrictionType>('posting_disabled');
   const [restrictionDuration, setRestrictionDuration] = useState<number>(1);
   const [internalNotes, setInternalNotes] = useState('');
@@ -604,7 +604,7 @@ export function ModerationActionPanel({
                 <option value="user_warned">Warn User</option>
                 <option value="restriction_applied">Apply Restriction</option>
                 <option value="user_suspended">Suspend User</option>
-                {isAdminUser && <option value="user_banned">Ban User (Admin Only)</option>}
+                {isAdminUser && <option value="user_banned">Suspend User Permanently (Admin Only)</option>}
               </select>
               {selectedAction && (
                 <p className="text-sm text-gray-400 mt-1">{getActionDescription(selectedAction)}</p>

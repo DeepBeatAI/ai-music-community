@@ -1,7 +1,11 @@
 import { supabase } from '@/lib/supabase';
 import { creatorCache } from './creatorCache';
 import { logger } from './logger';
+import { UserFacingError } from '@/types/errors';
 import type { Post, UserProfile } from '@/types';
+
+// Re-export UserFacingError for convenience
+export { UserFacingError };
 
 export interface PostWithProfile extends Post {
   user_profiles: UserProfile;
@@ -234,12 +238,12 @@ export async function createTextPost(
 
     if (restrictionError) {
       logger.error('Error checking post restrictions:', restrictionError);
-      throw new Error('Failed to verify posting permissions');
+      throw new UserFacingError('Failed to verify posting permissions');
     }
 
     if (!canPost) {
       logger.warn(`User ${userId} attempted to post while restricted`);
-      throw new Error('You are currently restricted from creating posts. Please contact support for more information.');
+      throw new UserFacingError('You are currently restricted from creating posts. Please contact support for more information.');
     }
 
     const { data, error } = await supabase
@@ -256,7 +260,10 @@ export async function createTextPost(
     
     return data;
   } catch (error) {
-    logger.error('Error creating text post:', error);
+    // Don't log UserFacingError to avoid Next.js error overlay
+    if (!(error instanceof UserFacingError)) {
+      logger.error('Error creating text post:', error);
+    }
     throw error;
   }
 }
@@ -306,12 +313,12 @@ export async function createAudioPost(
 
     if (restrictionError) {
       logger.error('Error checking post restrictions:', restrictionError);
-      throw new Error('Failed to verify posting permissions');
+      throw new UserFacingError('Failed to verify posting permissions');
     }
 
     if (!canPost) {
       logger.warn(`User ${userId} attempted to post while restricted`);
-      throw new Error('You are currently restricted from creating posts. Please contact support for more information.');
+      throw new UserFacingError('You are currently restricted from creating posts. Please contact support for more information.');
     }
 
     // 1. Verify track exists and get track data
@@ -362,7 +369,10 @@ export async function createAudioPost(
     logger.debug(`Successfully created audio post ${data.id} with track ${trackId}`);
     return data;
   } catch (error) {
-    logger.error('Error creating audio post:', error);
+    // Don't log UserFacingError to avoid Next.js error overlay
+    if (!(error instanceof UserFacingError)) {
+      logger.error('Error creating audio post:', error);
+    }
     throw error;
   }
 }

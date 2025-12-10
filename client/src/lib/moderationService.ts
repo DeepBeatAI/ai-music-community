@@ -420,7 +420,7 @@ export async function verifyModeratorRole(): Promise<{ id: string }> {
  * 
  * This helper function verifies that the current authenticated user has
  * admin privileges. It's used throughout the reversal system to ensure
- * only admins can perform admin-only actions like removing bans.
+ * only admins can perform admin-only actions like removing permanent suspensions.
  * 
  * @returns The current user if they have admin role
  * @throws ModerationError if user is not authenticated or lacks admin role
@@ -1125,10 +1125,11 @@ function validateModerationActionParams(params: ModerationActionParams): void {
  * Requirements: 5.1, 5.2, 5.3
  * 
  * @param params - Moderation action parameters
+ * @param actionId - Optional action ID for suspensions (to prevent duplicates)
  * @returns void
  * @throws ModerationError if action fails
  */
-async function executeAction(params: ModerationActionParams): Promise<void> {
+async function executeAction(params: ModerationActionParams, actionId?: string): Promise<void> {
   const { actionType, targetType, targetId, targetUserId, durationDays } = params;
 
   switch (actionType) {
@@ -1149,17 +1150,19 @@ async function executeAction(params: ModerationActionParams): Promise<void> {
 
     case 'user_suspended':
       // Use existing suspendUser function from adminService
+      // Pass actionId to prevent duplicate moderation_actions record
       if (targetUserId) {
         const { suspendUser } = await import('@/lib/adminService');
-        await suspendUser(targetUserId, params.reason, durationDays);
+        await suspendUser(targetUserId, params.reason, durationDays, actionId);
       }
       break;
 
     case 'user_banned':
-      // Permanent ban (suspension with no expiration)
+      // Permanent suspension (suspension with no expiration)
+      // Pass actionId to prevent duplicate moderation_actions record
       if (targetUserId) {
         const { suspendUser } = await import('@/lib/adminService');
-        await suspendUser(targetUserId, params.reason); // No duration = permanent
+        await suspendUser(targetUserId, params.reason, undefined, actionId); // No duration = permanent
       }
       break;
 
@@ -1233,12 +1236,12 @@ export async function takeModerationAction(
       );
     }
 
-    // Check if action is admin-only (ban)
+    // Check if action is admin-only (permanent suspension)
     if (params.actionType === 'user_banned') {
       const isAdminUser = await isAdmin(user.id);
       if (!isAdminUser) {
         throw new ModerationError(
-          'Only admins can permanently ban users',
+          'Only admins can permanently suspend users',
           MODERATION_ERROR_CODES.INSUFFICIENT_PERMISSIONS
         );
       }
@@ -1288,36 +1291,89 @@ export async function takeModerationAction(
       expiresAt = expirationDate.toISOString();
     }
 
-    // Execute the action
-    await executeAction(params);
+    // For suspensions and bans, create action record first so we can pass the ID
+    // This prevents duplicate moderation_actions records
+    let action: ModerationAction | null = null;
+    const needsActionFirst = params.actionType === 'user_suspended' || params.actionType === 'user_banned';
+    
+    if (needsActionFirst) {
+      // Create moderation action record first
+      const { data: createdAction, error: actionError } = await supabase
+        .from('moderation_actions')
+        .insert({
+          moderator_id: user.id,
+          target_user_id: params.targetUserId,
+          action_type: params.actionType,
+          target_type: params.targetType || null,
+          target_id: params.targetId || null,
+          reason: params.reason,
+          duration_days: params.durationDays || null,
+          expires_at: expiresAt,
+          related_report_id: params.reportId,
+          internal_notes: params.internalNotes || null,
+          notification_sent: false,
+          notification_message: params.notificationMessage || null,
+        })
+        .select()
+        .single();
 
-    // Create moderation action record
-    const { data: action, error: actionError } = await supabase
-      .from('moderation_actions')
-      .insert({
-        moderator_id: user.id,
-        target_user_id: params.targetUserId,
-        action_type: params.actionType,
-        target_type: params.targetType || null,
-        target_id: params.targetId || null,
-        reason: params.reason,
-        duration_days: params.durationDays || null,
-        expires_at: expiresAt,
-        related_report_id: params.reportId,
-        internal_notes: params.internalNotes || null,
-        notification_sent: false,
-        notification_message: params.notificationMessage || null,
-      })
-      .select()
-      .single();
+      if (actionError) {
+        handleDatabaseError(actionError, 'create moderation action');
+      }
 
-    if (actionError) {
-      handleDatabaseError(actionError, 'create moderation action');
+      if (!createdAction) {
+        throw new ModerationError(
+          'Failed to create moderation action - no data returned',
+          MODERATION_ERROR_CODES.DATABASE_ERROR
+        );
+      }
+      
+      action = createdAction;
+      
+      // Execute the action with the action ID (action is guaranteed non-null here)
+      await executeAction(params, createdAction.id);
+    } else {
+      // Execute the action first for other action types
+      await executeAction(params);
+
+      // Create moderation action record
+      const { data: createdAction, error: actionError } = await supabase
+        .from('moderation_actions')
+        .insert({
+          moderator_id: user.id,
+          target_user_id: params.targetUserId,
+          action_type: params.actionType,
+          target_type: params.targetType || null,
+          target_id: params.targetId || null,
+          reason: params.reason,
+          duration_days: params.durationDays || null,
+          expires_at: expiresAt,
+          related_report_id: params.reportId,
+          internal_notes: params.internalNotes || null,
+          notification_sent: false,
+          notification_message: params.notificationMessage || null,
+        })
+        .select()
+        .single();
+
+      if (actionError) {
+        handleDatabaseError(actionError, 'create moderation action');
+      }
+
+      if (!createdAction) {
+        throw new ModerationError(
+          'Failed to create moderation action - no data returned',
+          MODERATION_ERROR_CODES.DATABASE_ERROR
+        );
+      }
+      
+      action = createdAction;
     }
 
+    // TypeScript assertion: action is guaranteed to be non-null here
     if (!action) {
       throw new ModerationError(
-        'Failed to create moderation action - no data returned',
+        'Failed to create moderation action',
         MODERATION_ERROR_CODES.DATABASE_ERROR
       );
     }
@@ -1404,6 +1460,8 @@ export async function takeModerationAction(
     if (error instanceof ModerationError) {
       throw error;
     }
+    console.error('Unexpected error in takeModerationAction:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
     throw new ModerationError(
       'An unexpected error occurred while taking moderation action',
       MODERATION_ERROR_CODES.DATABASE_ERROR,
@@ -2344,10 +2402,10 @@ export async function liftSuspension(userId: string, reason: string): Promise<vo
 }
 
 /**
- * Remove a permanent ban from a user (admin only)
+ * Remove a permanent suspension from a user (admin only)
  * Requirements: 13.3, 13.4, 13.5, 13.6, 13.13
  * 
- * This function performs a complete ban reversal workflow:
+ * This function performs a complete permanent suspension reversal workflow:
  * 1. Verifies admin-only authorization
  * 2. Clears user_profiles.suspended_until and suspension_reason (handles far future dates)
  * 3. Deactivates suspension restriction in user_restrictions
@@ -2355,8 +2413,8 @@ export async function liftSuspension(userId: string, reason: string): Promise<vo
  * 5. Sends notification to the user
  * 6. Logs audit event
  * 
- * @param userId - User ID to remove ban from
- * @param reason - Reason for removing the ban (required)
+ * @param userId - User ID to remove permanent suspension from
+ * @param reason - Reason for removing the permanent suspension (required)
  * @returns void
  * @throws ModerationError if unauthorized, validation fails, or database error
  */
@@ -2374,18 +2432,18 @@ export async function removeBan(userId: string, reason: string): Promise<void> {
     // Validate and sanitize reason
     if (!reason || reason.trim().length === 0) {
       throw new ModerationError(
-        'Reason is required for removing ban',
+        'Reason is required for removing permanent suspension',
         MODERATION_ERROR_CODES.VALIDATION_ERROR
       );
     }
     validateTextLength(reason, 1000, 'Reason');
     reason = sanitizeText(reason);
 
-    // Verify admin role (ban removal is admin-only, throws if unauthorized)
+    // Verify admin role (permanent suspension removal is admin-only, throws if unauthorized)
     // Requirements: 13.3, 13.8, 13.13
     const user = await verifyAdminRole();
 
-    // Check if user is actually banned (suspended with far future date or null)
+    // Check if user is actually permanently suspended (suspended with far future date or null)
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('suspended_until, suspension_reason')
@@ -2398,22 +2456,22 @@ export async function removeBan(userId: string, reason: string): Promise<void> {
 
     if (!profile || !profile.suspended_until) {
       throw new ModerationError(
-        'User is not currently banned',
+        'User is not currently permanently suspended',
         MODERATION_ERROR_CODES.VALIDATION_ERROR,
         { userId }
       );
     }
 
-    // Check if this is a permanent ban (far future date indicates permanent ban)
-    // Permanent bans typically have a date far in the future (e.g., year 9999)
+    // Check if this is a permanent suspension (far future date indicates permanent suspension)
+    // Permanent suspensions typically have a date far in the future (e.g., year 9999)
     const suspendedUntil = new Date(profile.suspended_until);
     const farFutureThreshold = new Date('2100-01-01'); // Any date beyond 2100 is considered permanent
     const isPermanentBan = suspendedUntil > farFutureThreshold;
 
     if (!isPermanentBan) {
-      // This is a temporary suspension, not a permanent ban
+      // This is a temporary suspension, not a permanent suspension
       throw new ModerationError(
-        'User has a temporary suspension, not a permanent ban. Use liftSuspension instead.',
+        'User has a temporary suspension, not a permanent suspension. Use liftSuspension instead.',
         MODERATION_ERROR_CODES.VALIDATION_ERROR,
         { userId, suspendedUntil: profile.suspended_until }
       );
@@ -2430,7 +2488,7 @@ export async function removeBan(userId: string, reason: string): Promise<void> {
       .eq('user_id', userId);
 
     if (clearBanError) {
-      handleDatabaseError(clearBanError, 'clear ban from user profile');
+      handleDatabaseError(clearBanError, 'clear permanent suspension from user profile');
     }
 
     // Step 2: Deactivate suspension restriction in user_restrictions
@@ -2447,10 +2505,10 @@ export async function removeBan(userId: string, reason: string): Promise<void> {
 
     if (deactivateRestrictionError) {
       console.error('Failed to deactivate suspension restriction:', deactivateRestrictionError);
-      // Don't throw - ban was already cleared from profile
+      // Don't throw - permanent suspension was already cleared from profile
     }
 
-    // Step 3: Find and update the most recent ban action with reversal details
+    // Step 3: Find and update the most recent permanent suspension action with reversal details
     // Requirements: 13.4, 13.5, 13.12
     const { data: banActions, error: fetchActionsError } = await supabase
       .from('moderation_actions')
@@ -2462,8 +2520,8 @@ export async function removeBan(userId: string, reason: string): Promise<void> {
       .limit(1);
 
     if (fetchActionsError) {
-      console.error('Failed to fetch ban actions:', fetchActionsError);
-      // Don't throw - ban was already cleared
+      console.error('Failed to fetch permanent suspension actions:', fetchActionsError);
+      // Don't throw - permanent suspension was already cleared
     }
 
     if (banActions && banActions.length > 0) {
@@ -2489,17 +2547,17 @@ export async function removeBan(userId: string, reason: string): Promise<void> {
 
       if (updateActionError) {
         console.error('Failed to update moderation action with reversal:', updateActionError);
-        // Don't throw - ban was already cleared
+        // Don't throw - permanent suspension was already cleared
       }
 
       // Log self-reversal distinctly for audit purposes
       // Requirements: 13.12
       if (isSelfReversal) {
-        await logSecurityEvent('self_reversal_ban_removal', user.id, {
+        await logSecurityEvent('self_reversal_permanent_suspension_removal', user.id, {
           actionId,
           targetUserId: userId,
           reason,
-          actionType: 'ban_removal',
+          actionType: 'permanent_suspension_removal',
         });
       }
     }

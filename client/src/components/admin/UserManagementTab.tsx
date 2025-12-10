@@ -62,9 +62,9 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
   };
 
   const handleSuspend = async () => {
-    if (!confirm(`Are you sure you want to suspend ${user.username}?`)) return;
+    if (!confirm(`Are you sure you want to ban ${user.username}? This will prevent them from logging in.`)) return;
 
-    const reason = prompt('Enter suspension reason:');
+    const reason = prompt('Enter ban reason:');
     if (!reason) return;
 
     setLoading(true);
@@ -75,14 +75,14 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
       onUpdate();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to suspend user');
+      setError(err instanceof Error ? err.message : 'Failed to ban user');
     } finally {
       setLoading(false);
     }
   };
 
   const handleUnsuspend = async () => {
-    if (!confirm(`Are you sure you want to unsuspend ${user.username}?`)) return;
+    if (!confirm(`Are you sure you want to unban ${user.username}?`)) return;
 
     setLoading(true);
     setError(null);
@@ -92,7 +92,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
       onUpdate();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to unsuspend user');
+      setError(err instanceof Error ? err.message : 'Failed to unban user');
     } finally {
       setLoading(false);
     }
@@ -196,8 +196,8 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
               </div>
               <p>
                 <span className="font-medium text-gray-900">Status:</span>{' '}
-                <span className={user.is_suspended ? 'text-red-600' : 'text-green-600'}>
-                  {user.is_suspended ? 'Suspended' : 'Active'}
+                <span className={user.is_banned ? 'text-red-600' : 'text-green-600'}>
+                  {user.is_banned ? 'Banned' : 'Active'}
                 </span>
               </p>
             </div>
@@ -255,13 +255,13 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
               >
                 Reset Password
               </button>
-              {user.is_suspended ? (
+              {user.is_banned ? (
                 <button
                   onClick={handleUnsuspend}
                   disabled={loading}
                   className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
                 >
-                  Unsuspend Account
+                  Unban Account
                 </button>
               ) : (
                 !user.roles.includes('admin') && (
@@ -270,7 +270,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
                     disabled={loading}
                     className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
                   >
-                    Suspend Account
+                    Ban Account
                   </button>
                 )
               )}

@@ -252,10 +252,9 @@ export default function AudioUpload({
         // Also call legacy callback for backward compatibility
         onFileSelect(validation.file, validation.duration, compressionResult || undefined);
       } else {
-        // Provide more specific error messages
+        // Display user-friendly error message without technical details
         const errorMessage = result.error || 'Failed to upload track';
-        const details = result.details ? ` (${result.details})` : '';
-        setUploadError(errorMessage + details);
+        setUploadError(errorMessage);
       }
     } catch (error) {
       console.error('Track upload error:', error);

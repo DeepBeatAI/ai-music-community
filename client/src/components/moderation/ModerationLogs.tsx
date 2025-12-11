@@ -49,6 +49,12 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
   const [showNonReversedOnly, setShowNonReversedOnly] = useState(false);
   const [showRecentlyReversed, setShowRecentlyReversed] = useState(false);
   const [quickFilter, setQuickFilter] = useState<'all' | 'active' | 'reversed' | 'expired'>('all');
+  const [showMyActionsOnly, setShowMyActionsOnly] = useState(false);
+
+  // Stats (independent of filters)
+  const [reversalRate, setReversalRate] = useState(0);
+  const [totalReversed, setTotalReversed] = useState(0);
+  const [totalActions, setTotalActions] = useState(0);
 
   // Check if user is admin
   useEffect(() => {
@@ -61,15 +67,48 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
     checkAdminStatus();
   }, [user]);
 
+  // Fetch stats (independent of filters)
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Build stats filters - only include moderatorId if "My Actions Only" is enabled
+        const statsFilters: ActionLogFilters = {};
+        if (showMyActionsOnly && user) {
+          statsFilters.moderatorId = user.id;
+        }
+        
+        // Fetch ALL actions for stats (no other filters applied)
+        const statsResult = await fetchModerationLogs(statsFilters, 100000, 0);
+        
+        // Calculate reversal statistics from ALL actions
+        const reversedActions = statsResult.actions.filter((action) => action.revoked_at);
+        const reversedCount = reversedActions.length;
+        const rate = statsResult.total > 0 ? (reversedCount / statsResult.total) * 100 : 0;
+        
+        setTotalActions(statsResult.total);
+        setTotalReversed(reversedCount);
+        setReversalRate(rate);
+      } catch (error) {
+        console.error('Failed to fetch stats:', error);
+      }
+    };
+
+    if (user) {
+      fetchStats();
+    }
+  }, [showMyActionsOnly, user]);
+
   // Fetch logs
   useEffect(() => {
     const fetchLogs = async () => {
       try {
         setLoading(true);
         const offset = (currentPage - 1) * itemsPerPage;
+        
+        // Fetch paginated results for display
         const result = await fetchModerationLogs(filters, itemsPerPage, offset);
         
-        // Fetch usernames for all actions
+        // Fetch usernames for displayed actions
         const actionsWithUsernames = await Promise.all(
           result.actions.map(async (action) => {
             const actionWithUsernames: ActionWithUsernames = { ...action };
@@ -124,6 +163,11 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
   // Apply filters
   const handleApplyFilters = () => {
     const newFilters: ActionLogFilters = {};
+
+    // Add moderator filter if "My Actions Only" is enabled
+    if (showMyActionsOnly && user) {
+      newFilters.moderatorId = user.id;
+    }
 
     if (actionTypeFilter) {
       newFilters.actionType = actionTypeFilter;
@@ -293,6 +337,106 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
 
   return (
     <div className="space-y-6">
+      {/* Statistics Summary with Toggle */}
+      <div className="space-y-4">
+        {/* Toggle Switch */}
+        <div className="flex items-center justify-between bg-gray-800 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <span className="text-sm font-medium text-gray-300">
+              {showMyActionsOnly ? 'Showing My Actions Only' : 'Showing All Actions'}
+            </span>
+            {showMyActionsOnly && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-600 text-white">
+                My Stats
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !showMyActionsOnly;
+              setShowMyActionsOnly(newValue);
+              setCurrentPage(1); // Reset to first page
+              // Trigger filter application
+              setTimeout(() => {
+                const applyButton = document.querySelector('[data-apply-filters]') as HTMLButtonElement;
+                if (applyButton) applyButton.click();
+              }, 0);
+            }}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+              showMyActionsOnly ? 'bg-blue-600' : 'bg-gray-600'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                showMyActionsOnly ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-400 mb-1">
+                  {showMyActionsOnly ? 'My Total Actions' : 'Total Actions'}
+                </p>
+                <p className="text-3xl font-bold text-white">{totalActions}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                <span className="text-2xl">📊</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-400 mb-1">
+                  {showMyActionsOnly ? 'My Reversed Actions' : 'Reversed Actions'}
+                </p>
+                <p className="text-3xl font-bold text-white">{totalReversed}</p>
+              </div>
+              <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center">
+                <span className="text-2xl">↩️</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-400 mb-1">
+                  {showMyActionsOnly ? 'My Reversal Rate' : 'Reversal Rate'}
+                </p>
+                <p className="text-3xl font-bold text-white">{reversalRate.toFixed(1)}%</p>
+              </div>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                reversalRate < 10 ? 'bg-green-600' : reversalRate < 25 ? 'bg-yellow-600' : 'bg-red-600'
+              }`}>
+                <span className="text-2xl">
+                  {reversalRate < 10 ? '✓' : '⚠'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <p className="text-sm text-gray-400 mb-2">Accuracy</p>
+                <p className={`text-lg font-semibold ${
+                  reversalRate < 10 ? 'text-green-400' : reversalRate < 25 ? 'text-yellow-400' : 'text-red-400'
+                }`}>
+                  {reversalRate < 10 ? 'Excellent' : reversalRate < 25 ? 'Good' : 'Review Needed'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
@@ -315,7 +459,7 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           {/* Action Type Filter */}
           <div>
             <label htmlFor="action-type-filter" className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
@@ -335,18 +479,18 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
               }`}
             >
               <option value="">All Types</option>
-              <option value="content_removed">Content Removed</option>
               <option value="content_approved">Content Approved</option>
+              <option value="content_removed">Content Removed</option>
               <option value="user_warned">User Warned</option>
-              <option value="user_suspended">User Suspended</option>
-              <option value="user_banned">User Banned</option>
               <option value="restriction_applied">Restriction Applied</option>
+              <option value="user_suspended">User Suspended</option>
+              <option value="user_banned">Permanent Suspension</option>
             </select>
           </div>
 
-          {/* Reversal Filter */}
+          {/* Reversal Status Filter - Dropdown */}
           <div>
-            <label className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="reversal-status-filter" className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
               <span>Reversal Status</span>
               {(showRecentlyReversed || showReversedOnly || showNonReversedOnly) && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
@@ -354,44 +498,29 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                 </span>
               )}
             </label>
-            <div className="space-y-2">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showRecentlyReversed}
-                  onChange={(e) => handleRecentlyReversedChange(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                />
-                <span className={`text-sm ${showRecentlyReversed ? 'text-blue-400 font-medium' : 'text-gray-300'}`}>
-                  Recently Reversed (7 days)
-                </span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showReversedOnly}
-                  onChange={(e) => handleReversedOnlyChange(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                />
-                <span className={`text-sm ${showReversedOnly ? 'text-blue-400 font-medium' : 'text-gray-300'}`}>
-                  Show Reversed Only
-                </span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showNonReversedOnly}
-                  onChange={(e) => handleNonReversedOnlyChange(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                />
-                <span className={`text-sm ${showNonReversedOnly ? 'text-blue-400 font-medium' : 'text-gray-300'}`}>
-                  Show Non-Reversed Only
-                </span>
-              </label>
-              {!showRecentlyReversed && !showReversedOnly && !showNonReversedOnly && (
-                <p className="text-xs text-gray-400 italic">Showing all actions</p>
-              )}
-            </div>
+            <select
+              id="reversal-status-filter"
+              value={
+                showRecentlyReversed ? 'recently-reversed' :
+                showReversedOnly ? 'reversed' :
+                showNonReversedOnly ? 'non-reversed' :
+                'all'
+              }
+              onChange={(e) => {
+                const value = e.target.value;
+                setShowRecentlyReversed(value === 'recently-reversed');
+                setShowReversedOnly(value === 'reversed');
+                setShowNonReversedOnly(value === 'non-reversed');
+              }}
+              className={`w-full bg-gray-700 border rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                (showRecentlyReversed || showReversedOnly || showNonReversedOnly) ? 'border-blue-500' : 'border-gray-600'
+              }`}
+            >
+              <option value="all">All Actions</option>
+              <option value="recently-reversed">Recently Reversed (7 days)</option>
+              <option value="reversed">Reversed Only</option>
+              <option value="non-reversed">Non-Reversed Only</option>
+            </select>
           </div>
 
           {/* Search Query */}
@@ -416,46 +545,38 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
             />
           </div>
 
-          {/* Start Date */}
+          {/* Date Range - Both fields in one column */}
           <div>
-            <label htmlFor="start-date" className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
-              <span>Start Date</span>
-              {startDate && (
+            <label className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
+              <span>Date Range</span>
+              {(startDate || endDate) && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
                   ✓
                 </span>
               )}
             </label>
-            <input
-              id="start-date"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className={`w-full bg-gray-700 border rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                startDate ? 'border-blue-500' : 'border-gray-600'
-              }`}
-            />
-          </div>
-
-          {/* End Date */}
-          <div>
-            <label htmlFor="end-date" className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
-              <span>End Date</span>
-              {endDate && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
-                  ✓
-                </span>
-              )}
-            </label>
-            <input
-              id="end-date"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className={`w-full bg-gray-700 border rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                endDate ? 'border-blue-500' : 'border-gray-600'
-              }`}
-            />
+            <div className="flex gap-2">
+              <input
+                id="start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                placeholder="Start"
+                className={`flex-1 bg-gray-700 border rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  startDate ? 'border-blue-500' : 'border-gray-600'
+                }`}
+              />
+              <input
+                id="end-date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                placeholder="End"
+                className={`flex-1 bg-gray-700 border rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  endDate ? 'border-blue-500' : 'border-gray-600'
+                }`}
+              />
+            </div>
           </div>
         </div>
 
@@ -463,6 +584,7 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
         <div className="flex items-center space-x-4">
           <button
             onClick={handleApplyFilters}
+            data-apply-filters
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
           >
             Apply Filters
@@ -620,7 +742,7 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                     Date
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Action Type
+                    Action Type / Status
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                     Target User
@@ -698,7 +820,9 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <span className={reversed ? 'line-through' : ''}>
-                          {action.duration_days
+                          {action.action_type === 'user_banned'
+                            ? 'Permanent'
+                            : action.duration_days
                             ? `${action.duration_days} days`
                             : action.expires_at
                             ? 'Permanent'

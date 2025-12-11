@@ -70,7 +70,7 @@ function getActionState(action: ModerationAction): ActionState {
  * Get styling configuration for each action state
  * 
  * Color coding:
- * - Active: Red (#DC2626) or Orange (#EA580C)
+ * - Active: Green (#16A34A)
  * - Reversed: Gray (#6B7280) with strikethrough
  * - Expired: Blue (#2563EB)
  * 
@@ -86,8 +86,8 @@ function getStateStyles(state: ActionState): {
     case 'active':
       return {
         label: 'ACTIVE',
-        bgColor: 'bg-red-900',
-        textColor: 'text-red-200',
+        bgColor: 'bg-green-900',
+        textColor: 'text-green-200',
         strikethrough: false,
       };
     case 'reversed':
@@ -116,7 +116,7 @@ function getStateStyles(state: ActionState): {
 export function getStateColor(state: ActionState): string {
   switch (state) {
     case 'active':
-      return '#DC2626'; // Red
+      return '#16A34A'; // Green
     case 'reversed':
       return '#6B7280'; // Gray
     case 'expired':

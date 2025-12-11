@@ -362,7 +362,7 @@ export const ACTION_TYPE_LABELS: Record<ModerationActionType, string> = {
   content_approved: 'Content Approved',
   user_warned: 'User Warned',
   user_suspended: 'User Suspended',
-  user_banned: 'User Suspended Permanently',
+  user_banned: 'Permanent Suspension',
   restriction_applied: 'Restriction Applied',
 };
 

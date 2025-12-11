@@ -9,7 +9,6 @@ import { ModerationQueue } from '@/components/moderation/ModerationQueue';
 import { ModerationLogs } from '@/components/moderation/ModerationLogs';
 import { ModerationMetrics } from '@/components/moderation/ModerationMetrics';
 import { ModerationSettings } from '@/components/moderation/ModerationSettings';
-import { MyActionsView } from '@/components/moderation/MyActionsView';
 import { UserStatusPanel } from '@/components/moderation/UserStatusPanel';
 import { supabase } from '@/lib/supabase';
 
@@ -19,7 +18,7 @@ export default function ModerationPage() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'queue' | 'logs' | 'myActions' | 'userStatus' | 'metrics' | 'settings'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'logs' | 'userStatus' | 'metrics' | 'settings'>('queue');
   
   // User Status tab state
   const [searchUsername, setSearchUsername] = useState('');
@@ -191,17 +190,6 @@ export default function ModerationPage() {
               Action Logs
             </button>
             <button
-              onClick={() => setActiveTab('myActions')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'myActions'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
-              }`}
-              aria-current={activeTab === 'myActions' ? 'page' : undefined}
-            >
-              My Actions
-            </button>
-            <button
               onClick={() => setActiveTab('userStatus')}
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'userStatus'
@@ -252,15 +240,6 @@ export default function ModerationPage() {
 
           {activeTab === 'logs' && (
             <ModerationLogs
-              onActionSelect={(action) => {
-                // TODO: Open action details modal in future if needed
-                console.log('Selected action:', action);
-              }}
-            />
-          )}
-
-          {activeTab === 'myActions' && (
-            <MyActionsView
               onActionSelect={(action) => {
                 // TODO: Open action details modal in future if needed
                 console.log('Selected action:', action);

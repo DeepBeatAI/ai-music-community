@@ -24,6 +24,7 @@ interface ModerationLogsProps {
 interface ActionWithUsernames extends ModerationAction {
   targetUsername?: string;
   moderatorUsername?: string;
+  revokedByUsername?: string;
 }
 
 export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
@@ -143,6 +144,21 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
               actionWithUsernames.moderatorUsername = moderatorProfile?.username || 'Unknown Moderator';
             }
 
+            // Fetch revoked by username if action was reversed
+            if (action.revoked_by) {
+              const { data: revokedByProfile, error: revokedByError } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('user_id', action.revoked_by)
+                .maybeSingle();
+              
+              if (revokedByError) {
+                console.error('Error fetching revoked by username:', revokedByError);
+              }
+              
+              actionWithUsernames.revokedByUsername = revokedByProfile?.username || 'Unknown';
+            }
+
             return actionWithUsernames;
           })
         );
@@ -258,6 +274,15 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickFilter, quickFilterChanged]);
+
+  // Auto-apply filters when "My Actions Only" toggle changes
+  useEffect(() => {
+    // Skip on initial render (when filters are empty)
+    if (filters !== undefined) {
+      handleApplyFilters(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showMyActionsOnly]);
 
   // Handle reversal filter checkbox changes (mutually exclusive)
   const handleRecentlyReversedChange = (checked: boolean) => {
@@ -376,13 +401,8 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
           </div>
           <button
             onClick={() => {
-              const newValue = !showMyActionsOnly;
-              setShowMyActionsOnly(newValue);
+              setShowMyActionsOnly(!showMyActionsOnly);
               setCurrentPage(1); // Reset to first page
-              // Trigger filter application (don't reset quick filter)
-              setTimeout(() => {
-                handleApplyFilters(false);
-              }, 0);
             }}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
               showMyActionsOnly ? 'bg-blue-600' : 'bg-gray-600'
@@ -545,28 +565,6 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
             </select>
           </div>
 
-          {/* Search Query */}
-          <div>
-            <label htmlFor="search-query" className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
-              <span>Search User/Content ID</span>
-              {searchQuery.trim() && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
-                  ✓
-                </span>
-              )}
-            </label>
-            <input
-              id="search-query"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Enter user or content ID"
-              className={`w-full bg-gray-700 border rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                searchQuery.trim() ? 'border-blue-500' : 'border-gray-600'
-              }`}
-            />
-          </div>
-
           {/* Date Range - Both fields in one column */}
           <div>
             <label className="flex items-center space-x-2 text-sm font-medium text-gray-300 mb-2">
@@ -664,13 +662,13 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
             onClick={() => handleQuickFilter('active')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 ${
               quickFilter === 'active'
-                ? 'bg-red-600 text-white'
+                ? 'bg-green-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
             <span>Active Only</span>
             {quickFilter === 'active' && (
-              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-red-600 text-xs font-bold">
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-green-600 text-xs font-bold">
                 ✓
               </span>
             )}
@@ -694,13 +692,13 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
             onClick={() => handleQuickFilter('expired')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 ${
               quickFilter === 'expired'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-blue-900 text-blue-200'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
             <span>Expired Only</span>
             {quickFilter === 'expired' && (
-              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-blue-600 text-xs font-bold">
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-200 text-blue-900 text-xs font-bold">
                 ✓
               </span>
             )}
@@ -820,10 +818,15 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                           {action.targetUsername || 'Unknown User'}
                         </span>
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        <span className={reversed ? 'line-through' : ''}>
+                      <td className="px-4 sm:px-6 py-4 text-sm text-gray-300">
+                        <div className={reversed ? 'line-through' : ''}>
                           {action.moderatorUsername || 'Unknown Moderator'}
-                        </span>
+                        </div>
+                        {reversed && action.revokedByUsername && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            Reversed by: {action.revokedByUsername}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-sm text-gray-300 max-w-xs">
                         <div className={reversed ? 'line-through' : ''}>

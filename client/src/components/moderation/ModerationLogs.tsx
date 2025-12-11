@@ -161,8 +161,16 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
   }, [filters, currentPage, itemsPerPage, showToast]);
 
   // Apply filters
-  const handleApplyFilters = () => {
+  const handleApplyFilters = (resetQuickFilter = false) => {
     const newFilters: ActionLogFilters = {};
+
+    // Determine the effective quick filter value
+    const effectiveQuickFilter = resetQuickFilter ? 'all' : quickFilter;
+
+    // Reset quick filter to 'all' when applying normal filters manually
+    if (resetQuickFilter) {
+      setQuickFilter('all');
+    }
 
     // Add moderator filter if "My Actions Only" is enabled
     if (showMyActionsOnly && user) {
@@ -185,19 +193,20 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
       newFilters.endDate = new Date(endDate).toISOString();
     }
 
-    // Handle quick filter
-    if (quickFilter === 'active') {
+    // Handle quick filter using effective value
+    if (effectiveQuickFilter === 'active') {
       newFilters.nonReversedOnly = true;
       newFilters.nonExpiredOnly = true;
-    } else if (quickFilter === 'reversed') {
+    } else if (effectiveQuickFilter === 'reversed') {
       newFilters.reversedOnly = true;
-    } else if (quickFilter === 'expired') {
+    } else if (effectiveQuickFilter === 'expired') {
       newFilters.expiredOnly = true;
+      newFilters.nonReversedOnly = true; // Exclude reversed actions from expired filter
     }
-    // 'all' means no filter applied
+    // 'all' means no quick filter applied
 
     // Handle reversal filters (mutually exclusive) - only if quick filter is 'all'
-    if (quickFilter === 'all') {
+    if (effectiveQuickFilter === 'all') {
       if (showRecentlyReversed) {
         newFilters.recentlyReversed = true;
       } else if (showReversedOnly) {
@@ -225,6 +234,9 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
     setCurrentPage(1);
   };
 
+  // Track if quick filter was just changed (to trigger auto-apply)
+  const [quickFilterChanged, setQuickFilterChanged] = useState(false);
+
   // Handle quick filter button clicks
   const handleQuickFilter = (filter: 'all' | 'active' | 'reversed' | 'expired') => {
     setQuickFilter(filter);
@@ -234,7 +246,18 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
       setShowReversedOnly(false);
       setShowNonReversedOnly(false);
     }
+    // Mark that quick filter was changed to trigger auto-apply
+    setQuickFilterChanged(true);
   };
+
+  // Auto-apply filters when quick filter changes
+  useEffect(() => {
+    if (quickFilterChanged) {
+      handleApplyFilters(false);
+      setQuickFilterChanged(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickFilter, quickFilterChanged]);
 
   // Handle reversal filter checkbox changes (mutually exclusive)
   const handleRecentlyReversedChange = (checked: boolean) => {
@@ -356,10 +379,9 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
               const newValue = !showMyActionsOnly;
               setShowMyActionsOnly(newValue);
               setCurrentPage(1); // Reset to first page
-              // Trigger filter application
+              // Trigger filter application (don't reset quick filter)
               setTimeout(() => {
-                const applyButton = document.querySelector('[data-apply-filters]') as HTMLButtonElement;
-                if (applyButton) applyButton.click();
+                handleApplyFilters(false);
               }, 0);
             }}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
@@ -583,7 +605,7 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
         {/* Filter Actions */}
         <div className="flex items-center space-x-4">
           <button
-            onClick={handleApplyFilters}
+            onClick={() => handleApplyFilters(true)}
             data-apply-filters
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
           >

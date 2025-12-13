@@ -225,6 +225,31 @@ export async function fetchUserDetails(userId: string): Promise<AdminUserData> {
           last_active: new Date().toISOString(),
         };
 
+        // Check auth ban status via API endpoint
+        let isBanned = false;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            const response = await fetch('/api/admin/check-ban-status', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ userId }),
+            });
+            
+            if (response.ok) {
+              const banStatus = await response.json();
+              isBanned = banStatus.isBanned;
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check ban status:', error);
+          // Fall back to database suspension status
+          isBanned = profile.is_suspended || false;
+        }
+
         return {
           id: profile.id,
           user_id: profile.user_id,
@@ -234,7 +259,7 @@ export async function fetchUserDetails(userId: string): Promise<AdminUserData> {
           roles: profile.roles || [],
           created_at: profile.created_at,
           last_active: activity.last_active,
-          is_banned: profile.is_suspended || false,
+          is_banned: isBanned,
           activity_summary: activity,
         };
       }
@@ -397,14 +422,124 @@ export async function updateUserRoles(
 }
 
 /**
- * Ban user account with audit logging
+ * Ban user account - prevents login entirely using Supabase Auth
+ * Requirements: 3.7
+ * 
+ * This is different from suspension:
+ * - Ban: User cannot login at all (Supabase Auth level)
+ * - Suspension: User can login but cannot create content (application level)
+ */
+export async function banUserAccount(
+  userId: string,
+  reason: string
+): Promise<void> {
+  try {
+    // Get the current session token
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      throw new AdminError(
+        'Not authenticated',
+        ADMIN_ERROR_CODES.UNAUTHORIZED,
+        {}
+      );
+    }
+
+    // Call the API route to ban the user (requires service role key)
+    const response = await fetch('/api/admin/ban-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId, reason }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new AdminError(
+        errorData.error || 'Failed to ban user account',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
+        { details: errorData.details }
+      );
+    }
+
+    // Invalidate user caches
+    adminCache.invalidateUserCaches(userId);
+  } catch (error) {
+    if (error instanceof AdminError) {
+      throw error;
+    }
+    throw new AdminError(
+      'An unexpected error occurred while banning user',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
+ * Unban user account - allows login again
+ * Requirements: 3.7
+ */
+export async function unbanUserAccount(userId: string): Promise<void> {
+  try {
+    // Get the current session token
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      throw new AdminError(
+        'Not authenticated',
+        ADMIN_ERROR_CODES.UNAUTHORIZED,
+        {}
+      );
+    }
+
+    // Call the API route to unban the user (requires service role key)
+    const response = await fetch('/api/admin/unban-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new AdminError(
+        errorData.error || 'Failed to unban user account',
+        ADMIN_ERROR_CODES.DATABASE_ERROR,
+        { details: errorData.details }
+      );
+    }
+
+    // Invalidate user caches
+    adminCache.invalidateUserCaches(userId);
+  } catch (error) {
+    if (error instanceof AdminError) {
+      throw error;
+    }
+    throw new AdminError(
+      'An unexpected error occurred while unbanning user',
+      ADMIN_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
+ * Suspend user account with moderation system integration
  * Requirements: 3.7, 12.1, 12.2, 12.7
  * 
- * This function now integrates with the moderation system by:
+ * This function integrates with the moderation system by:
  * - Creating a moderation_actions record
  * - Creating a user_restrictions record
- * - Updating user_profiles with ban details
+ * - Updating user_profiles with suspension details
  * - Logging to admin_audit_log
+ * 
+ * Note: This is for content restrictions, not login prevention.
+ * For login prevention, use banUserAccount() instead.
  */
 export async function suspendUser(
   userId: string,
@@ -422,7 +557,7 @@ export async function suspendUser(
 
     if (error) {
       throw new AdminError(
-        'Failed to ban user account',
+        'Failed to suspend user account',
         ADMIN_ERROR_CODES.DATABASE_ERROR,
         { originalError: error }
       );
@@ -435,7 +570,7 @@ export async function suspendUser(
       throw error;
     }
     throw new AdminError(
-      'An unexpected error occurred while banning user',
+      'An unexpected error occurred while suspending user',
       ADMIN_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );

@@ -6,8 +6,8 @@ import {
   fetchUserDetails,
   updateUserPlanTier,
   updateUserRoles,
-  suspendUser,
-  unsuspendUser,
+  banUserAccount,
+  unbanUserAccount,
   resetUserPassword,
 } from '@/lib/adminService';
 import type { AdminUserData } from '@/types/admin';
@@ -61,7 +61,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     }
   };
 
-  const handleSuspend = async () => {
+  const handleBan = async () => {
     if (!confirm(`Are you sure you want to ban ${user.username}? This will prevent them from logging in.`)) return;
 
     const reason = prompt('Enter ban reason:');
@@ -71,7 +71,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     setError(null);
 
     try {
-      await suspendUser(user.user_id, reason);
+      await banUserAccount(user.user_id, reason);
       onUpdate();
       onClose();
     } catch (err) {
@@ -81,14 +81,14 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     }
   };
 
-  const handleUnsuspend = async () => {
+  const handleUnban = async () => {
     if (!confirm(`Are you sure you want to unban ${user.username}?`)) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      await unsuspendUser(user.user_id);
+      await unbanUserAccount(user.user_id);
       onUpdate();
       onClose();
     } catch (err) {
@@ -257,7 +257,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
               </button>
               {user.is_banned ? (
                 <button
-                  onClick={handleUnsuspend}
+                  onClick={handleUnban}
                   disabled={loading}
                   className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
                 >
@@ -266,7 +266,7 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
               ) : (
                 !user.roles.includes('admin') && (
                   <button
-                    onClick={handleSuspend}
+                    onClick={handleBan}
                     disabled={loading}
                     className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
                   >

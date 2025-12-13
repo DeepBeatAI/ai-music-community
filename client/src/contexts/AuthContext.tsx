@@ -274,27 +274,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 }, [router, pathname]);
 
-  // Update last_active and session activity periodically while user is active (every 5 minutes)
+  // Update last_active and session activity periodically while user is active (every 10 seconds)
+  // Also check if user has been banned
   useEffect(() => {
     if (!user || !session) return;
 
     const updateInterval = setInterval(async () => {
+      console.log('Periodic check: Updating activity and checking ban status...');
       updateLastActive(user.id);
       
-      // Update session last_activity
+      // Check if user has been banned by checking the session in the database
+      // The revoke_user_sessions function deletes sessions, so if session doesn't exist, user is banned
       try {
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('user_sessions')
+          .select('is_active')
+          .eq('session_token', session.access_token)
+          .maybeSingle();
+        
+        console.log('Session check result:', { 
+          sessionExists: !!sessionData, 
+          isActive: sessionData?.is_active,
+          error: sessionError?.message 
+        });
+        
+        // If session doesn't exist or is not active, log out the user
+        if (!sessionData || !sessionData.is_active) {
+          console.log('Session revoked or inactive, logging out user');
+          await supabase.auth.signOut();
+          setUser(null);
+          setSession(null);
+          setProfile(null);
+          setUserTypeInfo(null);
+          alert('Your account has been suspended. Please contact support.');
+          router.push('/login');
+          return;
+        }
+        
+        // Update session last_activity
         await supabase
           .from('user_sessions')
           .update({ last_activity: new Date().toISOString() })
           .eq('session_token', session.access_token)
           .eq('is_active', true);
       } catch (error) {
-        console.error('Failed to update session activity:', error);
+        console.error('Failed to check session status:', error);
       }
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 10 * 1000); // 10 seconds
 
     return () => clearInterval(updateInterval);
-  }, [user, session]);
+  }, [user, session, router]);
 
   // Automatic session refresh - refresh token 10 minutes before expiration
   useEffect(() => {
@@ -354,7 +383,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await supabase.auth.signInWithPassword({ email, password });
       
       if (result.error) {
-        return { data: null, error: result.error.message };
+        // Improve ban error message
+        let errorMessage = result.error.message;
+        if (errorMessage.toLowerCase().includes('banned') || errorMessage.toLowerCase().includes('ban')) {
+          errorMessage = 'Your account has been suspended. Please contact support for assistance.';
+        }
+        return { data: null, error: errorMessage };
       }
 
       return { data: result.data, error: null };

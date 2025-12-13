@@ -127,21 +127,6 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
       </div>
 
       <div className="p-6 space-y-6">
-        {/* Suspension Status */}
-        {suspensionStatus?.isSuspended && (
-          <SuspensionSection
-            suspensionStatus={suspensionStatus}
-            userId={userId}
-            isAdminUser={isAdminUser}
-            onActionComplete={() => {
-              loadUserStatus();
-              onActionComplete?.();
-            }}
-            actionLoading={actionLoading}
-            setActionLoading={setActionLoading}
-          />
-        )}
-
         {/* Active Restrictions */}
         {activeRestrictions.length > 0 && (
           <RestrictionsSection
@@ -186,195 +171,6 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
     </div>
   );
 }
-
-
-// ============================================================================
-// Suspension Section Component
-// ============================================================================
-
-interface SuspensionSectionProps {
-  suspensionStatus: UserSuspensionStatus;
-  userId: string;
-  isAdminUser: boolean;
-  onActionComplete: () => void;
-  actionLoading: boolean;
-  setActionLoading: (loading: boolean) => void;
-}
-
-function SuspensionSection({
-  suspensionStatus,
-  userId,
-  isAdminUser,
-  onActionComplete,
-  actionLoading,
-  setActionLoading,
-}: SuspensionSectionProps) {
-  const [showReversalDialog, setShowReversalDialog] = useState(false);
-  const [reversalReason, setReversalReason] = useState('');
-  const [reversalError, setReversalError] = useState<string | null>(null);
-
-  const handleLiftSuspension = async () => {
-    if (!reversalReason.trim()) {
-      setReversalError('Reason is required');
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      setReversalError(null);
-
-      if (suspensionStatus.isPermanent) {
-        await removeBan(userId, reversalReason);
-      } else {
-        await liftSuspension(userId, reversalReason);
-      }
-
-      setShowReversalDialog(false);
-      setReversalReason('');
-      onActionComplete();
-    } catch (err) {
-      console.error('Failed to lift suspension:', err);
-      setReversalError(err instanceof Error ? err.message : 'Failed to lift suspension');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  // Color coding: Requirements 15.4 - Active actions use Red (#DC2626)
-  return (
-    <div className="border border-red-600 rounded-lg p-4 bg-red-50">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-2xl">🔴</span>
-            <h3 className="text-lg font-semibold text-red-900">
-              {suspensionStatus.isPermanent ? 'Permanently Banned' : 'Suspended'}
-            </h3>
-          </div>
-          
-          {!suspensionStatus.isPermanent && suspensionStatus.suspendedUntil && (
-            <p className="text-sm text-red-700 mb-1">
-              Until: {formatDate(suspensionStatus.suspendedUntil)}
-            </p>
-          )}
-          
-          {!suspensionStatus.isPermanent && suspensionStatus.daysRemaining !== null && (
-            <p className="text-sm text-red-700 mb-1">
-              Days remaining: {suspensionStatus.daysRemaining}
-            </p>
-          )}
-          
-          {suspensionStatus.suspensionReason && (
-            <p className="text-sm text-red-700 mt-2">
-              <span className="font-medium">Reason:</span> {suspensionStatus.suspensionReason}
-            </p>
-          )}
-        </div>
-
-        <div>
-          {suspensionStatus.isPermanent ? (
-            isAdminUser && (
-              <button
-                onClick={() => setShowReversalDialog(true)}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                Remove Ban
-              </button>
-            )
-          ) : (
-            <button
-              onClick={() => setShowReversalDialog(true)}
-              disabled={actionLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-            >
-              Lift Suspension
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Reversal Confirmation Dialog */}
-      {showReversalDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {suspensionStatus.isPermanent ? 'Remove Ban' : 'Lift Suspension'}
-              </h3>
-            </div>
-
-            <div className="px-6 py-4">
-              <p className="text-sm text-gray-600 mb-4">
-                You are about to {suspensionStatus.isPermanent ? 'remove the permanent ban' : 'lift the suspension'} for this user.
-              </p>
-
-              <div className="bg-gray-50 rounded p-3 mb-4 text-sm">
-                <p className="font-medium text-gray-700 mb-1">Original Action:</p>
-                {!suspensionStatus.isPermanent && suspensionStatus.suspendedUntil && (
-                  <p className="text-gray-600">• Suspended until: {formatDate(suspensionStatus.suspendedUntil)}</p>
-                )}
-                {suspensionStatus.suspensionReason && (
-                  <p className="text-gray-600">• Reason: {suspensionStatus.suspensionReason}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="reversalReason" className="block text-sm font-medium text-gray-700 mb-2">
-                  Reason for reversal (required)
-                </label>
-                <textarea
-                  id="reversalReason"
-                  value={reversalReason}
-                  onChange={(e) => setReversalReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Explain why this action is being reversed..."
-                />
-              </div>
-
-              {reversalError && (
-                <p className="text-sm text-red-600 mt-2">{reversalError}</p>
-              )}
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowReversalDialog(false);
-                  setReversalReason('');
-                  setReversalError(null);
-                }}
-                disabled={actionLoading}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleLiftSuspension}
-                disabled={actionLoading || !reversalReason.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Processing...' : `Confirm ${suspensionStatus.isPermanent ? 'Remove Ban' : 'Lift Suspension'}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 // ============================================================================
 // Restrictions Section Component
@@ -508,7 +304,7 @@ function RestrictionsSection({
                   id="restrictionReversalReason"
                   value={reversalReason}
                   onChange={(e) => setReversalReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
                   rows={3}
                   placeholder="Explain why this restriction is being removed..."
                 />
@@ -618,7 +414,7 @@ function ModerationHistorySection({
       content_approved: 'Content Approved',
       user_warned: 'User Warned',
       user_suspended: 'User Suspended',
-      user_banned: 'User Banned',
+      user_banned: 'User Permanently Suspended',
       restriction_applied: 'Restriction Applied',
     };
     return labels[actionType] || actionType;

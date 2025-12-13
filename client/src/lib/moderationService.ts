@@ -3068,13 +3068,35 @@ export async function getUserSuspensionStatus(userId: string): Promise<UserSuspe
       handleDatabaseError(error, 'get user suspension status');
     }
 
-    // If no profile or no suspension, return not suspended
-    if (!profile || !profile.suspended_until) {
+    // If no profile, return not suspended
+    if (!profile) {
       return {
         isSuspended: false,
         suspendedUntil: null,
         suspensionReason: null,
         isPermanent: false,
+        daysRemaining: null,
+      };
+    }
+
+    // Check if user has a suspension reason (indicates they are or were suspended)
+    if (!profile.suspension_reason) {
+      return {
+        isSuspended: false,
+        suspendedUntil: null,
+        suspensionReason: null,
+        isPermanent: false,
+        daysRemaining: null,
+      };
+    }
+
+    // If suspended_until is NULL, it's a permanent suspension
+    if (!profile.suspended_until) {
+      return {
+        isSuspended: true,
+        suspendedUntil: null,
+        suspensionReason: profile.suspension_reason,
+        isPermanent: true,
         daysRemaining: null,
       };
     }
@@ -3097,17 +3119,12 @@ export async function getUserSuspensionStatus(userId: string): Promise<UserSuspe
     const msRemaining = suspendedUntil.getTime() - now.getTime();
     const daysRemaining = Math.ceil(msRemaining / (1000 * 60 * 60 * 24));
 
-    // Determine if this is a permanent ban
-    // A ban is considered permanent if it's more than 50 years in the future
-    // (this is a reasonable threshold to distinguish permanent bans from very long temporary suspensions)
-    const isPermanent = daysRemaining > (50 * 365);
-
     return {
       isSuspended: true,
       suspendedUntil: profile.suspended_until,
       suspensionReason: profile.suspension_reason,
-      isPermanent,
-      daysRemaining: isPermanent ? null : daysRemaining,
+      isPermanent: false,
+      daysRemaining,
     };
   } catch (error) {
     if (error instanceof ModerationError) {

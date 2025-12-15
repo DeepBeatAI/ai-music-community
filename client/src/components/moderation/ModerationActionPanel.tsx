@@ -743,8 +743,13 @@ export function ModerationActionPanel({
           <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-bold text-white mb-4">Confirm Action</h3>
             <p className="text-gray-300 mb-6">
-              Are you sure you want to {ACTION_TYPE_LABELS[selectedAction as ModerationActionType].toLowerCase()}?
-              This action cannot be easily undone.
+              {selectedAction === 'user_banned' ? (
+                'Are you sure you want to permanently suspend this user? This action cannot be easily undone.'
+              ) : selectedAction === 'user_suspended' ? (
+                'Are you sure you want to suspend this user? This action cannot be easily undone.'
+              ) : (
+                `Are you sure you want to ${ACTION_TYPE_LABELS[selectedAction as ModerationActionType].toLowerCase()}? This action cannot be easily undone.`
+              )}
             </p>
             <div className="flex items-center justify-end space-x-3">
               <button

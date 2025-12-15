@@ -11,22 +11,12 @@ import {
 } from '@/lib/moderationService';
 import { REASON_LABELS, ACTION_TYPE_LABELS } from '@/types/moderation';
 import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
-import { ReversalTooltip } from './ReversalTooltip';
 
 interface ReversalMetricsSummary {
   overallReversalRate: number;
   totalReversals: number;
   totalActions: number;
   averageTimeToReversalHours: number;
-  recentReversals: Array<{
-    id: string;
-    action_type: string;
-    target_user_id: string;
-    revoked_at: string;
-    revoked_by: string;
-    reversal_reason: string;
-  }>;
 }
 
 interface ModeratorPerformanceWithUsername {
@@ -47,8 +37,6 @@ export function ModerationMetrics() {
   const [dateRange, setDateRange] = useState<MetricsDateRange | undefined>(undefined);
   const [includeSLA, setIncludeSLA] = useState(false);
   const [includeTrends, setIncludeTrends] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState(30); // seconds
   const [reversalMetrics, setReversalMetrics] = useState<ReversalMetricsSummary | null>(null);
   const [reversalLoading, setReversalLoading] = useState(true);
   const [moderatorPerformanceWithUsernames, setModeratorPerformanceWithUsernames] = useState<ModeratorPerformanceWithUsername[]>([]);
@@ -144,36 +132,11 @@ export function ModerationMetrics() {
           throw new Error('No data returned from get_reversal_metrics');
         }
 
-        // Fetch recent reversals (last 5)
-        const { data: recentReversalsData, error: reversalsError } = await supabase
-          .from('moderation_actions')
-          .select('id, action_type, target_user_id, revoked_at, revoked_by, metadata')
-          .not('revoked_at', 'is', null)
-          .order('revoked_at', { ascending: false })
-          .limit(5);
-
-        if (reversalsError) {
-          throw reversalsError;
-        }
-
-        // Extract reversal reason from metadata
-        const recentReversals = (recentReversalsData || []).map((action) => ({
-          id: action.id,
-          action_type: action.action_type,
-          target_user_id: action.target_user_id,
-          revoked_at: action.revoked_at!,
-          revoked_by: action.revoked_by!,
-          reversal_reason:
-            (action.metadata as { reversal_reason?: string })?.reversal_reason ||
-            'No reason provided',
-        }));
-
         setReversalMetrics({
           overallReversalRate: metricsData.overallReversalRate || 0,
           totalReversals: metricsData.totalReversals || 0,
           totalActions: metricsData.totalActions || 0,
           averageTimeToReversalHours: metricsData.timeToReversalStats?.averageHours || 0,
-          recentReversals,
         });
       } catch (error) {
         console.error('Failed to fetch reversal metrics:', error);
@@ -185,25 +148,6 @@ export function ModerationMetrics() {
 
     fetchReversalMetrics();
   }, [dateRange]);
-
-  // Auto-refresh functionality
-  useEffect(() => {
-    if (!autoRefresh) {
-      return;
-    }
-
-    const intervalId = setInterval(async () => {
-      try {
-        const data = await calculateModerationMetrics(dateRange, includeSLA, includeTrends);
-        setMetrics(data);
-      } catch (error) {
-        console.error('Failed to auto-refresh metrics:', error);
-        // Don't show toast for auto-refresh failures to avoid spam
-      }
-    }, refreshInterval * 1000);
-
-    return () => clearInterval(intervalId);
-  }, [autoRefresh, refreshInterval, dateRange, includeSLA, includeTrends]);
 
   // Loading state with skeleton
   if (loading) {
@@ -354,33 +298,6 @@ export function ModerationMetrics() {
                 Include Trends (requires date range)
               </span>
             </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-300">Auto-refresh</span>
-            </label>
-            {autoRefresh && (
-              <div className="ml-6">
-                <label className="block text-xs text-gray-400 mb-1">
-                  Refresh interval (seconds)
-                </label>
-                <select
-                  value={refreshInterval}
-                  onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={15}>15 seconds</option>
-                  <option value={30}>30 seconds</option>
-                  <option value={60}>1 minute</option>
-                  <option value={120}>2 minutes</option>
-                  <option value={300}>5 minutes</option>
-                </select>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -458,12 +375,6 @@ export function ModerationMetrics() {
         <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-white">Reversal Metrics</h3>
-            <Link
-              href="/moderation?tab=reversals"
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              View Detailed Report →
-            </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -514,56 +425,6 @@ export function ModerationMetrics() {
               <p className="text-xs text-gray-500 mt-1">Detection time</p>
             </div>
           </div>
-
-          {/* Recent Reversals List */}
-          {reversalMetrics.recentReversals.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-3">Recent Reversals</h4>
-              <div className="space-y-2">
-                {reversalMetrics.recentReversals.map((reversal) => {
-                  // Create a minimal action object for the tooltip
-                  const actionForTooltip = {
-                    id: reversal.id,
-                    action_type: reversal.action_type,
-                    target_user_id: reversal.target_user_id,
-                    revoked_at: reversal.revoked_at,
-                    revoked_by: reversal.revoked_by,
-                    metadata: { reversal_reason: reversal.reversal_reason },
-                  } as any;
-
-                  return (
-                    <ReversalTooltip key={reversal.id} action={actionForTooltip} position="left">
-                      <div
-                        className="flex items-center justify-between p-3 bg-gray-700/30 rounded-lg hover:bg-gray-700/50 transition-colors cursor-help"
-                      >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-300">
-                          {ACTION_TYPE_LABELS[
-                            reversal.action_type as keyof typeof ACTION_TYPE_LABELS
-                          ] || reversal.action_type}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(reversal.revoked_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-400 truncate">
-                        {reversal.reversal_reason}
-                      </p>
-                    </div>
-                    <Link
-                      href={`/moderation?tab=logs&action=${reversal.id}`}
-                      className="ml-4 text-blue-400 hover:text-blue-300 text-sm whitespace-nowrap"
-                    >
-                      View Details
-                    </Link>
-                  </div>
-                    </ReversalTooltip>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Alert for high reversal rate */}
           {reversalMetrics.overallReversalRate > 20 && (

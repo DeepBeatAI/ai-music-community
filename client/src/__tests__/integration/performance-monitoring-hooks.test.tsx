@@ -23,11 +23,17 @@ const originalConsoleError = console.error;
 const originalConsoleLog = console.log;
 
 // Test component using performance monitoring
-const TestComponentWithMonitoring: React.FC<{
+interface TestComponentWithMonitoringProps {
   triggerRerender?: boolean;
   triggerInfiniteLoop?: boolean;
   dependencies?: string[];
-}> = ({ triggerRerender = false, triggerInfiniteLoop = false, dependencies = ['dep1'] }) => {
+}
+
+function TestComponentWithMonitoring({ 
+  triggerRerender = false, 
+  triggerInfiniteLoop = false, 
+  dependencies = ['dep1'] 
+}: TestComponentWithMonitoringProps) {
   const [count, setCount] = useState(0);
   
   const monitoring = usePerformanceMonitoring({
@@ -88,13 +94,15 @@ const TestComponentWithMonitoring: React.FC<{
       </button>
     </div>
   );
-};
+}
 
 // Test component for effect tracking
-const TestComponentWithEffectTracking: React.FC<{
+interface TestComponentWithEffectTrackingProps {
   dependencies: string[];
   effectId: string;
-}> = ({ dependencies, effectId }) => {
+}
+
+function TestComponentWithEffectTracking({ dependencies, effectId }: TestComponentWithEffectTrackingProps) {
   const [state, setState] = useState(0);
 
   useEffectTracking('TestComponentWithEffectTracking', effectId, dependencies);
@@ -115,7 +123,7 @@ const TestComponentWithEffectTracking: React.FC<{
       </button>
     </div>
   );
-};
+}
 
 describe('Performance Monitoring Hooks Integration', () => {
   beforeEach(() => {

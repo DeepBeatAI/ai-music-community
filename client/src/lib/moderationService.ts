@@ -151,6 +151,94 @@ export function calculatePriority(reason: ReportReason): number {
 }
 
 /**
+ * Send notifications to all moderators and admins for high priority reports
+ * Requirements: Notification system for P1 and P2 reports
+ * 
+ * @param report - The created report
+ * @param priority - Priority level (1 or 2)
+ */
+async function notifyModeratorsOfHighPriorityReport(report: Report, priority: number): Promise<void> {
+  try {
+    // Get all users with moderator or admin roles (excluding the report creator)
+    const { data: moderatorRoles, error: rolesError } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .in('role_type', ['moderator', 'admin'])
+      .eq('is_active', true)
+      .neq('user_id', report.reporter_id); // Exclude the person who created the report
+
+    if (rolesError) {
+      console.error('Failed to fetch moderator roles for notification:', rolesError);
+      return;
+    }
+
+    if (!moderatorRoles || moderatorRoles.length === 0) {
+      console.log('No other moderators or admins found to notify');
+      return;
+    }
+
+    // Deduplicate user_ids (in case a user has both moderator and admin roles)
+    const uniqueUserIds = [...new Set(moderatorRoles.map(role => role.user_id))];
+
+    if (uniqueUserIds.length === 0) {
+      console.log('No unique users to notify after deduplication');
+      return;
+    }
+
+    // Get report type label
+    const reportTypeLabel = report.report_type.charAt(0).toUpperCase() + report.report_type.slice(1);
+    
+    // Get reason label from REASON_LABELS
+    const reasonLabels: Record<string, string> = {
+      spam: 'Spam or Misleading Content',
+      harassment: 'Harassment or Bullying',
+      hate_speech: 'Hate Speech or Discrimination',
+      inappropriate_content: 'Inappropriate or Offensive Content',
+      copyright_violation: 'Copyright Violation',
+      impersonation: 'Impersonation or Identity Theft',
+      self_harm: 'Self-Harm or Suicide Content',
+      other: 'Other Violation',
+    };
+    const reasonLabel = reasonLabels[report.reason] || report.reason;
+
+    // Create notification title based on priority
+    const priorityLabel = priority === 1 ? 'P1 Critical' : 'P2 High Priority';
+    const priorityEmoji = priority === 1 ? '🚨' : '⚠️';
+    const title = `${priorityEmoji} ${priorityLabel} Report: ${reportTypeLabel} - ${reasonLabel}`;
+    const message = priority === 1 ? 'Requires immediate attention' : 'Review needed';
+
+    // Create notifications for all unique moderators and admins
+    const notifications = uniqueUserIds.map(userId => ({
+      user_id: userId,
+      type: 'moderation' as const,
+      title,
+      message,
+      related_post_id: null,
+      related_user_id: report.reported_user_id,
+      data: {
+        report_id: report.id,
+        priority,
+        report_type: report.report_type,
+        reason: report.reason,
+      },
+    }));
+
+    const { error: notificationError } = await supabase
+      .from('notifications')
+      .insert(notifications);
+
+    if (notificationError) {
+      console.error('Failed to create notifications for high priority report:', notificationError);
+    } else {
+      console.log(`Sent ${notifications.length} notifications for ${priorityLabel} report`);
+    }
+  } catch (error) {
+    console.error('Error sending notifications to moderators:', error);
+    // Don't throw - notification failure shouldn't block report creation
+  }
+}
+
+/**
  * Validate report parameters
  * Requirements: 11.6
  * 
@@ -844,6 +932,11 @@ export async function submitReport(params: ReportParams): Promise<Report> {
       );
     }
 
+    // Send notifications to moderators and admins for P1 and P2 reports
+    if (priority === 1 || priority === 2) {
+      await notifyModeratorsOfHighPriorityReport(data as Report, priority);
+    }
+
     return data as Report;
   } catch (error) {
     if (error instanceof ModerationError) {
@@ -920,6 +1013,11 @@ export async function moderatorFlagContent(params: ModeratorFlagParams): Promise
         'Failed to create moderator flag - no data returned',
         MODERATION_ERROR_CODES.DATABASE_ERROR
       );
+    }
+
+    // Send notifications to moderators and admins for P1 and P2 flags
+    if (priority === 1 || priority === 2) {
+      await notifyModeratorsOfHighPriorityReport(data as Report, priority);
     }
 
     return data as Report;

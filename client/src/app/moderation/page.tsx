@@ -8,7 +8,6 @@ import { isAdmin } from '@/lib/moderationService';
 import { ModerationQueue } from '@/components/moderation/ModerationQueue';
 import { ModerationLogs } from '@/components/moderation/ModerationLogs';
 import { ModerationMetrics } from '@/components/moderation/ModerationMetrics';
-import { ModerationSettings } from '@/components/moderation/ModerationSettings';
 import { UserStatusPanel } from '@/components/moderation/UserStatusPanel';
 import { supabase } from '@/lib/supabase';
 
@@ -18,7 +17,7 @@ export default function ModerationPage() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'queue' | 'logs' | 'userStatus' | 'metrics' | 'settings'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'logs' | 'userStatus' | 'metrics'>('queue');
   
   // User Status tab state
   const [searchUsername, setSearchUsername] = useState('');
@@ -211,19 +210,6 @@ export default function ModerationPage() {
             >
               Metrics
             </button>
-            {isAdminUser && (
-              <button
-                onClick={() => setActiveTab('settings')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'settings'
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
-                }`}
-                aria-current={activeTab === 'settings' ? 'page' : undefined}
-              >
-                Settings
-              </button>
-            )}
           </nav>
         </div>
 
@@ -310,8 +296,6 @@ export default function ModerationPage() {
           )}
 
           {activeTab === 'metrics' && <ModerationMetrics />}
-
-          {activeTab === 'settings' && isAdminUser && <ModerationSettings />}
         </div>
       </div>
     </div>

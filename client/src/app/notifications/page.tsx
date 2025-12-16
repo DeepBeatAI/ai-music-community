@@ -182,6 +182,10 @@ export default function NotificationsPage() {
 
     // Navigate based on notification type
     switch (notification.type) {
+      case 'moderation':
+        // Navigate to moderation dashboard for moderation notifications
+        router.push('/moderation');
+        break;
       case 'follow':
         // Navigate to the follower's profile (the person who followed you)
         // Try related_username first, then extract from title

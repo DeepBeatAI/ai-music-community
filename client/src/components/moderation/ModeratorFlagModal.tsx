@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { ReportType, ReportReason, REASON_LABELS, PRIORITY_LABELS } from '@/types/moderation';
-import { moderatorFlagContent } from '@/lib/moderationService';
+import { moderatorFlagContent, PRIORITY_MAP } from '@/lib/moderationService';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -187,8 +187,14 @@ export function ModeratorFlagModal({
               id="reason"
               value={reason}
               onChange={(e) => {
-                setReason(e.target.value as ReportReason | '');
+                const selectedReason = e.target.value as ReportReason | '';
+                setReason(selectedReason);
                 setErrors({ ...errors, reason: undefined });
+                
+                // Auto-update priority based on reason's default priority
+                if (selectedReason && selectedReason in PRIORITY_MAP) {
+                  setPriority(PRIORITY_MAP[selectedReason]);
+                }
               }}
               disabled={isSubmitting}
               className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${

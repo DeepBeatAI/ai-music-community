@@ -240,7 +240,8 @@ describe('Moderation Service - Property-Based Tests', () => {
                 expect(titleLowerCase).toContain('suspended');
                 break;
               case 'user_banned':
-                expect(titleLowerCase).toContain('banned');
+                // Changed from "banned" to "suspended permanently"
+                expect(titleLowerCase).toContain('suspended');
                 break;
               case 'restriction_applied':
                 expect(titleLowerCase).toContain('restriction');

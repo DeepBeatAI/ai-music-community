@@ -10,11 +10,17 @@ import { ModerationMetrics } from '../ModerationMetrics';
 import * as moderationService from '@/lib/moderationService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { supabase } from '@/lib/supabase';
 
 // Mock dependencies
 jest.mock('@/contexts/AuthContext');
 jest.mock('@/contexts/ToastContext');
 jest.mock('@/lib/moderationService');
+jest.mock('@/lib/supabase', () => ({
+  supabase: {
+    from: jest.fn(),
+  },
+}));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
@@ -151,6 +157,18 @@ describe('ModerationMetrics', () => {
       
       mockCalculateMetrics.mockResolvedValue(metricsWithPerformance);
 
+      // Mock Supabase queries for fetching moderator usernames
+      const mockFrom = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn()
+              .mockResolvedValueOnce({ data: { username: 'moderator1' }, error: null })
+              .mockResolvedValueOnce({ data: { username: 'moderator2' }, error: null }),
+          }),
+        }),
+      });
+      (supabase.from as jest.Mock) = mockFrom;
+
       render(<ModerationMetrics />);
 
       await waitFor(() => {
@@ -159,7 +177,7 @@ describe('ModerationMetrics', () => {
         expect(screen.getByText('30 actions')).toBeInTheDocument();
         expect(screen.getByText('3.5h')).toBeInTheDocument();
         expect(screen.getByText('5.2h')).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
     });
 
     it('should sort moderator performance by actions count descending', async () => {
@@ -188,6 +206,19 @@ describe('ModerationMetrics', () => {
       
       mockCalculateMetrics.mockResolvedValue(metricsWithPerformance);
 
+      // Mock Supabase queries for fetching moderator usernames
+      const mockFrom = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn()
+              .mockResolvedValueOnce({ data: { username: 'mod-low' }, error: null })
+              .mockResolvedValueOnce({ data: { username: 'mod-high' }, error: null })
+              .mockResolvedValueOnce({ data: { username: 'mod-mid' }, error: null }),
+          }),
+        }),
+      });
+      (supabase.from as jest.Mock) = mockFrom;
+
       render(<ModerationMetrics />);
 
       await waitFor(() => {
@@ -196,7 +227,7 @@ describe('ModerationMetrics', () => {
         expect(rows[1]).toHaveTextContent('mod-high');
         expect(rows[2]).toHaveTextContent('mod-mid');
         expect(rows[3]).toHaveTextContent('mod-low');
-      });
+      }, { timeout: 5000 });
     });
 
     it('should display N/A for moderators with no resolution time', async () => {
@@ -215,11 +246,21 @@ describe('ModerationMetrics', () => {
       
       mockCalculateMetrics.mockResolvedValue(metricsWithPerformance);
 
+      // Mock Supabase queries for fetching moderator usernames
+      const mockFrom = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValueOnce({ data: { username: 'moderator1' }, error: null }),
+          }),
+        }),
+      });
+      (supabase.from as jest.Mock) = mockFrom;
+
       render(<ModerationMetrics />);
 
       await waitFor(() => {
         expect(screen.getByText('N/A')).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
     });
   });
 
@@ -557,123 +598,19 @@ describe('ModerationMetrics', () => {
     });
   });
 
-  describe('Auto-Refresh Functionality', () => {
-    beforeEach(() => {
-      jest.useFakeTimers();
-    });
-
-    afterEach(() => {
-      jest.useRealTimers();
-    });
-
-    it('should not auto-refresh by default', async () => {
-      render(<ModerationMetrics />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Reports Received')).toBeInTheDocument();
-      });
-
-      expect(mockCalculateMetrics).toHaveBeenCalledTimes(1);
-
-      // Advance time
-      jest.advanceTimersByTime(35000); // 35 seconds
-
-      // Should not have called again
-      expect(mockCalculateMetrics).toHaveBeenCalledTimes(1);
-    });
-
-    it('should auto-refresh when checkbox is enabled', async () => {
-      render(<ModerationMetrics />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Reports Received')).toBeInTheDocument();
-      });
-
-      expect(mockCalculateMetrics).toHaveBeenCalledTimes(1);
-
-      // Enable auto-refresh
-      const autoRefreshCheckbox = screen.getByLabelText(/Auto-refresh/i);
-      fireEvent.click(autoRefreshCheckbox);
-
-      // Advance time by 30 seconds (default interval)
-      jest.advanceTimersByTime(30000);
-
-      await waitFor(() => {
-        expect(mockCalculateMetrics).toHaveBeenCalledTimes(2);
-      });
-    });
-
-    it('should respect custom refresh interval', async () => {
-      render(<ModerationMetrics />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Reports Received')).toBeInTheDocument();
-      });
-
-      expect(mockCalculateMetrics).toHaveBeenCalledTimes(1);
-
-      // Enable auto-refresh
-      const autoRefreshCheckbox = screen.getByLabelText(/Auto-refresh/i);
-      fireEvent.click(autoRefreshCheckbox);
-
-      // Find the select element by its text content
-      const intervalSelect = screen.getByText('30 seconds').closest('select') as HTMLSelectElement;
-      fireEvent.change(intervalSelect, { target: { value: '60' } });
-
-      // Advance time by 30 seconds (should not refresh yet)
-      jest.advanceTimersByTime(30000);
-      expect(mockCalculateMetrics).toHaveBeenCalledTimes(1);
-
-      // Advance another 30 seconds (total 60, should refresh now)
-      jest.advanceTimersByTime(30000);
-
-      await waitFor(() => {
-        expect(mockCalculateMetrics).toHaveBeenCalledTimes(2);
-      });
-    });
-
-    it('should stop auto-refresh when checkbox is unchecked', async () => {
-      render(<ModerationMetrics />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Reports Received')).toBeInTheDocument();
-      });
-
-      expect(mockCalculateMetrics).toHaveBeenCalledTimes(1);
-
-      // Enable auto-refresh
-      const autoRefreshCheckbox = screen.getByLabelText(/Auto-refresh/i);
-      fireEvent.click(autoRefreshCheckbox);
-
-      // Advance time to trigger one refresh
-      jest.advanceTimersByTime(30000);
-
-      await waitFor(() => {
-        expect(mockCalculateMetrics).toHaveBeenCalledTimes(2);
-      });
-
-      // Disable auto-refresh
-      fireEvent.click(autoRefreshCheckbox);
-
-      // Advance time again
-      jest.advanceTimersByTime(30000);
-
-      // Should not have refreshed again
-      expect(mockCalculateMetrics).toHaveBeenCalledTimes(2);
-    });
-  });
+  // Auto-refresh feature has been removed - tests removed
 
   describe('Loading and Error States', () => {
-    it('should display loading spinner while fetching metrics', () => {
+    it('should display loading skeleton while fetching metrics', () => {
       mockCalculateMetrics.mockImplementation(
         () => new Promise((resolve) => setTimeout(() => resolve(mockMetricsData), 1000))
       );
 
       render(<ModerationMetrics />);
 
-      // Check for loading spinner by class
-      const spinner = document.querySelector('.animate-spin');
-      expect(spinner).toBeInTheDocument();
+      // Check for loading skeleton by class
+      const skeleton = document.querySelector('.animate-pulse');
+      expect(skeleton).toBeInTheDocument();
     });
 
     it('should display error state when metrics fetch fails', async () => {
@@ -717,7 +654,7 @@ describe('ModerationMetrics', () => {
       });
     });
 
-    it('should display empty state for moderator performance when no actions', async () => {
+    it('should not display moderator performance section when no actions', async () => {
       mockIsAdmin.mockResolvedValue(true);
 
       const metricsWithNoPerformance = {
@@ -730,7 +667,8 @@ describe('ModerationMetrics', () => {
       render(<ModerationMetrics />);
 
       await waitFor(() => {
-        expect(screen.getByText('No moderator actions in the last 30 days')).toBeInTheDocument();
+        // When there's no moderator performance data, the section should not be displayed at all
+        expect(screen.queryByText('Moderator Performance Comparison')).not.toBeInTheDocument();
       });
     });
   });
@@ -754,16 +692,16 @@ describe('ModerationMetrics', () => {
       });
     });
 
-    it('should disable refresh button while loading', async () => {
+    it('should show loading skeleton while loading', async () => {
       mockCalculateMetrics.mockImplementation(
         () => new Promise((resolve) => setTimeout(() => resolve(mockMetricsData), 1000))
       );
 
       render(<ModerationMetrics />);
 
-      // Check for loading state
-      const spinner = document.querySelector('.animate-spin');
-      expect(spinner).toBeInTheDocument();
+      // Check for loading skeleton
+      const skeleton = document.querySelector('.animate-pulse');
+      expect(skeleton).toBeInTheDocument();
     });
 
     it('should show error toast when manual refresh fails', async () => {

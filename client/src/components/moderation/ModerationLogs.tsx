@@ -759,7 +759,10 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Date
+                    Date / Time
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Type
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                     Action Type / Status
@@ -797,6 +800,11 @@ export function ModerationLogs({ onActionSelect }: ModerationLogsProps) {
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <span className={reversed ? 'line-through' : ''}>
                           {formatDate(action.created_at)}
+                        </span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <span className={`capitalize ${reversed ? 'line-through' : ''}`}>
+                          {action.target_type || 'N/A'}
                         </span>
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">

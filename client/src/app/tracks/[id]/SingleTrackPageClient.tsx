@@ -1207,6 +1207,7 @@ export default function SingleTrackPageClient() {
                     <ReportButton
                       reportType="track"
                       targetId={track.id}
+                      contentCreatorId={track.user_id}
                       iconOnly={false}
                     />
                   )}
@@ -1215,6 +1216,7 @@ export default function SingleTrackPageClient() {
                   <ModeratorFlagButton
                     reportType="track"
                     targetId={track.id}
+                    contentCreatorId={track.user_id}
                     iconOnly={false}
                   />
                 </div>

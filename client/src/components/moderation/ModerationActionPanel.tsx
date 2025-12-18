@@ -297,13 +297,10 @@ export function ModerationActionPanel({
         reason: REASON_LABELS[report.reason], // Use the user-friendly label
         internalNotes,
         notificationMessage: notificationMessage || undefined,
+        // Always include target info from the report for all action types
+        targetType: report.report_type as 'post' | 'comment' | 'track' | 'user',
+        targetId: report.target_id,
       };
-
-      // Add target info for content actions
-      if (['content_removed', 'content_approved'].includes(selectedAction)) {
-        actionParams.targetType = report.report_type as 'post' | 'comment' | 'track' | 'user';
-        actionParams.targetId = report.target_id;
-      }
 
       // Add duration for suspensions
       if (selectedAction === 'user_suspended') {
@@ -689,24 +686,26 @@ export function ModerationActionPanel({
               />
             </div>
 
-            {/* User Notification Message */}
-            <div>
-              <label htmlFor="notification-message" className="block text-sm font-medium text-gray-300 mb-2">
-                User Notification Message (optional)
-              </label>
-              <textarea
-                id="notification-message"
-                value={notificationMessage}
-                onChange={(e) => setNotificationMessage(e.target.value)}
-                rows={3}
-                placeholder="Custom message to send to the user (optional)..."
-                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                disabled={loading || success}
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                If empty, a default notification will be sent based on the action type
-              </p>
-            </div>
+            {/* User Notification Message - Hidden for Dismiss Report */}
+            {selectedAction !== 'content_approved' && (
+              <div>
+                <label htmlFor="notification-message" className="block text-sm font-medium text-gray-300 mb-2">
+                  User Notification Message (optional)
+                </label>
+                <textarea
+                  id="notification-message"
+                  value={notificationMessage}
+                  onChange={(e) => setNotificationMessage(e.target.value)}
+                  rows={3}
+                  placeholder="Custom message to send to the user (optional)..."
+                  className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  disabled={loading || success}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  If empty, a default notification will be sent based on the action type
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

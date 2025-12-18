@@ -284,7 +284,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateLastActive(user.id);
       
       // Check if user has been banned by checking the session in the database
-      // The revoke_user_sessions function deletes sessions, so if session doesn't exist, user is banned
       try {
         const { data: sessionData, error: sessionError } = await supabase
           .from('user_sessions')
@@ -298,9 +297,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error: sessionError?.message 
         });
         
-        // If session doesn't exist or is not active, log out the user
-        if (!sessionData || !sessionData.is_active) {
-          console.log('Session revoked or inactive, logging out user');
+        // IMPORTANT: Only log out if session EXISTS and is_active = false
+        // If session doesn't exist, it might be a legacy session or error - don't log out
+        if (sessionData && sessionData.is_active === false) {
+          console.log('Session explicitly marked as inactive by admin, logging out user');
           await supabase.auth.signOut();
           setUser(null);
           setSession(null);
@@ -311,12 +311,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         
-        // Update session last_activity
-        await supabase
-          .from('user_sessions')
-          .update({ last_activity: new Date().toISOString() })
-          .eq('session_token', session.access_token)
-          .eq('is_active', true);
+        // If session exists and is active, update last_activity
+        if (sessionData && sessionData.is_active) {
+          await supabase
+            .from('user_sessions')
+            .update({ last_activity: new Date().toISOString() })
+            .eq('session_token', session.access_token)
+            .eq('is_active', true);
+        }
+        // If session doesn't exist, try to create it (might be legacy session)
+        else if (!sessionData && !sessionError) {
+          console.log('Session not found in database, creating it...');
+          try {
+            let ipAddress = '127.0.0.1';
+            try {
+              const ipResponse = await fetch('/api/get-ip');
+              const ipData = await ipResponse.json();
+              ipAddress = ipData.ip || '127.0.0.1';
+            } catch (ipError) {
+              console.error('Failed to get IP address:', ipError);
+            }
+
+            const expiresAt = new Date(session.expires_at! * 1000).toISOString();
+            await supabase.from('user_sessions').insert({
+              user_id: user.id,
+              session_token: session.access_token,
+              expires_at: expiresAt,
+              is_active: true,
+              last_activity: new Date().toISOString(),
+              ip_address: ipAddress,
+              user_agent: navigator.userAgent,
+            });
+            console.log('Session created successfully');
+          } catch (createError) {
+            console.error('Failed to create session:', createError);
+          }
+        }
       } catch (error) {
         console.error('Failed to check session status:', error);
       }

@@ -56,7 +56,8 @@ export async function getCreatorByUsername(username: string): Promise<CreatorPro
       updated_at: data.updated_at || data.created_at,
     };
   } catch (error) {
-    console.error('Error fetching creator by username:', error);
+    // Silently return null - errors here are expected during logout or when unauthenticated
+    // The calling component will handle the null return appropriately
     return null;
   }
 }
@@ -111,7 +112,8 @@ export async function getCreatorById(userId: string): Promise<CreatorProfile | n
       updated_at: data.updated_at || data.created_at,
     };
   } catch (error) {
-    console.error('Error fetching creator by ID:', error);
+    // Silently return null - errors here are expected during logout or when unauthenticated
+    // The calling component will handle the null return appropriately
     return null;
   }
 }

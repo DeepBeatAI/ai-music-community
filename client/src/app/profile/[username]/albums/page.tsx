@@ -158,7 +158,7 @@ export default function AllCreatorAlbumsPage() {
           setIsOwnProfile(false);
         }
       } catch (err) {
-        console.error('Error fetching creator profile:', err);
+        // Silently handle errors - they're expected during logout or when unauthenticated
         setError('Failed to load creator profile');
         setCreatorProfile(null);
       }

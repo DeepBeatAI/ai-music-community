@@ -1165,7 +1165,7 @@ describe('Moderation Service - Property 15: Reversal Notification Delivery', () 
             fc.record({
               reason: fc.string({ minLength: 10, maxLength: 100 }),
               appliedBy: fc.string({ minLength: 3, maxLength: 30 }),
-              appliedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }).map(d => d.toISOString()),
+              appliedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms).toISOString()),
               durationDays: fc.option(fc.integer({ min: 1, max: 365 }), { nil: undefined }),
             }),
             { nil: undefined }
@@ -1372,11 +1372,11 @@ describe('Moderation Service - Property 16: Reversal History Completeness', () =
               actionType: fc.constantFrom('user_suspended', 'user_banned', 'user_warned', 'restriction_applied', 'content_removed') as fc.Arbitrary<'user_suspended' | 'user_banned' | 'user_warned' | 'restriction_applied' | 'content_removed'>,
               moderatorId: fc.uuid(),
               reason: fc.string({ minLength: 10, maxLength: 100 }),
-              createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              createdAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               isReversed: fc.boolean(),
               reversalDetails: fc.option(
                 fc.record({
-                  revokedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                  revokedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                   revokedBy: fc.uuid(),
                   reversalReason: fc.string({ minLength: 10, maxLength: 100 }),
                   isSelfReversal: fc.boolean(),
@@ -1466,11 +1466,11 @@ describe('Moderation Service - Property 16: Reversal History Completeness', () =
               actionType: fc.constantFrom('user_suspended', 'user_banned', 'user_warned', 'restriction_applied', 'content_removed') as fc.Arbitrary<'user_suspended' | 'user_banned' | 'user_warned' | 'restriction_applied' | 'content_removed'>,
               moderatorId: fc.uuid(),
               reason: fc.string({ minLength: 10, maxLength: 100 }),
-              createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              createdAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               isReversed: fc.boolean(),
               reversalDetails: fc.option(
                 fc.record({
-                  revokedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                  revokedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                   revokedBy: fc.uuid(),
                   reversalReason: fc.string({ minLength: 10, maxLength: 100 }),
                   isSelfReversal: fc.boolean(),
@@ -1519,10 +1519,10 @@ describe('Moderation Service - Property 16: Reversal History Completeness', () =
               actionType: fc.constantFrom('user_suspended', 'user_banned', 'user_warned', 'restriction_applied', 'content_removed') as fc.Arbitrary<'user_suspended' | 'user_banned' | 'user_warned' | 'restriction_applied' | 'content_removed'>,
               moderatorId: fc.uuid(),
               reason: fc.string({ minLength: 10, maxLength: 100 }),
-              createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              createdAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               isReversed: fc.constant(true), // All actions are reversed
               reversalDetails: fc.record({
-                revokedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                revokedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                 revokedBy: fc.uuid(),
                 reversalReason: fc.string({ minLength: 10, maxLength: 100 }),
                 isSelfReversal: fc.boolean(),
@@ -1582,11 +1582,11 @@ describe('Moderation Service - Property 16: Reversal History Completeness', () =
               actionType: fc.constantFrom('user_suspended', 'user_banned', 'user_warned', 'restriction_applied', 'content_removed') as fc.Arbitrary<'user_suspended' | 'user_banned' | 'user_warned' | 'restriction_applied' | 'content_removed'>,
               moderatorId: fc.uuid(),
               reason: fc.string({ minLength: 10, maxLength: 100 }),
-              createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              createdAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               isReversed: fc.boolean(),
               reversalDetails: fc.option(
                 fc.record({
-                  revokedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                  revokedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                   revokedBy: fc.uuid(),
                   reversalReason: fc.string({ minLength: 10, maxLength: 100 }),
                   isSelfReversal: fc.boolean(),
@@ -1685,11 +1685,11 @@ describe('Moderation Service - Property 16: Reversal History Completeness', () =
               actionType: fc.constantFrom('user_suspended', 'user_banned', 'user_warned', 'restriction_applied', 'content_removed') as fc.Arbitrary<'user_suspended' | 'user_banned' | 'user_warned' | 'restriction_applied' | 'content_removed'>,
               moderatorId: fc.uuid(),
               reason: fc.string({ minLength: 10, maxLength: 100 }),
-              createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              createdAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               isReversed: fc.boolean(),
               reversalDetails: fc.option(
                 fc.record({
-                  revokedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                  revokedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                   revokedBy: fc.uuid(),
                   reversalReason: fc.string({ minLength: 10, maxLength: 100 }),
                   isSelfReversal: fc.boolean(),
@@ -1766,11 +1766,11 @@ describe('Moderation Service - Property 16: Reversal History Completeness', () =
               actionType: fc.constantFrom('user_suspended', 'user_banned', 'user_warned', 'restriction_applied', 'content_removed') as fc.Arbitrary<'user_suspended' | 'user_banned' | 'user_warned' | 'restriction_applied' | 'content_removed'>,
               moderatorId: fc.uuid(),
               reason: fc.string({ minLength: 10, maxLength: 100 }),
-              createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              createdAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               isReversed: fc.boolean(),
               reversalDetails: fc.option(
                 fc.record({
-                  revokedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                  revokedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                   revokedBy: fc.uuid(),
                   reversalReason: fc.string({ minLength: 10, maxLength: 100 }),
                   isSelfReversal: fc.boolean(),
@@ -1892,11 +1892,11 @@ describe('Moderation Service - Property 16: Reversal History Completeness', () =
               actionType: fc.constantFrom('user_suspended', 'user_banned', 'user_warned', 'restriction_applied', 'content_removed') as fc.Arbitrary<'user_suspended' | 'user_banned' | 'user_warned' | 'restriction_applied' | 'content_removed'>,
               moderatorId: fc.uuid(),
               reason: fc.string({ minLength: 10, maxLength: 100 }),
-              createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              createdAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               isReversed: fc.boolean(),
               reversalDetails: fc.option(
                 fc.record({
-                  revokedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                  revokedAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                   revokedBy: fc.uuid(),
                   reversalReason: fc.string({ minLength: 10, maxLength: 100 }),
                   isSelfReversal: fc.boolean(),
@@ -2064,9 +2064,9 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
           fc.record({
             id: fc.uuid(),
             moderator_id: fc.uuid(),
-            created_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+            created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
             revoked_at: fc.option(
-              fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               { nil: null }
             ),
             revoked_by: fc.option(fc.uuid(), { nil: null }),
@@ -2138,9 +2138,9 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
               fc.record({
                 id: fc.uuid(),
                 moderator_id: fc.constantFrom(...moderators),
-                created_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                 revoked_at: fc.option(
-                  fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                  fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                   { nil: null }
                 ),
                 revoked_by: fc.option(fc.uuid(), { nil: null }),
@@ -2221,7 +2221,7 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
           fc.record({
             id: fc.uuid(),
             moderator_id: fc.uuid(),
-            created_at: fc.date({ min: new Date('2020-01-01'), max: new Date('2023-12-31') }),
+            created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: new Date('2023-12-31').getTime() }).map(ms => new Date(ms)),
             revoked_at: fc.option(
               fc.integer({ min: 1, max: 30 * 24 * 60 * 60 * 1000 }), // 1ms to 30 days offset
               { nil: null }
@@ -2305,7 +2305,7 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
             fc.record({
               id: fc.uuid(),
               moderator_id: fc.uuid(),
-              created_at: fc.date({ min: new Date('2020-01-01'), max: new Date('2023-12-31') }),
+              created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: new Date('2023-12-31').getTime() }).map(ms => new Date(ms)),
               revoked_at: fc.integer({ min: 1000, max: 30 * 24 * 60 * 60 * 1000 }), // offset in ms
               revoked_by: fc.uuid(),
             }).map(action => ({
@@ -2319,7 +2319,7 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
             fc.record({
               id: fc.uuid(),
               moderator_id: fc.uuid(),
-              created_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               revoked_at: fc.constant(null),
               revoked_by: fc.constant(null),
             }),
@@ -2330,9 +2330,9 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
             fc.record({
               id: fc.uuid(),
               moderator_id: fc.uuid(),
-              created_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               revoked_at: fc.option(
-                fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+                fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
                 { nil: null }
               ),
               revoked_by: fc.option(fc.uuid(), { nil: null }),
@@ -2394,9 +2394,9 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
           fc.record({
             id: fc.uuid(),
             moderator_id: fc.uuid(),
-            created_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+            created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
             revoked_at: fc.option(
-              fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               { nil: null }
             ),
             revoked_by: fc.option(fc.uuid(), { nil: null }),
@@ -2458,9 +2458,9 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
           fc.record({
             id: fc.uuid(),
             moderator_id: fc.uuid(),
-            created_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+            created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
             revoked_at: fc.option(
-              fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               { nil: null }
             ),
             revoked_by: fc.option(fc.uuid(), { nil: null }),
@@ -2517,9 +2517,9 @@ describe('Moderation Service - Property 17: Reversal Metrics Accuracy', () => {
           fc.record({
             id: fc.uuid(),
             moderator_id: fc.uuid(),
-            created_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+            created_at: fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
             revoked_at: fc.option(
-              fc.date({ min: new Date('2020-01-01'), max: new Date() }),
+              fc.integer({ min: new Date('2020-01-01').getTime(), max: Date.now() - 1000 }).map(ms => new Date(ms)),
               { nil: null }
             ),
             revoked_by: fc.option(fc.uuid(), { nil: null }),
@@ -3053,4 +3053,6 @@ describe('Moderation Service - Property 18: Reversal Immutability', () => {
     );
   });
 });
+
+
 

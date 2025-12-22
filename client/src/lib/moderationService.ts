@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Report,
   ReportParams,
+  ReportType,
   ModeratorFlagParams,
   ModerationAction,
   ModerationActionParams,
@@ -29,6 +30,7 @@ import {
   ReversalHistoryEntry,
   StateChangeEntry,
   StateChangeAction,
+  ProfileContext,
 } from '@/types/moderation';
 
 // ============================================================================
@@ -76,6 +78,28 @@ export const MODERATION_ACTION_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 // ============================================================================
 // Utility Functions
 // ============================================================================
+
+/**
+ * Get standardized content type label for error messages
+ * Requirements: 8.1, 8.2, 8.3, 8.4, 8.7, 8.8
+ * 
+ * This function ensures consistent content type labels across all error messages.
+ * It capitalizes the first letter and keeps the rest lowercase for consistency.
+ * 
+ * @param reportType - The report type (post, comment, track, user)
+ * @returns Standardized content type label
+ */
+function getContentTypeLabel(reportType: ReportType): string {
+  // Map report types to their display labels
+  const labels: Record<ReportType, string> = {
+    post: 'Post',
+    comment: 'Comment',
+    track: 'Track',
+    user: 'User',
+  };
+
+  return labels[reportType] || reportType.charAt(0).toUpperCase() + reportType.slice(1);
+}
 
 /**
  * Sanitize user-provided text to prevent XSS attacks
@@ -873,6 +897,67 @@ async function getReportedUserId(
 }
 
 /**
+ * Check if user has already reported this target within 24 hours
+ * Requirements: 2.3, 2.5, 10.1, 10.2, 10.3
+ * 
+ * This function implements duplicate detection to prevent users from spamming
+ * reports for the same target. It checks if the same user has reported the same
+ * target (with the same report_type) within the last 24 hours.
+ * 
+ * @param userId - Reporter user ID
+ * @param reportType - Type of content being reported
+ * @param targetId - ID of the target being reported
+ * @returns Object with isDuplicate flag and original report timestamp
+ * @throws ModerationError if database query fails
+ */
+async function checkDuplicateReport(
+  userId: string,
+  reportType: ReportType,
+  targetId: string
+): Promise<{ isDuplicate: boolean; originalReportDate?: string }> {
+  try {
+    const twentyFourHoursAgo = new Date(
+      Date.now() - RATE_LIMIT_WINDOW_MS
+    ).toISOString();
+
+    const { data, error } = await supabase
+      .from('moderation_reports')
+      .select('created_at')
+      .eq('reporter_id', userId)
+      .eq('report_type', reportType)
+      .eq('target_id', targetId)
+      .gte('created_at', twentyFourHoursAgo)
+      .maybeSingle();
+
+    if (error) {
+      throw new ModerationError(
+        'Failed to check for duplicate report',
+        MODERATION_ERROR_CODES.DATABASE_ERROR,
+        { originalError: error }
+      );
+    }
+
+    if (data) {
+      return {
+        isDuplicate: true,
+        originalReportDate: data.created_at,
+      };
+    }
+
+    return { isDuplicate: false };
+  } catch (error) {
+    if (error instanceof ModerationError) {
+      throw error;
+    }
+    throw new ModerationError(
+      'An unexpected error occurred while checking for duplicate report',
+      MODERATION_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
  * Submit a user report
  * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6
  * 
@@ -888,9 +973,76 @@ export async function submitReport(params: ReportParams): Promise<Report> {
     // Get current user
     const user = await getCurrentUser();
 
+    // Check for self-report prevention
+    // Requirements: 8.5, 8.6
+    if (params.reportType === 'user') {
+      // For user reports, check if reporter is reporting themselves
+      if (user.id === params.targetId) {
+        throw new ModerationError(
+          'You cannot report your own profile',
+          MODERATION_ERROR_CODES.VALIDATION_ERROR,
+          { userId: user.id, targetId: params.targetId }
+        );
+      }
+    } else {
+      // For content reports (post, comment, track), check if reporter owns the content
+      const contentOwnerId = await getReportedUserId(params.reportType, params.targetId);
+      if (contentOwnerId && user.id === contentOwnerId) {
+        const contentTypeLabel = getContentTypeLabel(params.reportType);
+        throw new ModerationError(
+          `You cannot report your own ${contentTypeLabel.toLowerCase()}`,
+          MODERATION_ERROR_CODES.VALIDATION_ERROR,
+          { userId: user.id, targetId: params.targetId }
+        );
+      }
+    }
+
+    // Check for duplicate report (before rate limit check)
+    // Requirements: 2.3, 2.4, 10.4, 10.7, 10.8
+    const duplicateCheck = await checkDuplicateReport(
+      user.id,
+      params.reportType,
+      params.targetId
+    );
+
+    if (duplicateCheck.isDuplicate) {
+      // Log duplicate attempt
+      // Requirements: 2.9, 2.10, 6.3, 6.7
+      await logSecurityEvent('duplicate_report_attempt', user.id, {
+        reportType: params.reportType,
+        targetId: params.targetId,
+        originalReportDate: duplicateCheck.originalReportDate,
+        timestamp: new Date().toISOString(),
+        user_agent: typeof window !== 'undefined' ? window.navigator.userAgent : undefined,
+      });
+
+      // Format content type label for error message
+      const contentTypeLabel = getContentTypeLabel(params.reportType);
+      
+      throw new ModerationError(
+        `You have already reported this ${contentTypeLabel.toLowerCase()} recently. Please wait 24 hours before reporting again.`,
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        {
+          reportType: params.reportType,
+          targetId: params.targetId,
+          originalReportDate: duplicateCheck.originalReportDate,
+        }
+      );
+    }
+
     // Check rate limit
     const reportCount = await checkReportRateLimit(user.id);
     if (reportCount >= REPORT_RATE_LIMIT) {
+      // Log rate limit violation
+      // Requirements: 2.9, 2.10, 6.2, 6.7
+      await logSecurityEvent('rate_limit_exceeded', user.id, {
+        reportType: params.reportType,
+        reportCount,
+        limit: REPORT_RATE_LIMIT,
+        timestamp: new Date().toISOString(),
+        user_agent: typeof window !== 'undefined' ? window.navigator.userAgent : undefined,
+      });
+
       throw new ModerationError(
         `You have exceeded the report limit of ${REPORT_RATE_LIMIT} reports per 24 hours. Please try again later.`,
         MODERATION_ERROR_CODES.RATE_LIMIT_EXCEEDED,
@@ -900,6 +1052,29 @@ export async function submitReport(params: ReportParams): Promise<Report> {
 
     // Get reported user ID
     const reportedUserId = await getReportedUserId(params.reportType, params.targetId);
+
+    // Check admin protection (only for user reports)
+    // Requirements: 2.7, 2.8, 6.4
+    if (params.reportType === 'user' && reportedUserId) {
+      const targetIsAdmin = await isAdmin(reportedUserId);
+      if (targetIsAdmin) {
+        // Log admin report attempt
+        // Requirements: 2.9, 2.10, 6.4, 6.7
+        await logSecurityEvent('admin_report_attempt', user.id, {
+          targetUserId: reportedUserId,
+          reportType: params.reportType,
+          targetId: params.targetId,
+          timestamp: new Date().toISOString(),
+          user_agent: typeof window !== 'undefined' ? window.navigator.userAgent : undefined,
+        });
+
+        throw new ModerationError(
+          'This account cannot be reported',
+          MODERATION_ERROR_CODES.VALIDATION_ERROR,
+          { targetUserId: reportedUserId }
+        );
+      }
+    }
 
     // Calculate priority
     const priority = calculatePriority(params.reason);
@@ -956,7 +1131,7 @@ export async function submitReport(params: ReportParams): Promise<Report> {
 
 /**
  * Moderator flag content for review
- * Requirements: 2.1, 2.2, 2.3, 2.4, 2.6
+ * Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 10.9
  * 
  * @param params - Moderator flag parameters
  * @returns Created report with moderator flag
@@ -976,6 +1151,39 @@ export async function moderatorFlagContent(params: ModeratorFlagParams): Promise
       throw new ModerationError(
         'Only moderators and admins can flag content',
         MODERATION_ERROR_CODES.UNAUTHORIZED
+      );
+    }
+
+    // Check for duplicate report (before creating the flag)
+    // Requirements: 10.9
+    const duplicateCheck = await checkDuplicateReport(
+      user.id,
+      params.reportType,
+      params.targetId
+    );
+
+    if (duplicateCheck.isDuplicate) {
+      // Log duplicate attempt for moderator flags
+      // Requirements: 2.9, 2.10, 6.3, 6.7, 10.9
+      await logSecurityEvent('duplicate_report_attempt', user.id, {
+        reportType: params.reportType,
+        targetId: params.targetId,
+        originalReportDate: duplicateCheck.originalReportDate,
+        moderatorFlag: true,
+        timestamp: new Date().toISOString(),
+        user_agent: typeof window !== 'undefined' ? window.navigator.userAgent : undefined,
+      });
+
+      const contentTypeLabel = getContentTypeLabel(params.reportType);
+      
+      throw new ModerationError(
+        `You have already reported this ${contentTypeLabel.toLowerCase()} recently. Please wait 24 hours before reporting again.`,
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        {
+          reportType: params.reportType,
+          targetId: params.targetId,
+          originalReportDate: duplicateCheck.originalReportDate,
+        }
       );
     }
 
@@ -1110,6 +1318,134 @@ export async function fetchModerationQueue(filters: QueueFilters = {}): Promise<
     }
     throw new ModerationError(
       'An unexpected error occurred while fetching moderation queue',
+      MODERATION_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
+ * Get profile context for moderation panel
+ * Requirements: 7.2, 7.3, 7.4, 7.5
+ * 
+ * This function fetches comprehensive context about a user profile for display
+ * in the moderation panel when reviewing user reports. It includes profile data,
+ * account age, recent report count, and moderation history.
+ * 
+ * @param userId - User ID to get context for
+ * @returns Profile context data
+ * @throws ModerationError if database query fails or user not found
+ */
+export async function getProfileContext(userId: string): Promise<ProfileContext> {
+  try {
+    // Validate user ID
+    if (!isValidUUID(userId)) {
+      throw new ModerationError(
+        'Invalid user ID format',
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        { userId }
+      );
+    }
+
+    // Verify moderator role
+    await verifyModeratorRole();
+
+    // Fetch user profile
+    // Note: userId can be either user_id or profile id, so we try both
+    // Note: user_profiles table does not have avatar_url or bio columns
+    let profile = null;
+    let profileError = null;
+    
+    // First try with user_id
+    const { data: profileByUserId, error: errorByUserId } = await supabase
+      .from('user_profiles')
+      .select('username, created_at, user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (profileByUserId) {
+      profile = profileByUserId;
+    } else if (!errorByUserId) {
+      // If not found by user_id (and no error), try with id (profile id)
+      const { data: profileById, error: errorById } = await supabase
+        .from('user_profiles')
+        .select('username, created_at, user_id')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (profileById) {
+        profile = profileById;
+      } else {
+        profileError = errorById;
+      }
+    } else {
+      // There was an error in the first query
+      profileError = errorByUserId;
+    }
+
+    if (profileError || !profile) {
+      throw new ModerationError(
+        'User profile not found',
+        MODERATION_ERROR_CODES.NOT_FOUND,
+        { userId, error: profileError }
+      );
+    }
+    
+    // Use the actual user_id from the profile for subsequent queries
+    const actualUserId = profile.user_id || userId;
+
+    // Calculate account age
+    const joinDate = new Date(profile.created_at);
+    const accountAgeDays = Math.floor(
+      (Date.now() - joinDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Count recent reports (last 30 days)
+    const thirtyDaysAgo = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const { count: recentReportCount } = await supabase
+      .from('moderation_reports')
+      .select('id', { count: 'exact', head: true })
+      .eq('reported_user_id', actualUserId)
+      .gte('created_at', thirtyDaysAgo);
+
+    // Fetch moderation history (last 10 actions)
+    const { data: moderationHistory, error: historyError } = await supabase
+      .from('moderation_actions')
+      .select('action_type, reason, created_at, expires_at')
+      .eq('target_user_id', actualUserId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (historyError) {
+      console.error('Failed to fetch moderation history:', historyError);
+    }
+
+    // Map database fields to interface fields
+    const mappedHistory = (moderationHistory || []).map((action) => ({
+      actionType: action.action_type as ModerationActionType,
+      reason: action.reason,
+      createdAt: action.created_at,
+      expiresAt: action.expires_at,
+    }));
+
+    return {
+      username: profile.username,
+      avatarUrl: null, // user_profiles table does not have avatar_url column
+      bio: null, // user_profiles table does not have bio column
+      joinDate: profile.created_at,
+      accountAgeDays,
+      recentReportCount: recentReportCount || 0,
+      moderationHistory: mappedHistory,
+    };
+  } catch (error) {
+    if (error instanceof ModerationError) {
+      throw error;
+    }
+    throw new ModerationError(
+      'An unexpected error occurred while fetching profile context',
       MODERATION_ERROR_CODES.DATABASE_ERROR,
       { originalError: error }
     );

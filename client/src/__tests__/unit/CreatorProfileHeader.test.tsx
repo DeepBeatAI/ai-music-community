@@ -18,6 +18,54 @@ jest.mock('@/components/FollowButton', () => {
   };
 });
 
+// Mock the ReportButton component
+jest.mock('@/components/moderation/ReportButton', () => ({
+  ReportButton: function MockReportButton({ 
+    reportType, 
+    targetId, 
+    iconOnly 
+  }: { 
+    reportType: string; 
+    targetId: string; 
+    iconOnly: boolean;
+  }) {
+    return (
+      <button 
+        data-testid="report-button"
+        data-report-type={reportType}
+        data-target-id={targetId}
+        data-icon-only={iconOnly}
+      >
+        Report
+      </button>
+    );
+  },
+}));
+
+// Mock the ModeratorFlagButton component
+jest.mock('@/components/moderation/ModeratorFlagButton', () => ({
+  ModeratorFlagButton: function MockModeratorFlagButton({ 
+    reportType, 
+    targetId, 
+    iconOnly 
+  }: { 
+    reportType: string; 
+    targetId: string; 
+    iconOnly: boolean;
+  }) {
+    return (
+      <button 
+        data-testid="moderator-flag-button"
+        data-report-type={reportType}
+        data-target-id={targetId}
+        data-icon-only={iconOnly}
+      >
+        Flag
+      </button>
+    );
+  },
+}));
+
 // Mock Next.js Image component
 jest.mock('next/image', () => ({
   __esModule: true,
@@ -292,6 +340,115 @@ describe('CreatorProfileHeader Component', () => {
       render(<CreatorProfileHeader profile={profileWithSpecialBio} isOwnProfile={false} />);
       
       expect(screen.getByText('Bio with <special> & "characters"')).toBeInTheDocument();
+    });
+  });
+
+  describe('Report and Flag Button Integration', () => {
+    describe('Button Visibility for Regular Users', () => {
+      test('should show report button when viewing another user profile', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const reportButton = screen.getByTestId('report-button');
+        expect(reportButton).toBeInTheDocument();
+      });
+
+      test('should show moderator flag button when viewing another user profile', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const flagButton = screen.getByTestId('moderator-flag-button');
+        expect(flagButton).toBeInTheDocument();
+      });
+    });
+
+    describe('Buttons Hidden When Viewing Own Profile', () => {
+      test('should hide report button when viewing own profile', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={true} />);
+        
+        const reportButton = screen.queryByTestId('report-button');
+        expect(reportButton).not.toBeInTheDocument();
+      });
+
+      test('should hide moderator flag button when viewing own profile', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={true} />);
+        
+        const flagButton = screen.queryByTestId('moderator-flag-button');
+        expect(flagButton).not.toBeInTheDocument();
+      });
+    });
+
+    describe('Correct Props Passed to Buttons', () => {
+      test('should pass correct report_type to ReportButton', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const reportButton = screen.getByTestId('report-button');
+        expect(reportButton).toHaveAttribute('data-report-type', 'user');
+      });
+
+      test('should pass correct targetId to ReportButton', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const reportButton = screen.getByTestId('report-button');
+        expect(reportButton).toHaveAttribute('data-target-id', mockProfile.id);
+      });
+
+      test('should pass iconOnly={false} to ReportButton', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const reportButton = screen.getByTestId('report-button');
+        expect(reportButton).toHaveAttribute('data-icon-only', 'false');
+      });
+
+      test('should pass correct report_type to ModeratorFlagButton', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const flagButton = screen.getByTestId('moderator-flag-button');
+        expect(flagButton).toHaveAttribute('data-report-type', 'user');
+      });
+
+      test('should pass correct targetId to ModeratorFlagButton', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const flagButton = screen.getByTestId('moderator-flag-button');
+        expect(flagButton).toHaveAttribute('data-target-id', mockProfile.id);
+      });
+
+      test('should pass iconOnly={false} to ModeratorFlagButton', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const flagButton = screen.getByTestId('moderator-flag-button');
+        expect(flagButton).toHaveAttribute('data-icon-only', 'false');
+      });
+    });
+
+    describe('Button Layout and Positioning', () => {
+      test('should render buttons in a flex container with gap-2', () => {
+        const { container } = render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const buttonContainer = container.querySelector('.flex.items-center.gap-2');
+        expect(buttonContainer).toBeInTheDocument();
+      });
+
+      test('should render buttons next to Follow button', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const followButton = screen.getByTestId('follow-button');
+        const reportButton = screen.getByTestId('report-button');
+        const flagButton = screen.getByTestId('moderator-flag-button');
+        
+        expect(followButton).toBeInTheDocument();
+        expect(reportButton).toBeInTheDocument();
+        expect(flagButton).toBeInTheDocument();
+      });
+
+      test('should render both report and flag buttons together', () => {
+        render(<CreatorProfileHeader profile={mockProfile} isOwnProfile={false} />);
+        
+        const reportButton = screen.getByTestId('report-button');
+        const flagButton = screen.getByTestId('moderator-flag-button');
+        
+        expect(reportButton).toBeInTheDocument();
+        expect(flagButton).toBeInTheDocument();
+      });
     });
   });
 });

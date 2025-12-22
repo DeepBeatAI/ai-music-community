@@ -195,7 +195,7 @@ describe('ModerationActionPanel', () => {
 
       const actionSelect = screen.getByLabelText('Action Type *') as HTMLSelectElement;
       const optionTexts = Array.from(actionSelect.options).map(opt => opt.text);
-      expect(optionTexts).not.toContain('Ban User (Admin Only)');
+      expect(optionTexts).not.toContain('Suspend User Permanently (Admin Only)');
     });
 
     it('should show ban option for admin users', async () => {
@@ -213,7 +213,7 @@ describe('ModerationActionPanel', () => {
       await waitFor(() => {
         const actionSelect = screen.getByLabelText('Action Type *') as HTMLSelectElement;
         const optionTexts = Array.from(actionSelect.options).map(opt => opt.text);
-        expect(optionTexts).toContain('Ban User (Admin Only)');
+        expect(optionTexts).toContain('Suspend User Permanently (Admin Only)');
       }, { timeout: 3000 });
     });
   });
@@ -616,6 +616,320 @@ describe('ModerationActionPanel', () => {
         expect(mockOnActionComplete).toHaveBeenCalled();
         expect(mockOnClose).toHaveBeenCalled();
       }, { timeout: 2000 });
+    });
+  });
+
+  describe('Profile Context for User Reports', () => {
+    const mockUserReport: Report = {
+      ...mockReport,
+      report_type: 'user',
+      target_id: 'user-target-123',
+    };
+
+    const mockProfileContext = {
+      username: 'reporteduser',
+      avatarUrl: 'https://example.com/avatar.jpg',
+      bio: 'This is my bio',
+      joinDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(), // 15 days ago
+      accountAgeDays: 15,
+      recentReportCount: 3,
+      moderationHistory: [
+        {
+          actionType: 'user_warned' as const,
+          reason: 'Spam',
+          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          expiresAt: null,
+        },
+        {
+          actionType: 'user_suspended' as const,
+          reason: 'Harassment',
+          createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+          expiresAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      (moderationService.getProfileContext as jest.Mock).mockResolvedValue(mockProfileContext);
+    });
+
+    it('should load profile context for user reports', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(moderationService.getProfileContext).toHaveBeenCalledWith('user-target-123');
+      });
+    });
+
+    it('should display profile context section for user reports', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Profile Context')).toBeInTheDocument();
+        expect(screen.getByText('reporteduser')).toBeInTheDocument();
+        expect(screen.getByText(/Member for/)).toBeInTheDocument();
+      });
+    });
+
+    it('should display user avatar in profile context', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        const avatar = screen.getByAltText('reporteduser') as HTMLImageElement;
+        expect(avatar).toBeInTheDocument();
+        expect(avatar.src).toContain('avatar.jpg');
+      });
+    });
+
+    it('should display bio in profile context', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('This is my bio')).toBeInTheDocument();
+      });
+    });
+
+    it('should display recent report count badge', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/3 reports in last 30 days/)).toBeInTheDocument();
+      });
+    });
+
+    it('should display new account badge for accounts less than 7 days old', async () => {
+      const newAccountContext = {
+        ...mockProfileContext,
+        accountAgeDays: 5,
+      };
+      (moderationService.getProfileContext as jest.Mock).mockResolvedValue(newAccountContext);
+
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('New account')).toBeInTheDocument();
+      });
+    });
+
+    it('should not display new account badge for accounts 7 days or older', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('New account')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should display collapsible moderation history', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Moderation History \(2\)/)).toBeInTheDocument();
+      });
+    });
+
+    it('should expand moderation history when clicked', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Moderation History \(2\)/)).toBeInTheDocument();
+      });
+
+      const historyToggle = screen.getByText(/Moderation History \(2\)/);
+      fireEvent.click(historyToggle);
+
+      await waitFor(() => {
+        expect(screen.getByText('Warn User')).toBeInTheDocument();
+        expect(screen.getByText('Suspend User')).toBeInTheDocument();
+        expect(screen.getByText('Spam')).toBeInTheDocument();
+        expect(screen.getByText('Harassment')).toBeInTheDocument();
+      });
+    });
+
+    it('should not display profile context for non-user reports', async () => {
+      render(
+        <ModerationActionPanel
+          report={mockReport} // post report
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Reported Content')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Profile Context')).not.toBeInTheDocument();
+      expect(moderationService.getProfileContext).not.toHaveBeenCalled();
+    });
+
+    it('should show loading state while fetching profile context', async () => {
+      // Delay the resolution to see loading state
+      (moderationService.getProfileContext as jest.Mock).mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve(mockProfileContext), 100))
+      );
+
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      // Should show loading state initially
+      expect(screen.getByText('Loading profile context...')).toBeInTheDocument();
+
+      // Wait for profile context to load
+      await waitFor(() => {
+        expect(screen.getByText('Profile Context')).toBeInTheDocument();
+      });
+
+      // Loading state should be gone
+      expect(screen.queryByText('Loading profile context...')).not.toBeInTheDocument();
+    });
+
+    it('should handle profile context loading errors gracefully', async () => {
+      (moderationService.getProfileContext as jest.Mock).mockRejectedValue(
+        new Error('Failed to load profile')
+      );
+
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      // Panel should still render without profile context
+      await waitFor(() => {
+        expect(screen.getByText('Reported Content')).toBeInTheDocument();
+      });
+
+      // Profile context should not be displayed
+      expect(screen.queryByText('Profile Context')).not.toBeInTheDocument();
+    });
+
+    it('should format account age correctly for days', async () => {
+      const context = { ...mockProfileContext, accountAgeDays: 5 };
+      (moderationService.getProfileContext as jest.Mock).mockResolvedValue(context);
+
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Member for 5 days/)).toBeInTheDocument();
+      });
+    });
+
+    it('should format account age correctly for weeks', async () => {
+      const context = { ...mockProfileContext, accountAgeDays: 14 };
+      (moderationService.getProfileContext as jest.Mock).mockResolvedValue(context);
+
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Member for 2 weeks/)).toBeInTheDocument();
+      });
+    });
+
+    it('should format account age correctly for months', async () => {
+      const context = { ...mockProfileContext, accountAgeDays: 60 };
+      (moderationService.getProfileContext as jest.Mock).mockResolvedValue(context);
+
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Member for 2 months/)).toBeInTheDocument();
+      });
+    });
+
+    it('should format account age correctly for years', async () => {
+      const context = { ...mockProfileContext, accountAgeDays: 400 };
+      (moderationService.getProfileContext as jest.Mock).mockResolvedValue(context);
+
+      render(
+        <ModerationActionPanel
+          report={mockUserReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Member for 1 year/)).toBeInTheDocument();
+      });
     });
   });
 });

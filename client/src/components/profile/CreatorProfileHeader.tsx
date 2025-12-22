@@ -2,6 +2,8 @@
 
 import Image from 'next/image';
 import FollowButton from '@/components/FollowButton';
+import { ReportButton } from '@/components/moderation/ReportButton';
+import { ModeratorFlagButton } from '@/components/moderation/ModeratorFlagButton';
 import type { CreatorProfile } from '@/types';
 
 interface CreatorProfileHeaderProps {
@@ -50,15 +52,31 @@ export default function CreatorProfileHeader({
               )}
             </div>
 
-            {/* Follow Button - Hidden for own profile */}
+            {/* Follow Button and Moderation Actions - Hidden for own profile */}
             {!isOwnProfile && (
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 flex flex-col gap-2">
                 <FollowButton
                   userId={profile.id}
                   username={profile.username}
                   size="lg"
                   variant="primary"
                 />
+                
+                {/* Report and Flag Buttons */}
+                <div className="flex items-center gap-2">
+                  <ReportButton
+                    reportType="user"
+                    targetId={profile.id}
+                    contentCreatorId={profile.id}
+                    iconOnly={false}
+                  />
+                  <ModeratorFlagButton
+                    reportType="user"
+                    targetId={profile.id}
+                    contentCreatorId={profile.id}
+                    iconOnly={false}
+                  />
+                </div>
               </div>
             )}
           </div>

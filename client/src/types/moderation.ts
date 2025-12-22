@@ -499,3 +499,29 @@ export interface ReversalHistoryEntry {
   stateChanges?: StateChangeEntry[]; // Complete state change history for multiple reversals
   wasReapplied?: boolean; // Whether the action was re-applied after reversal
 }
+
+// ============================================================================
+// Profile Context Types
+// ============================================================================
+
+/**
+ * Profile context for moderation panel
+ * Requirements: 7.2, 7.3, 7.4, 7.5
+ * 
+ * This interface provides comprehensive context about a user profile
+ * when reviewing user reports in the moderation queue.
+ */
+export interface ProfileContext {
+  username: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  joinDate: string;
+  accountAgeDays: number;
+  recentReportCount: number;
+  moderationHistory: Array<{
+    actionType: ModerationActionType;
+    reason: string;
+    createdAt: string;
+    expiresAt: string | null;
+  }>;
+}

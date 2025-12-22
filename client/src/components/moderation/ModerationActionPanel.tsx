@@ -12,8 +12,9 @@ import {
   RESTRICTION_TYPE_LABELS,
   ModerationError,
   MODERATION_ERROR_CODES,
+  ProfileContext,
 } from '@/types/moderation';
-import { takeModerationAction, isAdmin, revokeAction } from '@/lib/moderationService';
+import { takeModerationAction, isAdmin, revokeAction, getProfileContext } from '@/lib/moderationService';
 import { supabase } from '@/lib/supabase';
 
 interface ModerationActionPanelProps {
@@ -54,6 +55,10 @@ export function ModerationActionPanel({
   const [contentCreatedAt, setContentCreatedAt] = useState<string | null>(null);
   const [userHistory, setUserHistory] = useState<UserViolationHistory | null>(null);
   
+  // Profile context for user reports
+  const [profileContext, setProfileContext] = useState<ProfileContext | null>(null);
+  const [loadingContext, setLoadingContext] = useState(false);
+  
   // Action form state
   const [selectedAction, setSelectedAction] = useState<ModerationActionType | ''>('');
   const [suspensionDuration, setSuspensionDuration] = useState<number>(1);
@@ -71,6 +76,11 @@ export function ModerationActionPanel({
     loadReportDetails();
     checkAdminStatus();
     checkReportedUserAdminStatus();
+    
+    // Load profile context for user reports
+    if (report.report_type === 'user' && report.target_id) {
+      loadProfileContext();
+    }
     
     // If actionIdToReverse is provided, load that action and show reversal dialog
     if (actionIdToReverse) {
@@ -117,6 +127,22 @@ export function ModerationActionPanel({
       }
     } catch (error) {
       console.error('Failed to check reported user admin status:', error);
+    }
+  };
+
+  const loadProfileContext = async () => {
+    if (!report.target_id) return;
+    
+    try {
+      setLoadingContext(true);
+      const context = await getProfileContext(report.target_id);
+      setProfileContext(context);
+    } catch (error) {
+      console.error('Failed to load profile context:', error);
+      // Don't set error state - profile context is supplementary information
+      // The panel should still be usable without it
+    } finally {
+      setLoadingContext(false);
     }
   };
 
@@ -194,6 +220,7 @@ export function ModerationActionPanel({
     try {
       let tableName: string;
       let selectFields: string;
+      let idField: string = 'id'; // Default to 'id' field
 
       switch (report.report_type) {
         case 'post':
@@ -210,7 +237,8 @@ export function ModerationActionPanel({
           break;
         case 'user':
           tableName = 'user_profiles';
-          selectFields = 'username, bio, created_at';
+          selectFields = 'username, created_at'; // Note: bio column does not exist
+          idField = 'user_id'; // For user profiles, use user_id field
           break;
         default:
           return;
@@ -219,7 +247,7 @@ export function ModerationActionPanel({
       const { data } = await supabase
         .from(tableName)
         .select(selectFields)
-        .eq('id', report.target_id)
+        .eq(idField, report.target_id)
         .maybeSingle();
 
       if (data) {
@@ -234,8 +262,8 @@ export function ModerationActionPanel({
           const trackData = data as unknown as { title: string; description?: string };
           setContentPreview(`Title: ${trackData.title}\n${trackData.description || 'No description'}`);
         } else if (report.report_type === 'user') {
-          const userData = data as unknown as { username: string; bio?: string };
-          setContentPreview(`Username: ${userData.username}\nBio: ${userData.bio || 'No bio'}`);
+          const userData = data as unknown as { username: string };
+          setContentPreview(`Username: ${userData.username}`);
         } else {
           const contentData = data as unknown as { content?: string };
           setContentPreview(contentData.content || 'No content available');
@@ -365,6 +393,22 @@ export function ModerationActionPanel({
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const formatAccountAge = (days: number): string => {
+    if (days < 1) return 'less than a day';
+    if (days === 1) return '1 day';
+    if (days < 7) return `${days} days`;
+    if (days < 30) {
+      const weeks = Math.floor(days / 7);
+      return weeks === 1 ? '1 week' : `${weeks} weeks`;
+    }
+    if (days < 365) {
+      const months = Math.floor(days / 30);
+      return months === 1 ? '1 month' : `${months} months`;
+    }
+    const years = Math.floor(days / 365);
+    return years === 1 ? '1 year' : `${years} years`;
   };
 
   const getActionDescription = (action: ModerationActionType): string => {
@@ -505,6 +549,90 @@ export function ModerationActionPanel({
             )}
           </div>
 
+          {/* Profile Context Section (for user reports only) */}
+          {report.report_type === 'user' && profileContext && (
+            <div className="bg-gray-800 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-300">Profile Context</h3>
+              
+              {/* User Info */}
+              <div className="flex items-center gap-3">
+                {/* Avatar placeholder - database doesn't have avatar_url column */}
+                <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-gray-400 font-semibold text-lg">
+                  {profileContext.username.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-white font-medium">{profileContext.username}</p>
+                  <p className="text-sm text-gray-400">
+                    Member for {formatAccountAge(profileContext.accountAgeDays)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Bio - database doesn't have bio column, so this won't render */}
+              {profileContext.bio && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Bio</p>
+                  <p className="text-sm text-gray-300">{profileContext.bio}</p>
+                </div>
+              )}
+
+              {/* Badges */}
+              <div className="flex gap-2 flex-wrap">
+                {profileContext.recentReportCount > 0 && (
+                  <span className="px-2 py-1 bg-yellow-900/30 text-yellow-400 text-xs rounded">
+                    {profileContext.recentReportCount} {profileContext.recentReportCount === 1 ? 'report' : 'reports'} in last 30 days
+                  </span>
+                )}
+                {profileContext.accountAgeDays < 7 && (
+                  <span className="px-2 py-1 bg-blue-900/30 text-blue-400 text-xs rounded">
+                    New account
+                  </span>
+                )}
+              </div>
+
+              {/* Collapsible Moderation History */}
+              {profileContext.moderationHistory.length > 0 && (
+                <details className="group">
+                  <summary className="cursor-pointer text-sm text-gray-400 hover:text-gray-300 flex items-center gap-2 select-none">
+                    <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                    Moderation History ({profileContext.moderationHistory.length})
+                  </summary>
+                  <div className="mt-2 space-y-2 pl-6">
+                    {profileContext.moderationHistory.map((action, index) => (
+                      <div key={index} className="text-xs text-gray-400 border-l-2 border-gray-700 pl-3">
+                        <p className="text-gray-300 font-medium">{ACTION_TYPE_LABELS[action.actionType]}</p>
+                        <p className="text-gray-400">{action.reason}</p>
+                        <p className="text-gray-500">
+                          {new Date(action.createdAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </p>
+                        {action.expiresAt && (
+                          <p className="text-gray-500 text-xs">
+                            Expires: {new Date(action.expiresAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Loading state for profile context */}
+          {report.report_type === 'user' && loadingContext && (
+            <div className="bg-gray-800 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Loading profile context...</p>
+            </div>
+          )}
+
           {/* Reported Content Section */}
           <div className="bg-gray-700 rounded-lg p-5 space-y-3">
             <h3 className="text-lg font-semibold text-white">Reported Content</h3>
@@ -530,7 +658,9 @@ export function ModerationActionPanel({
 
             {contentPreview && (
               <div>
-                <span className="text-sm text-gray-400 block mb-1">Content Preview:</span>
+                <span className="text-sm text-gray-400 block mb-1">
+                  {report.report_type === 'user' ? 'User Profile:' : 'Content Preview:'}
+                </span>
                 <div className="bg-gray-800 rounded p-3 max-h-40 overflow-y-auto">
                   <pre className="text-white text-sm whitespace-pre-wrap font-sans">
                     {contentPreview}

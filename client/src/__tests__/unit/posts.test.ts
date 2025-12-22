@@ -24,6 +24,7 @@ import type { Post } from '@/types';
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     from: jest.fn(),
+    rpc: jest.fn(),
   },
 }));
 

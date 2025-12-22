@@ -149,7 +149,7 @@ describe('ModerationLogs', () => {
       await waitFor(() => {
         expect(screen.getByText('Content Removed')).toBeInTheDocument();
         expect(screen.getByText('User Suspended')).toBeInTheDocument();
-        expect(screen.getByText('User Banned')).toBeInTheDocument();
+        expect(screen.getByText('Permanent Suspension')).toBeInTheDocument();
       });
     });
   });

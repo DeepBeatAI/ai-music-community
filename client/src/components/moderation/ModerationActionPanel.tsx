@@ -334,6 +334,11 @@ export function ModerationActionPanel({
       return;
     }
 
+    if (internalNotes.trim().length < 10) {
+      setError('Internal notes must be at least 10 characters');
+      return;
+    }
+
     // Check if action requires confirmation
     const destructiveActions: ModerationActionType[] = [
       'content_removed',

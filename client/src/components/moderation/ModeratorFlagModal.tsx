@@ -21,7 +21,7 @@ interface ModeratorFlagModalProps {
  * 
  * Features:
  * - Reason dropdown with all violation categories
- * - Required internal notes field
+ * - Required additional details field
  * - Priority selector (P1-P5)
  * - "Moderator Flag" indicator
  * - Form validation
@@ -65,9 +65,11 @@ export function ModeratorFlagModal({
       newErrors.reason = 'Please select a reason for flagging';
     }
 
-    // Validate internal notes (required for moderator flags)
+    // Validate additional details (required for moderator flags)
     if (!internalNotes.trim()) {
-      newErrors.internalNotes = 'Internal notes are required for moderator flags';
+      newErrors.internalNotes = 'Additional details are required for moderator flags';
+    } else if (internalNotes.trim().length < 10) {
+      newErrors.internalNotes = 'Additional details must be at least 10 characters';
     }
 
     setErrors(newErrors);
@@ -238,10 +240,10 @@ export function ModeratorFlagModal({
             </p>
           </div>
 
-          {/* Internal Notes Textarea */}
+          {/* Additional details Textarea */}
           <div>
             <label htmlFor="internalNotes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Internal Notes <span className="text-red-500">*</span>
+              Additional details <span className="text-red-500">*</span>
             </label>
             <textarea
               id="internalNotes"

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { getUserAlbums, addTrackToAlbum } from '@/lib/albums';
+import { getUserAlbums, addTrackToAlbum, removeTrackFromAlbum } from '@/lib/albums';
 import type { Album } from '@/types/album';
 
 interface AddToAlbumModalProps {
@@ -102,6 +102,37 @@ export function AddToAlbumModal({
 
       // If "None" is selected, remove from current album
       if (selectedAlbumId === null) {
+        // Only remove if track is currently in an album
+        if (!currentAlbumId) {
+          setSuccessMessage('Track is not in any album');
+          setTimeout(() => {
+            onClose();
+          }, 1000);
+          return;
+        }
+
+        // Remove track from current album
+        const result = await removeTrackFromAlbum({
+          album_id: currentAlbumId,
+          track_id: trackId,
+        });
+
+        if (!result.success) {
+          const errorMessage = result.error || 'Failed to remove track from album';
+          setError(errorMessage);
+          
+          // Rollback optimistic update
+          if (onSuccess && previousAlbumId) {
+            const previousAlbum = albums.find(a => a.id === previousAlbumId);
+            onSuccess(previousAlbumId, previousAlbum?.name || null);
+          }
+          
+          if (onError) {
+            onError(errorMessage);
+          }
+          return;
+        }
+
         // Optimistic update
         if (onSuccess) {
           onSuccess(null, null);

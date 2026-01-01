@@ -151,16 +151,23 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
         if (contentData) {
           if (report.report_type === 'track') {
             const trackData = contentData as unknown as { title: string; description?: string };
-            setContentPreview(`Title: ${trackData.title}\n${trackData.description || 'No description'}`);
+            // Only show title for tracks, not description
+            setContentPreview(`Title: ${trackData.title}`);
           } else if (report.report_type === 'user') {
-            const userData = contentData as unknown as { username: string; bio?: string };
-            setContentPreview(`Username: ${userData.username}\nBio: ${userData.bio || 'No bio'}`);
+            // Don't show content preview for user reports
+            // The user info is already shown in the "Reported user" field
+            setContentPreview(null);
           } else {
             const postCommentData = contentData as unknown as { content?: string };
             setContentPreview(postCommentData.content || 'No content available');
           }
         } else {
-          setContentPreview('Content has been deleted or is unavailable');
+          // Don't show "content deleted" message for user reports
+          if (report.report_type === 'user') {
+            setContentPreview(null);
+          } else {
+            setContentPreview('Content has been deleted or is unavailable');
+          }
         }
       }
     } catch (error) {

@@ -785,7 +785,10 @@ export function ModerationActionPanel({
               >
                 <option value="">Select an action...</option>
                 <option value="content_approved">Dismiss Report (Approve Content)</option>
-                <option value="content_removed">Remove Content</option>
+                {/* Don't show "Remove Content" option for user reports */}
+                {report.report_type !== 'user' && (
+                  <option value="content_removed">Remove Content</option>
+                )}
                 <option value="user_warned">Warn User</option>
                 <option value="restriction_applied">Apply Restriction</option>
                 <option value="user_suspended">Suspend User</option>

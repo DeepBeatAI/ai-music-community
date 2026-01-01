@@ -84,7 +84,7 @@ function generateAlbumRemovedWithTracksMessage(params: NotificationTemplateParam
   const { reason, customMessage } = params;
   
   let message = 'Your album and all tracks within it have been removed for violating our community guidelines.\n\n';
-  message += `Reason: ${reason}\n\n`;
+  message += `Reason: ${reason}.\n\n`;
   
   if (customMessage) {
     message += `Additional information: ${customMessage}\n\n`;
@@ -108,7 +108,7 @@ function generateAlbumRemovedOnlyMessage(params: NotificationTemplateParams): st
   const { reason, customMessage } = params;
   
   let message = 'Your album has been removed for violating our community guidelines.\n\n';
-  message += `Reason: ${reason}\n\n`;
+  message += `Reason: ${reason}.\n\n`;
   
   if (customMessage) {
     message += `Additional information: ${customMessage}\n\n`;

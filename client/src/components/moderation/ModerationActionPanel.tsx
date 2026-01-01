@@ -173,7 +173,14 @@ export function ModerationActionPanel({
       setLoadingAlbumContext(true);
       setAlbumContextError(null);
       const context = await fetchAlbumContext(report.target_id);
-      setAlbumContext(context);
+      
+      if (context === null) {
+        // Album not found (likely deleted by user)
+        setAlbumContextError('Album not found');
+        setAlbumContext(null);
+      } else {
+        setAlbumContext(context);
+      }
     } catch (error) {
       console.error('Failed to load album context:', error);
       setAlbumContextError(error instanceof Error ? error.message : 'Failed to load album context');

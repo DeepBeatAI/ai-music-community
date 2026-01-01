@@ -1468,10 +1468,10 @@ export async function getProfileContext(userId: string): Promise<ProfileContext>
  * metadata, tracks, track count, and total duration.
  * 
  * @param albumId - Album ID to get context for
- * @returns Album context data
- * @throws ModerationError if database query fails or album not found
+ * @returns Album context data, or null if album not found (e.g., deleted by user)
+ * @throws ModerationError if database query fails or validation error
  */
-export async function fetchAlbumContext(albumId: string): Promise<AlbumContext> {
+export async function fetchAlbumContext(albumId: string): Promise<AlbumContext | null> {
   try {
     // Validate album ID
     if (!isValidUUID(albumId)) {
@@ -1517,11 +1517,9 @@ export async function fetchAlbumContext(albumId: string): Promise<AlbumContext> 
     }
 
     if (!album) {
-      throw new ModerationError(
-        'Album not found',
-        MODERATION_ERROR_CODES.NOT_FOUND,
-        { albumId }
-      );
+      // Album not found - this is expected if user deleted it before moderation action
+      // Return null instead of throwing error to avoid Next.js error logging
+      return null;
     }
 
     // Extract and format tracks from the join result
@@ -1697,6 +1695,15 @@ async function removeAlbumWithCascading(
 
     // Fetch album context to get track information
     const albumContext = await fetchAlbumContext(albumId);
+    
+    if (!albumContext) {
+      throw new ModerationError(
+        'Album not found - cannot perform moderation action',
+        MODERATION_ERROR_CODES.NOT_FOUND,
+        { albumId }
+      );
+    }
+    
     const trackIds = albumContext.tracks.map(track => track.id);
 
     console.log(`[Moderation] Removing album ${albumId} with cascading options:`, {

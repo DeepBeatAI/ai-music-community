@@ -155,13 +155,14 @@ describe('fetchAlbumContext', () => {
 
       const result = await fetchAlbumContext(mockAlbumId);
 
-      expect(result.id).toBe(mockAlbumId);
-      expect(result.name).toBe('Test Album');
-      expect(result.description).toBe('Test album description');
-      expect(result.cover_image_url).toBe('https://example.com/cover.jpg');
-      expect(result.user_id).toBe('33333333-3333-3333-3333-333333333333');
-      expect(result.is_public).toBe(true);
-      expect(result.tracks).toHaveLength(3);
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(mockAlbumId);
+      expect(result!.name).toBe('Test Album');
+      expect(result!.description).toBe('Test album description');
+      expect(result!.cover_image_url).toBe('https://example.com/cover.jpg');
+      expect(result!.user_id).toBe('33333333-3333-3333-3333-333333333333');
+      expect(result!.is_public).toBe(true);
+      expect(result!.tracks).toHaveLength(3);
     });
 
     it('should throw error when album not found', async () => {
@@ -292,7 +293,8 @@ describe('fetchAlbumContext', () => {
 
       const result = await fetchAlbumContext(mockAlbumId);
 
-      expect(result.track_count).toBe(3);
+      expect(result).not.toBeNull();
+      expect(result!.track_count).toBe(3);
     });
 
     it('should handle albums with no tracks', async () => {
@@ -339,8 +341,9 @@ describe('fetchAlbumContext', () => {
 
       const result = await fetchAlbumContext(mockAlbumId);
 
-      expect(result.track_count).toBe(0);
-      expect(result.tracks).toHaveLength(0);
+      expect(result).not.toBeNull();
+      expect(result!.track_count).toBe(0);
+      expect(result!.tracks).toHaveLength(0);
     });
   });
 
@@ -385,7 +388,8 @@ describe('fetchAlbumContext', () => {
       const result = await fetchAlbumContext(mockAlbumId);
 
       // Total duration should be 180 + 240 + 200 = 620
-      expect(result.total_duration).toBe(620);
+      expect(result).not.toBeNull();
+      expect(result!.total_duration).toBe(620);
     });
 
     it('should handle tracks with null duration', async () => {
@@ -450,7 +454,8 @@ describe('fetchAlbumContext', () => {
       const result = await fetchAlbumContext(mockAlbumId);
 
       // Total duration should be 0 + 240 = 240
-      expect(result.total_duration).toBe(240);
+      expect(result).not.toBeNull();
+      expect(result!.total_duration).toBe(240);
     });
 
     it('should return null for total duration when all tracks have null duration', async () => {
@@ -515,7 +520,8 @@ describe('fetchAlbumContext', () => {
       const result = await fetchAlbumContext(mockAlbumId);
 
       // Total duration should be null when sum is 0
-      expect(result.total_duration).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.total_duration).toBeNull();
     });
   });
 
@@ -589,12 +595,13 @@ describe('fetchAlbumContext', () => {
 
       const result = await fetchAlbumContext(mockAlbumId);
 
-      expect(result.tracks[0].position).toBe(1);
-      expect(result.tracks[0].title).toBe('Track 1');
-      expect(result.tracks[1].position).toBe(2);
-      expect(result.tracks[1].title).toBe('Track 2');
-      expect(result.tracks[2].position).toBe(3);
-      expect(result.tracks[2].title).toBe('Track 3');
+      expect(result).not.toBeNull();
+      expect(result!.tracks[0].position).toBe(1);
+      expect(result!.tracks[0].title).toBe('Track 1');
+      expect(result!.tracks[1].position).toBe(2);
+      expect(result!.tracks[1].title).toBe('Track 2');
+      expect(result!.tracks[2].position).toBe(3);
+      expect(result!.tracks[2].title).toBe('Track 3');
     });
   });
 });

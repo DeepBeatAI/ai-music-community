@@ -617,11 +617,11 @@ describe('Album Flagging - Database Integration Tests', () => {
 
       const result = await fetchAlbumContext(mockAlbumId);
 
-      expect(result).toBeDefined();
-      expect(result.id).toBe(mockAlbumId);
-      expect(result.tracks).toHaveLength(2);
-      expect(result.track_count).toBe(2);
-      expect(result.total_duration).toBe(380);
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(mockAlbumId);
+      expect(result!.tracks).toHaveLength(2);
+      expect(result!.track_count).toBe(2);
+      expect(result!.total_duration).toBe(380);
     });
 
     it('should handle album with no tracks', async () => {
@@ -680,10 +680,10 @@ describe('Album Flagging - Database Integration Tests', () => {
 
       const result = await fetchAlbumContext(mockAlbumId);
 
-      expect(result).toBeDefined();
-      expect(result.tracks).toHaveLength(0);
-      expect(result.track_count).toBe(0);
-      expect(result.total_duration).toBeNull(); // null when no tracks
+      expect(result).not.toBeNull();
+      expect(result!.tracks).toHaveLength(0);
+      expect(result!.track_count).toBe(0);
+      expect(result!.total_duration).toBeNull(); // null when no tracks
     });
 
     it('should handle album not found', async () => {
@@ -762,8 +762,9 @@ describe('Album Flagging - Database Integration Tests', () => {
 
       const result = await fetchAlbumContext(mockAlbumId);
 
-      expect(result.track_count).toBe(3);
-      expect(result.total_duration).toBe(450); // 120 + 150 + 180
+      expect(result).not.toBeNull();
+      expect(result!.track_count).toBe(3);
+      expect(result!.total_duration).toBe(450); // 120 + 150 + 180
     });
   });
 });

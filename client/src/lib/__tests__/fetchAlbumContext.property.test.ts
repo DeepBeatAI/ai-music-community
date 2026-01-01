@@ -115,14 +115,17 @@ describe('Property 5: Album Context Completeness', () => {
 
           const result = await fetchAlbumContext(albumId);
 
+          // Property: result should not be null for valid album
+          expect(result).not.toBeNull();
+
           // Property: track_count should equal the number of tracks
-          expect(result.track_count).toBe(tracks.length);
+          expect(result!.track_count).toBe(tracks.length);
 
           // Property: tracks array should contain all tracks
-          expect(result.tracks).toHaveLength(tracks.length);
+          expect(result!.tracks).toHaveLength(tracks.length);
 
           // Property: all track IDs should be present
-          const resultTrackIds = result.tracks.map((t) => t.id);
+          const resultTrackIds = result!.tracks.map((t) => t.id);
           const expectedTrackIds = tracks.map((t) => t.id);
           expect(resultTrackIds.sort()).toEqual(expectedTrackIds.sort());
         }
@@ -206,6 +209,9 @@ describe('Property 5: Album Context Completeness', () => {
 
           const result = await fetchAlbumContext(albumId);
 
+          // Property: result should not be null for valid album
+          expect(result).not.toBeNull();
+
           // Calculate expected total duration
           const expectedTotalDuration = tracks.reduce(
             (sum, track) => sum + (track.duration || 0),
@@ -214,9 +220,9 @@ describe('Property 5: Album Context Completeness', () => {
 
           // Property: total_duration should equal sum of all durations (or null if 0)
           if (expectedTotalDuration > 0) {
-            expect(result.total_duration).toBe(expectedTotalDuration);
+            expect(result!.total_duration).toBe(expectedTotalDuration);
           } else {
-            expect(result.total_duration).toBeNull();
+            expect(result!.total_duration).toBeNull();
           }
         }
       ),
@@ -299,10 +305,13 @@ describe('Property 5: Album Context Completeness', () => {
 
           const result = await fetchAlbumContext(albumId);
 
+          // Property: result should not be null for valid album
+          expect(result).not.toBeNull();
+
           // Property: tracks should be sorted by position in ascending order
-          for (let i = 1; i < result.tracks.length; i++) {
-            expect(result.tracks[i].position).toBeGreaterThanOrEqual(
-              result.tracks[i - 1].position
+          for (let i = 1; i < result!.tracks.length; i++) {
+            expect(result!.tracks[i].position).toBeGreaterThanOrEqual(
+              result!.tracks[i - 1].position
             );
           }
         }
@@ -390,6 +399,9 @@ describe('Property 5: Album Context Completeness', () => {
 
           const result = await fetchAlbumContext(albumData.id);
 
+          // Property: result should not be null for valid album
+          expect(result).not.toBeNull();
+
           // Property: all required fields should be present
           expect(result).toHaveProperty('id');
           expect(result).toHaveProperty('name');
@@ -403,12 +415,12 @@ describe('Property 5: Album Context Completeness', () => {
           expect(result).toHaveProperty('total_duration');
 
           // Property: field values should match input
-          expect(result.id).toBe(albumData.id);
-          expect(result.name).toBe(albumData.name);
-          expect(result.description).toBe(albumData.description);
-          expect(result.cover_image_url).toBe(albumData.cover_image_url);
-          expect(result.user_id).toBe(albumData.user_id);
-          expect(result.is_public).toBe(albumData.is_public);
+          expect(result!.id).toBe(albumData.id);
+          expect(result!.name).toBe(albumData.name);
+          expect(result!.description).toBe(albumData.description);
+          expect(result!.cover_image_url).toBe(albumData.cover_image_url);
+          expect(result!.user_id).toBe(albumData.user_id);
+          expect(result!.is_public).toBe(albumData.is_public);
         }
       ),
       { numRuns: 100 }

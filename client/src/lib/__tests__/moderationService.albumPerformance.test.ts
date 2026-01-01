@@ -187,7 +187,8 @@ describe('Album Flagging System - Performance Tests', () => {
 
       // Should still be under 100ms with 50 tracks
       expect(fetchTime).toBeLessThan(100);
-      expect(result.track_count).toBe(50);
+      expect(result).not.toBeNull();
+      expect(result!.track_count).toBe(50);
     });
   });
 

@@ -537,6 +537,296 @@ describe('ModerationActionPanel', () => {
         expect(moderationService.takeModerationAction).toHaveBeenCalled();
       });
     });
+
+    it('should show confirmation dialog for album removal', async () => {
+      const albumReport: Report = {
+        id: 'report-album-1',
+        reporter_id: 'user-1',
+        reported_user_id: 'user-2',
+        report_type: 'album',
+        target_id: 'album-1',
+        reason: 'inappropriate_content',
+        description: 'Inappropriate album art',
+        status: 'pending',
+        priority: 3,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+        moderator_flagged: false,
+        reviewed_by: null,
+        reviewed_at: null,
+        resolution_notes: null,
+        action_taken: null,
+      };
+
+      const mockAlbumContext = {
+        id: 'album-1',
+        name: 'Test Album',
+        description: 'Test Description',
+        cover_image_url: null,
+        user_id: 'user-2',
+        is_public: true,
+        created_at: '2024-01-01T00:00:00Z',
+        tracks: [
+          { id: 'track-1', title: 'Track 1', duration: 180, position: 1 },
+          { id: 'track-2', title: 'Track 2', duration: 200, position: 2 },
+        ],
+        track_count: 2,
+        total_duration: 380,
+      };
+
+      (moderationService.fetchAlbumContext as jest.Mock).mockResolvedValue(mockAlbumContext);
+
+      render(
+        <ModerationActionPanel
+          report={albumReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        const actionSelect = screen.getByLabelText('Action Type *');
+        expect(actionSelect).toBeInTheDocument();
+      });
+
+      // Select content removal
+      const actionSelect = screen.getByLabelText('Action Type *');
+      fireEvent.change(actionSelect, { target: { value: 'content_removed' } });
+
+      // Fill in internal notes
+      const notesTextarea = screen.getByLabelText(/Internal Notes/);
+      fireEvent.change(notesTextarea, { target: { value: 'Removing inappropriate album' } });
+
+      const submitButton = screen.getByText('Submit Action');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Confirm Action')).toBeInTheDocument();
+        expect(screen.getByText(/Are you sure you want to remove this album/)).toBeInTheDocument();
+      });
+    });
+
+    it('should show cascading options in confirmation dialog for album removal', async () => {
+      const albumReport: Report = {
+        id: 'report-album-1',
+        reporter_id: 'user-1',
+        reported_user_id: 'user-2',
+        report_type: 'album',
+        target_id: 'album-1',
+        reason: 'inappropriate_content',
+        description: 'Inappropriate album art',
+        status: 'pending',
+        priority: 3,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+        moderator_flagged: false,
+        reviewed_by: null,
+        reviewed_at: null,
+        resolution_notes: null,
+        action_taken: null,
+      };
+
+      const mockAlbumContext = {
+        id: 'album-1',
+        name: 'Test Album',
+        description: 'Test Description',
+        cover_image_url: null,
+        user_id: 'user-2',
+        is_public: true,
+        created_at: '2024-01-01T00:00:00Z',
+        tracks: [
+          { id: 'track-1', title: 'Track 1', duration: 180, position: 1 },
+          { id: 'track-2', title: 'Track 2', duration: 200, position: 2 },
+        ],
+        track_count: 2,
+        total_duration: 380,
+      };
+
+      (moderationService.fetchAlbumContext as jest.Mock).mockResolvedValue(mockAlbumContext);
+
+      render(
+        <ModerationActionPanel
+          report={albumReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        const actionSelect = screen.getByLabelText('Action Type *');
+        expect(actionSelect).toBeInTheDocument();
+      });
+
+      // Select content removal
+      const actionSelect = screen.getByLabelText('Action Type *');
+      fireEvent.change(actionSelect, { target: { value: 'content_removed' } });
+
+      // Fill in internal notes
+      const notesTextarea = screen.getByLabelText(/Internal Notes/);
+      fireEvent.change(notesTextarea, { target: { value: 'Removing inappropriate album' } });
+
+      const submitButton = screen.getByText('Submit Action');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Cascading Action Options:')).toBeInTheDocument();
+        expect(screen.getByText('Remove album and all tracks')).toBeInTheDocument();
+        expect(screen.getByText('Remove album only (keep tracks as standalone)')).toBeInTheDocument();
+      });
+    });
+
+    it('should display warning message in album removal confirmation dialog', async () => {
+      const albumReport: Report = {
+        id: 'report-album-1',
+        reporter_id: 'user-1',
+        reported_user_id: 'user-2',
+        report_type: 'album',
+        target_id: 'album-1',
+        reason: 'inappropriate_content',
+        description: 'Inappropriate album art',
+        status: 'pending',
+        priority: 3,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+        moderator_flagged: false,
+        reviewed_by: null,
+        reviewed_at: null,
+        resolution_notes: null,
+        action_taken: null,
+      };
+
+      const mockAlbumContext = {
+        id: 'album-1',
+        name: 'Test Album',
+        description: 'Test Description',
+        cover_image_url: null,
+        user_id: 'user-2',
+        is_public: true,
+        created_at: '2024-01-01T00:00:00Z',
+        tracks: [],
+        track_count: 0,
+        total_duration: 0,
+      };
+
+      (moderationService.fetchAlbumContext as jest.Mock).mockResolvedValue(mockAlbumContext);
+
+      render(
+        <ModerationActionPanel
+          report={albumReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        const actionSelect = screen.getByLabelText('Action Type *');
+        expect(actionSelect).toBeInTheDocument();
+      });
+
+      // Select content removal
+      const actionSelect = screen.getByLabelText('Action Type *');
+      fireEvent.change(actionSelect, { target: { value: 'content_removed' } });
+
+      // Fill in internal notes
+      const notesTextarea = screen.getByLabelText(/Internal Notes/);
+      fireEvent.change(notesTextarea, { target: { value: 'Removing inappropriate album' } });
+
+      const submitButton = screen.getByText('Submit Action');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Are you sure you want to remove this album/)).toBeInTheDocument();
+        expect(screen.getByText(/This action cannot be easily undone/)).toBeInTheDocument();
+      });
+    });
+
+    it('should allow option selection and submission for album removal', async () => {
+      const albumReport: Report = {
+        id: 'report-album-1',
+        reporter_id: 'user-1',
+        reported_user_id: 'user-2',
+        report_type: 'album',
+        target_id: 'album-1',
+        reason: 'inappropriate_content',
+        description: 'Inappropriate album art',
+        status: 'pending',
+        priority: 3,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+        moderator_flagged: false,
+        reviewed_by: null,
+        reviewed_at: null,
+        resolution_notes: null,
+        action_taken: null,
+      };
+
+      const mockAlbumContext = {
+        id: 'album-1',
+        name: 'Test Album',
+        description: 'Test Description',
+        cover_image_url: null,
+        user_id: 'user-2',
+        is_public: true,
+        created_at: '2024-01-01T00:00:00Z',
+        tracks: [
+          { id: 'track-1', title: 'Track 1', duration: 180, position: 1 },
+        ],
+        track_count: 1,
+        total_duration: 180,
+      };
+
+      (moderationService.fetchAlbumContext as jest.Mock).mockResolvedValue(mockAlbumContext);
+      (moderationService.takeModerationAction as jest.Mock).mockResolvedValue({
+        id: 'action-123',
+      });
+
+      render(
+        <ModerationActionPanel
+          report={albumReport}
+          onClose={mockOnClose}
+          onActionComplete={mockOnActionComplete}
+        />
+      );
+
+      await waitFor(() => {
+        const actionSelect = screen.getByLabelText('Action Type *');
+        expect(actionSelect).toBeInTheDocument();
+      });
+
+      // Select content removal
+      const actionSelect = screen.getByLabelText('Action Type *');
+      fireEvent.change(actionSelect, { target: { value: 'content_removed' } });
+
+      // Fill in internal notes
+      const notesTextarea = screen.getByLabelText(/Internal Notes/);
+      fireEvent.change(notesTextarea, { target: { value: 'Removing inappropriate album' } });
+
+      const submitButton = screen.getByText('Submit Action');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Cascading Action Options:')).toBeInTheDocument();
+      });
+
+      // Select "Remove album only" option
+      const removeAlbumOnlyRadio = screen.getByLabelText(/Remove album only/);
+      fireEvent.click(removeAlbumOnlyRadio);
+
+      // Confirm the action
+      const confirmButton = screen.getByText('Confirm');
+      fireEvent.click(confirmButton);
+
+      await waitFor(() => {
+        expect(moderationService.takeModerationAction).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cascadingOptions: {
+              removeAlbum: true,
+              removeTracks: false,
+            },
+          })
+        );
+      });
+    });
   });
 
   describe('Interactions', () => {

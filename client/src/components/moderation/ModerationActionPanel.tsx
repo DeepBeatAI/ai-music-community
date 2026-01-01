@@ -13,9 +13,13 @@ import {
   ModerationError,
   MODERATION_ERROR_CODES,
   ProfileContext,
+  AlbumContext,
+  CascadingActionOptions as CascadingOptions,
 } from '@/types/moderation';
-import { takeModerationAction, isAdmin, revokeAction, getProfileContext } from '@/lib/moderationService';
+import { takeModerationAction, isAdmin, revokeAction, getProfileContext, fetchAlbumContext } from '@/lib/moderationService';
 import { supabase } from '@/lib/supabase';
+import { AlbumContextDisplay } from './AlbumContextDisplay';
+import { CascadingActionOptions } from './CascadingActionOptions';
 
 interface ModerationActionPanelProps {
   report: Report;
@@ -59,6 +63,11 @@ export function ModerationActionPanel({
   const [profileContext, setProfileContext] = useState<ProfileContext | null>(null);
   const [loadingContext, setLoadingContext] = useState(false);
   
+  // Album context for album reports
+  const [albumContext, setAlbumContext] = useState<AlbumContext | null>(null);
+  const [loadingAlbumContext, setLoadingAlbumContext] = useState(false);
+  const [albumContextError, setAlbumContextError] = useState<string | null>(null);
+  
   // Action form state
   const [selectedAction, setSelectedAction] = useState<ModerationActionType | ''>('');
   const [suspensionDuration, setSuspensionDuration] = useState<number>(1);
@@ -67,6 +76,12 @@ export function ModerationActionPanel({
   const [internalNotes, setInternalNotes] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  
+  // Cascading action options for album removal
+  const [cascadingOptions, setCascadingOptions] = useState<CascadingOptions>({
+    removeAlbum: true,
+    removeTracks: true, // Default to removing both album and tracks
+  });
   
   // User role
   const [isAdminUser, setIsAdminUser] = useState(false);
@@ -80,6 +95,11 @@ export function ModerationActionPanel({
     // Load profile context for user reports
     if (report.report_type === 'user' && report.target_id) {
       loadProfileContext();
+    }
+    
+    // Load album context for album reports
+    if (report.report_type === 'album' && report.target_id) {
+      loadAlbumContext();
     }
     
     // If actionIdToReverse is provided, load that action and show reversal dialog
@@ -143,6 +163,22 @@ export function ModerationActionPanel({
       // The panel should still be usable without it
     } finally {
       setLoadingContext(false);
+    }
+  };
+
+  const loadAlbumContext = async () => {
+    if (!report.target_id) return;
+    
+    try {
+      setLoadingAlbumContext(true);
+      setAlbumContextError(null);
+      const context = await fetchAlbumContext(report.target_id);
+      setAlbumContext(context);
+    } catch (error) {
+      console.error('Failed to load album context:', error);
+      setAlbumContextError(error instanceof Error ? error.message : 'Failed to load album context');
+    } finally {
+      setLoadingAlbumContext(false);
     }
   };
 
@@ -314,10 +350,11 @@ export function ModerationActionPanel({
         reason: string;
         internalNotes: string;
         notificationMessage?: string;
-        targetType?: 'post' | 'comment' | 'track' | 'user';
+        targetType?: 'post' | 'comment' | 'track' | 'user' | 'album';
         targetId?: string;
         durationDays?: number;
         restrictionType?: RestrictionType;
+        cascadingOptions?: CascadingOptions;
       } = {
         reportId: report.id,
         actionType: selectedAction,
@@ -326,7 +363,7 @@ export function ModerationActionPanel({
         internalNotes,
         notificationMessage: notificationMessage || undefined,
         // Always include target info from the report for all action types
-        targetType: report.report_type as 'post' | 'comment' | 'track' | 'user',
+        targetType: report.report_type as 'post' | 'comment' | 'track' | 'user' | 'album',
         targetId: report.target_id,
       };
 
@@ -339,6 +376,11 @@ export function ModerationActionPanel({
       if (selectedAction === 'restriction_applied') {
         actionParams.restrictionType = restrictionType;
         actionParams.durationDays = restrictionDuration;
+      }
+
+      // Add cascading options for album removal
+      if (selectedAction === 'content_removed' && report.report_type === 'album') {
+        actionParams.cascadingOptions = cascadingOptions;
       }
 
       await takeModerationAction(actionParams);
@@ -633,6 +675,15 @@ export function ModerationActionPanel({
             </div>
           )}
 
+          {/* Album Context Section (for album reports only) */}
+          {report.report_type === 'album' && (
+            <AlbumContextDisplay
+              albumContext={albumContext}
+              loading={loadingAlbumContext}
+              error={albumContextError}
+            />
+          )}
+
           {/* Reported Content Section */}
           <div className="bg-gray-700 rounded-lg p-5 space-y-3">
             <h3 className="text-lg font-semibold text-white">Reported Content</h3>
@@ -876,10 +927,24 @@ export function ModerationActionPanel({
                 'Are you sure you want to permanently suspend this user? This action cannot be easily undone.'
               ) : selectedAction === 'user_suspended' ? (
                 'Are you sure you want to suspend this user? This action cannot be easily undone.'
+              ) : selectedAction === 'content_removed' && report.report_type === 'album' ? (
+                'Are you sure you want to remove this album? This action cannot be easily undone.'
               ) : (
                 `Are you sure you want to ${ACTION_TYPE_LABELS[selectedAction as ModerationActionType].toLowerCase()}? This action cannot be easily undone.`
               )}
             </p>
+            
+            {/* Show cascading options for album removal */}
+            {selectedAction === 'content_removed' && report.report_type === 'album' && (
+              <div className="mb-6">
+                <CascadingActionOptions
+                  value={cascadingOptions}
+                  onChange={setCascadingOptions}
+                  trackCount={albumContext?.track_count}
+                />
+              </div>
+            )}
+            
             <div className="flex items-center justify-end space-x-3">
               <button
                 onClick={() => setShowConfirmDialog(false)}

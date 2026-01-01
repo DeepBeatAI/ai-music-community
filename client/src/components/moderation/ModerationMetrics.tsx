@@ -522,6 +522,184 @@ export function ModerationMetrics() {
         )}
       </div>
 
+      {/* Album Metrics Section */}
+      {metrics.albumMetrics && (
+        <>
+          {/* Album Reports Overview */}
+          <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Album Reports Overview</h3>
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-900 text-purple-200">
+                📀 Album Metrics
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Total Album Reports */}
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <span className="text-sm text-gray-400 block mb-2">Total Album Reports</span>
+                <div className="text-3xl font-bold text-purple-400">
+                  {metrics.albumMetrics.totalAlbumReports}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">In selected period</p>
+              </div>
+
+              {/* Album vs Track Percentage */}
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <span className="text-sm text-gray-400 block mb-2">Album vs Track Reports</span>
+                <div className="text-3xl font-bold text-blue-400">
+                  {metrics.albumMetrics.albumVsTrackPercentage.toFixed(1)}%
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Albums of total audio reports</p>
+              </div>
+
+              {/* Average Tracks per Album */}
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <span className="text-sm text-gray-400 block mb-2">Avg Tracks per Album</span>
+                <div className="text-3xl font-bold text-cyan-400">
+                  {metrics.albumMetrics.averageTracksPerReportedAlbum.toFixed(1)}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Tracks in reported albums</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Top Album Report Reasons */}
+          {metrics.albumMetrics.topAlbumReasons.length > 0 && (
+            <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Most Common Album Report Reasons
+              </h3>
+              <div className="space-y-3">
+                {metrics.albumMetrics.topAlbumReasons.map((item, index) => {
+                  const total = metrics.albumMetrics!.topAlbumReasons.reduce(
+                    (sum, r) => sum + r.count,
+                    0
+                  );
+                  const percentage = ((item.count / total) * 100).toFixed(1);
+
+                  return (
+                    <div key={item.reason}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-500 font-mono text-sm">#{index + 1}</span>
+                          <span className="text-gray-300">
+                            {REASON_LABELS[item.reason as keyof typeof REASON_LABELS] ||
+                              item.reason}
+                          </span>
+                        </div>
+                        <span className="text-gray-400">
+                          {item.count} ({percentage}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-2">
+                        <div
+                          className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Cascading Action Statistics */}
+          <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Cascading Action Statistics
+            </h3>
+            <p className="text-gray-400 text-sm mb-4">
+              When albums are removed, moderators can choose to remove all tracks or keep them as
+              standalone tracks.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              {/* Total Cascading Actions */}
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <span className="text-sm text-gray-400 block mb-2">Total Album Removals</span>
+                <div className="text-3xl font-bold text-red-400">
+                  {metrics.albumMetrics.cascadingActionStats.totalCascadingActions}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Albums removed</p>
+              </div>
+
+              {/* Album + Tracks Removed */}
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <span className="text-sm text-gray-400 block mb-2">Album + Tracks</span>
+                <div className="text-3xl font-bold text-orange-400">
+                  {metrics.albumMetrics.cascadingActionStats.albumAndTracksRemoved}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Full cascading removals</p>
+              </div>
+
+              {/* Album Only Removed */}
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <span className="text-sm text-gray-400 block mb-2">Album Only</span>
+                <div className="text-3xl font-bold text-yellow-400">
+                  {metrics.albumMetrics.cascadingActionStats.albumOnlyRemoved}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Tracks preserved</p>
+              </div>
+
+              {/* Cascading Percentage */}
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <span className="text-sm text-gray-400 block mb-2">Cascading Rate</span>
+                <div className="text-3xl font-bold text-pink-400">
+                  {metrics.albumMetrics.cascadingActionStats.cascadingPercentage.toFixed(1)}%
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Full cascade vs selective</p>
+              </div>
+            </div>
+
+            {/* Visual breakdown */}
+            {metrics.albumMetrics.cascadingActionStats.totalCascadingActions > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-400">Removal Type Distribution</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-4 flex overflow-hidden">
+                  <div
+                    className="bg-orange-500 h-4 transition-all duration-300"
+                    style={{
+                      width: `${metrics.albumMetrics.cascadingActionStats.cascadingPercentage}%`,
+                    }}
+                    title={`Album + Tracks: ${metrics.albumMetrics.cascadingActionStats.albumAndTracksRemoved}`}
+                  />
+                  <div
+                    className="bg-yellow-500 h-4 transition-all duration-300"
+                    style={{
+                      width: `${100 - metrics.albumMetrics.cascadingActionStats.cascadingPercentage}%`,
+                    }}
+                    title={`Album Only: ${metrics.albumMetrics.cascadingActionStats.albumOnlyRemoved}`}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                    <span className="text-gray-400">
+                      Album + Tracks (
+                      {metrics.albumMetrics.cascadingActionStats.cascadingPercentage.toFixed(1)}%)
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+                    <span className="text-gray-400">
+                      Album Only (
+                      {(
+                        100 - metrics.albumMetrics.cascadingActionStats.cascadingPercentage
+                      ).toFixed(1)}
+                      %)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Moderator Performance (Admin Only) */}
       {isAdminUser && moderatorPerformanceWithUsernames.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4 sm:p-6">

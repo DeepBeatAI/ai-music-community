@@ -1016,4 +1016,324 @@ describe('Moderation Service - Security Tests', () => {
       }
     });
   });
+
+  /**
+   * Album-Specific Security Tests
+   * Requirements: 9.6 (Album Flagging System)
+   */
+  describe('Album Security Tests', () => {
+    /**
+     * Test SQL injection prevention in album context fetching
+     * Requirements: 9.6
+     */
+    it('should prevent SQL injection in album UUID parameters', async () => {
+      const { fetchAlbumContext } = require('@/lib/moderationService');
+      
+      const invalidUUID = "12345678-1234-1234-1234-123456789012'; DROP TABLE albums; --";
+
+      // Mock authenticated moderator
+      (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+        data: { user: { id: 'moderator-123' } },
+        error: null,
+      });
+
+      // Mock moderator role
+      const mockFrom = jest.fn((table: string) => {
+        if (table === 'user_roles') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockResolvedValue({
+                  data: [{ role_type: 'moderator' }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              then: jest.fn().mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
+        };
+      });
+      (supabase.from as jest.Mock).mockImplementation(mockFrom);
+
+      await expect(fetchAlbumContext(invalidUUID)).rejects.toThrow(ModerationError);
+      await expect(fetchAlbumContext(invalidUUID)).rejects.toMatchObject({
+        code: MODERATION_ERROR_CODES.VALIDATION_ERROR,
+      });
+    });
+
+    /**
+     * Test XSS prevention in album context display
+     * Requirements: 9.6
+     */
+    it('should sanitize XSS attempts in album report descriptions', async () => {
+      const xssAttempt = '<script>alert("XSS")</script>';
+
+      const params: ReportParams = {
+        reportType: 'album',
+        targetId: '12345678-1234-1234-1234-123456789012',
+        reason: 'other',
+        description: xssAttempt,
+      };
+
+      // Mock authenticated user
+      (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+        data: { user: { id: 'user-123' } },
+        error: null,
+      });
+
+      const mockInsert = jest.fn();
+
+      // Mock database responses
+      const mockFrom = jest.fn((table: string) => {
+        if (table === 'moderation_reports') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  eq: jest.fn().mockReturnValue({
+                    gte: jest.fn().mockReturnValue({
+                      maybeSingle: jest.fn().mockResolvedValue({
+                        data: null,
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+                gte: jest.fn().mockResolvedValue({
+                  error: null,
+                  count: 0,
+                }),
+              }),
+            }),
+            insert: mockInsert.mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: {
+                    id: 'report-123',
+                    report_type: 'album',
+                    target_id: '12345678-1234-1234-1234-123456789012',
+                    reason: 'other',
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'albums') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: { user_id: 'other-user-id' },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              gte: jest.fn().mockResolvedValue({ error: null, count: 0 }),
+            }),
+          }),
+        };
+      });
+      (supabase.from as jest.Mock).mockImplementation(mockFrom);
+
+      await submitReport(params);
+
+      // Verify XSS was sanitized in the insert call
+      expect(mockInsert).toHaveBeenCalled();
+      const insertedData = mockInsert.mock.calls[0][0];
+      // Verify dangerous tags were removed/escaped
+      expect(insertedData.description).not.toContain('<script>');
+      expect(insertedData.description).not.toContain('</script>');
+      // Verify the description was sanitized (HTML tags removed)
+      expect(insertedData.description).toBeDefined();
+      expect(typeof insertedData.description).toBe('string');
+    });
+
+    /**
+     * Test invalid UUID rejection for album reports
+     * Requirements: 9.6
+     */
+    it('should reject invalid UUID format for album reports', async () => {
+      const invalidUUIDs = [
+        'not-a-uuid',
+        '12345',
+        'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+        '12345678-1234-1234-1234-12345678901', // Too short
+        '12345678-1234-1234-1234-1234567890123', // Too long
+      ];
+
+      for (const invalidUUID of invalidUUIDs) {
+        const params: ReportParams = {
+          reportType: 'album',
+          targetId: invalidUUID,
+          reason: 'spam',
+        };
+
+        await expect(submitReport(params)).rejects.toThrow(ModerationError);
+        await expect(submitReport(params)).rejects.toMatchObject({
+          code: MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        });
+      }
+    });
+
+    /**
+     * Test invalid cascading options rejection
+     * Requirements: 9.6
+     */
+    it('should reject invalid cascading options for album actions', async () => {
+      // Mock authenticated moderator
+      (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+        data: { user: { id: 'moderator-123' } },
+        error: null,
+      });
+
+      // Mock database responses
+      const mockFrom = jest.fn((table: string) => {
+        if (table === 'user_roles') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockResolvedValue({
+                  data: [{ role_type: 'moderator' }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'moderation_reports') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  then: jest.fn().mockResolvedValue({ error: null, count: 0 }),
+                }),
+                single: jest.fn().mockResolvedValue({
+                  data: {
+                    id: 'report-123',
+                    report_type: 'album',
+                    target_id: '12345678-1234-1234-1234-123456789012',
+                    reporter_id: 'some-user',
+                    reported_user_id: 'target-user',
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              then: jest.fn().mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
+        };
+      });
+      (supabase.from as jest.Mock).mockImplementation(mockFrom);
+
+      // Test with invalid cascading options (both false)
+      const params: ModerationActionParams = {
+        reportId: 'report-123',
+        actionType: 'content_removed',
+        targetUserId: 'target-user',
+        targetType: 'album',
+        targetId: '12345678-1234-1234-1234-123456789012',
+        reason: 'Test reason',
+        cascadingOptions: {
+          removeAlbum: false,
+          removeTracks: false,
+        },
+      };
+
+      await expect(takeModerationAction(params)).rejects.toThrow(ModerationError);
+      await expect(takeModerationAction(params)).rejects.toMatchObject({
+        code: MODERATION_ERROR_CODES.VALIDATION_ERROR,
+      });
+    });
+
+    /**
+     * Test that album report type is validated
+     * Requirements: 9.6
+     */
+    it('should validate album report type in moderation actions', async () => {
+      // Mock authenticated moderator
+      (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+        data: { user: { id: 'moderator-123' } },
+        error: null,
+      });
+
+      // Mock database responses
+      const mockFrom = jest.fn((table: string) => {
+        if (table === 'user_roles') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockResolvedValue({
+                  data: [{ role_type: 'moderator' }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'moderation_reports') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  then: jest.fn().mockResolvedValue({ error: null, count: 0 }),
+                }),
+                single: jest.fn().mockResolvedValue({
+                  data: {
+                    id: 'report-123',
+                    report_type: 'album',
+                    target_id: '12345678-1234-1234-1234-123456789012',
+                    reporter_id: 'some-user',
+                    reported_user_id: 'target-user',
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              then: jest.fn().mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
+        };
+      });
+      (supabase.from as jest.Mock).mockImplementation(mockFrom);
+
+      // Test with mismatched target type (report is album but action targets post)
+      const params: ModerationActionParams = {
+        reportId: 'report-123',
+        actionType: 'content_removed',
+        targetUserId: 'target-user',
+        targetType: 'post', // Mismatch - report is album
+        targetId: '12345678-1234-1234-1234-123456789012',
+        reason: 'Test reason',
+      };
+
+      await expect(takeModerationAction(params)).rejects.toThrow(ModerationError);
+      await expect(takeModerationAction(params)).rejects.toMatchObject({
+        code: MODERATION_ERROR_CODES.VALIDATION_ERROR,
+      });
+    });
+  });
 });

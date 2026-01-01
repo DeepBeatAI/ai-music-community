@@ -230,6 +230,8 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
         return '🎵';
       case 'user':
         return '👤';
+      case 'album':
+        return '💿';
       default:
         return '📄';
     }

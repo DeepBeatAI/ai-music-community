@@ -31,6 +31,8 @@ import {
   StateChangeEntry,
   StateChangeAction,
   ProfileContext,
+  AlbumContext,
+  CascadingActionOptions,
 } from '@/types/moderation';
 
 // ============================================================================
@@ -96,6 +98,7 @@ function getContentTypeLabel(reportType: ReportType): string {
     comment: 'Comment',
     track: 'Track',
     user: 'User',
+    album: 'Album',
   };
 
   return labels[reportType] || reportType.charAt(0).toUpperCase() + reportType.slice(1);
@@ -271,7 +274,7 @@ async function notifyModeratorsOfHighPriorityReport(report: Report, priority: nu
  */
 function validateReportParams(params: ReportParams): void {
   // Validate report type
-  const validReportTypes = ['post', 'comment', 'track', 'user'];
+  const validReportTypes = ['post', 'comment', 'track', 'user', 'album'];
   if (!validReportTypes.includes(params.reportType)) {
     throw new ModerationError(
       'Invalid report type',
@@ -334,7 +337,7 @@ function validateReportParams(params: ReportParams): void {
  */
 function validateModeratorFlagParams(params: ModeratorFlagParams): void {
   // Validate report type
-  const validReportTypes = ['post', 'comment', 'track', 'user'];
+  const validReportTypes = ['post', 'comment', 'track', 'user', 'album'];
   if (!validReportTypes.includes(params.reportType)) {
     throw new ModerationError(
       'Invalid report type',
@@ -859,6 +862,10 @@ async function getReportedUserId(
         break;
       case 'track':
         tableName = 'tracks';
+        userIdColumn = 'user_id';
+        break;
+      case 'album':
+        tableName = 'albums';
         userIdColumn = 'user_id';
         break;
       default:
@@ -1452,6 +1459,118 @@ export async function getProfileContext(userId: string): Promise<ProfileContext>
   }
 }
 
+/**
+ * Get album context for moderation panel
+ * Requirements: 3.3, 3.4, 3.5
+ * 
+ * This function fetches comprehensive context about an album for display
+ * in the moderation panel when reviewing album reports. It includes album
+ * metadata, tracks, track count, and total duration.
+ * 
+ * @param albumId - Album ID to get context for
+ * @returns Album context data
+ * @throws ModerationError if database query fails or album not found
+ */
+export async function fetchAlbumContext(albumId: string): Promise<AlbumContext> {
+  try {
+    // Validate album ID
+    if (!isValidUUID(albumId)) {
+      throw new ModerationError(
+        'Invalid album ID format',
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        { albumId }
+      );
+    }
+
+    // Verify moderator role
+    await verifyModeratorRole();
+
+    // Fetch album with tracks using Supabase join query
+    const { data: album, error: albumError } = await supabase
+      .from('albums')
+      .select(`
+        id,
+        name,
+        description,
+        cover_image_url,
+        user_id,
+        is_public,
+        created_at,
+        album_tracks (
+          position,
+          track:tracks (
+            id,
+            title,
+            duration
+          )
+        )
+      `)
+      .eq('id', albumId)
+      .maybeSingle();
+
+    if (albumError) {
+      throw new ModerationError(
+        'Failed to fetch album context',
+        MODERATION_ERROR_CODES.DATABASE_ERROR,
+        { albumId, originalError: albumError }
+      );
+    }
+
+    if (!album) {
+      throw new ModerationError(
+        'Album not found',
+        MODERATION_ERROR_CODES.NOT_FOUND,
+        { albumId }
+      );
+    }
+
+    // Extract and format tracks from the join result
+    const tracks = (album.album_tracks || [])
+      .map((at: any) => ({
+        id: at.track?.id || '',
+        title: at.track?.title || '',
+        duration: at.track?.duration || null,
+        position: at.position,
+      }))
+      .filter((track: any) => track.id) // Filter out any invalid tracks
+      .sort((a: any, b: any) => a.position - b.position); // Sort by position
+
+    // Calculate track count
+    const track_count = tracks.length;
+
+    // Calculate total duration (sum of all track durations)
+    // Return null if all tracks have null duration
+    const total_duration = tracks.reduce((sum: number | null, track: any) => {
+      if (track.duration === null) {
+        return sum;
+      }
+      return (sum || 0) + track.duration;
+    }, null as number | null);
+
+    return {
+      id: album.id,
+      name: album.name,
+      description: album.description,
+      cover_image_url: album.cover_image_url,
+      user_id: album.user_id,
+      is_public: album.is_public,
+      created_at: album.created_at,
+      tracks,
+      track_count,
+      total_duration,
+    };
+  } catch (error) {
+    if (error instanceof ModerationError) {
+      throw error;
+    }
+    throw new ModerationError(
+      'An unexpected error occurred while fetching album context',
+      MODERATION_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
 // ============================================================================
 // Moderation Action Functions
 // ============================================================================
@@ -1501,7 +1620,7 @@ function validateModerationActionParams(params: ModerationActionParams): void {
 
   // Validate target type if provided
   if (params.targetType) {
-    const validTargetTypes = ['post', 'comment', 'track', 'user'];
+    const validTargetTypes = ['post', 'comment', 'track', 'user', 'album'];
     if (!validTargetTypes.includes(params.targetType)) {
       throw new ModerationError(
         'Invalid target type',
@@ -1555,6 +1674,203 @@ function validateModerationActionParams(params: ModerationActionParams): void {
 }
 
 /**
+ * Remove album with cascading options
+ * Requirements: 4.3, 4.4, 4.5, 4.6
+ * 
+ * @param albumId - Album ID to remove
+ * @param cascadingOptions - Cascading deletion options
+ * @param parentActionId - Parent moderation action ID
+ * @param targetUserId - User ID of album owner
+ * @param reason - Reason for removal
+ * @throws ModerationError if deletion fails
+ */
+async function removeAlbumWithCascading(
+  albumId: string,
+  cascadingOptions: CascadingActionOptions,
+  parentActionId: string | undefined,
+  targetUserId: string,
+  reason: string
+): Promise<void> {
+  try {
+    // Get current user for moderator ID
+    const user = await getCurrentUser();
+
+    // Fetch album context to get track information
+    const albumContext = await fetchAlbumContext(albumId);
+    const trackIds = albumContext.tracks.map(track => track.id);
+
+    console.log(`[Moderation] Removing album ${albumId} with cascading options:`, {
+      removeAlbum: cascadingOptions.removeAlbum,
+      removeTracks: cascadingOptions.removeTracks,
+      trackCount: trackIds.length,
+    });
+
+    // If cascading to tracks, create moderation_action records for each track
+    if (cascadingOptions.removeTracks && trackIds.length > 0) {
+      const trackActions = trackIds.map(trackId => ({
+        moderator_id: user.id,
+        target_user_id: targetUserId,
+        action_type: 'content_removed' as const,
+        target_type: 'track' as const,
+        target_id: trackId,
+        reason: reason,
+        metadata: {
+          parent_album_action: parentActionId,
+          parent_album_id: albumId,
+          cascaded_from_album: true,
+        },
+      }));
+
+      const { error: tracksError } = await supabase
+        .from('moderation_actions')
+        .insert(trackActions);
+
+      if (tracksError) {
+        console.error('[Moderation] Failed to create track moderation actions:', tracksError);
+        // Log error but don't fail entire operation
+      } else {
+        console.log(`[Moderation] Created ${trackActions.length} track moderation actions`);
+      }
+    }
+
+    // Update parent action metadata with cascading information
+    if (parentActionId) {
+      const { error: updateError } = await supabase
+        .from('moderation_actions')
+        .update({
+          metadata: {
+            cascading_action: cascadingOptions.removeTracks,
+            affected_tracks: trackIds,
+            track_count: trackIds.length,
+          },
+        })
+        .eq('id', parentActionId);
+
+      if (updateError) {
+        console.error('[Moderation] Failed to update parent action metadata:', updateError);
+        // Log error but don't fail entire operation
+      }
+    }
+
+    // Delete the album and its relationships
+    // CRITICAL: We must delete album_tracks entries BEFORE deleting the album in BOTH cases
+    // because album_tracks has a foreign key to albums that may prevent deletion
+    
+    if (cascadingOptions.removeTracks && trackIds.length > 0) {
+      // Cascading delete: Remove tracks from junction table, then delete tracks, then delete album
+      
+      // Step 1: Remove album_tracks entries (must be done first)
+      const { error: junctionError } = await supabase
+        .from('album_tracks')
+        .delete()
+        .eq('album_id', albumId);
+
+      if (junctionError) {
+        console.error('[Moderation] Failed to remove album_tracks entries:', junctionError);
+        throw new ModerationError(
+          'Failed to remove album_tracks entries during cascading album removal',
+          MODERATION_ERROR_CODES.DATABASE_ERROR,
+          { originalError: junctionError }
+        );
+      } else {
+        console.log(`[Moderation] Removed ${trackIds.length} entries from album_tracks junction table`);
+      }
+
+      // Step 2: Delete all tracks explicitly
+      // Note: We delete tracks one by one to avoid potential RLS policy issues with bulk deletes
+      const trackDeletionResults = [];
+      for (const trackId of trackIds) {
+        const { error: trackDeleteError } = await supabase
+          .from('tracks')
+          .delete()
+          .eq('id', trackId);
+
+        if (trackDeleteError) {
+          console.error(`[Moderation] Failed to delete track ${trackId}:`, trackDeleteError);
+          trackDeletionResults.push({ trackId, success: false, error: trackDeleteError });
+        } else {
+          trackDeletionResults.push({ trackId, success: true });
+        }
+      }
+
+      // Check if any tracks failed to delete
+      const failedDeletions = trackDeletionResults.filter(r => !r.success);
+      if (failedDeletions.length > 0) {
+        console.error('[Moderation] Some tracks failed to delete:', {
+          failedCount: failedDeletions.length,
+          totalCount: trackIds.length,
+          failures: failedDeletions,
+        });
+        throw new ModerationError(
+          `Failed to delete ${failedDeletions.length} of ${trackIds.length} tracks during cascading album removal`,
+          MODERATION_ERROR_CODES.DATABASE_ERROR,
+          { failedDeletions, trackIds, trackCount: trackIds.length }
+        );
+      } else {
+        console.log(`[Moderation] Successfully deleted ${trackIds.length} tracks`);
+      }
+    } else if (!cascadingOptions.removeTracks && trackIds.length > 0) {
+      // Selective delete: Remove tracks from album_tracks junction table only (keep tracks as standalone)
+      const { error: junctionError } = await supabase
+        .from('album_tracks')
+        .delete()
+        .eq('album_id', albumId);
+
+      if (junctionError) {
+        console.error('[Moderation] Failed to remove album_tracks entries:', junctionError);
+        throw new ModerationError(
+          'Failed to remove album_tracks entries during selective album removal',
+          MODERATION_ERROR_CODES.DATABASE_ERROR,
+          { originalError: junctionError }
+        );
+      } else {
+        console.log(`[Moderation] Removed ${trackIds.length} tracks from album_tracks junction table (tracks kept in library)`);
+      }
+    }
+
+    // Delete the album record
+    const { data, error } = await supabase
+      .from('albums')
+      .delete()
+      .eq('id', albumId)
+      .select();
+
+    if (error) {
+      console.error('[Moderation] Failed to remove album:', {
+        error,
+        code: error.code,
+        message: error.message,
+        albumId,
+      });
+      handleDatabaseError(error, 'remove album');
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('[Moderation] No album was deleted. It may not exist or RLS policies may be blocking deletion.', {
+        albumId,
+      });
+      // Don't throw an error - album might already be deleted
+    } else {
+      console.log('[Moderation] Successfully removed album:', {
+        albumId,
+        cascadedToTracks: cascadingOptions.removeTracks,
+        trackCount: trackIds.length,
+      });
+    }
+  } catch (error) {
+    console.error('Exception while removing album with cascading:', error);
+    if (error instanceof ModerationError) {
+      throw error;
+    }
+    throw new ModerationError(
+      'An unexpected error occurred while removing album',
+      MODERATION_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
  * Execute a specific moderation action
  * Requirements: 5.1, 5.2, 5.3
  * 
@@ -1564,13 +1880,18 @@ function validateModerationActionParams(params: ModerationActionParams): void {
  * @throws ModerationError if action fails
  */
 async function executeAction(params: ModerationActionParams, actionId?: string): Promise<void> {
-  const { actionType, targetType, targetId, targetUserId, durationDays } = params;
+  const { actionType, targetType, targetId, targetUserId, durationDays, cascadingOptions } = params;
 
   switch (actionType) {
     case 'content_removed':
       // Delete the content permanently
       if (targetType && targetId) {
-        await removeContent(targetType, targetId);
+        // Handle album cascading deletion
+        if (targetType === 'album' && cascadingOptions) {
+          await removeAlbumWithCascading(targetId, cascadingOptions, actionId, targetUserId, params.reason);
+        } else {
+          await removeContent(targetType, targetId);
+        }
       }
       break;
 
@@ -1848,10 +2169,14 @@ export async function takeModerationAction(
     }
 
     // Send notification to the target user (if action affects them)
-    // Requirements: 7.1, 7.2, 7.3, 7.4
+    // Requirements: 7.1, 7.2, 7.3, 7.4, 5.1, 5.2, 5.3
     if (params.targetUserId && params.actionType !== 'content_approved') {
       try {
         const { sendModerationNotification } = await import('@/lib/moderationNotifications');
+        
+        // Determine if this is an album removal with cascading
+        const albumCascadingToTracks = params.targetType === 'album' && 
+                                       params.cascadingOptions?.removeTracks === true;
         
         const notificationId = await sendModerationNotification(params.targetUserId, {
           actionType: params.actionType,
@@ -1861,6 +2186,7 @@ export async function takeModerationAction(
           expiresAt: expiresAt || undefined,
           customMessage: params.notificationMessage, // Use notification message as additional info
           restrictionType: params.restrictionType,
+          albumCascadingToTracks, // Pass cascading information for album notifications
         });
 
         // Update notification_sent flag and notification_id
@@ -1920,7 +2246,8 @@ async function removeContent(contentType: string, contentId: string): Promise<vo
   try {
     const tableName = contentType === 'post' ? 'posts' : 
                      contentType === 'comment' ? 'comments' : 
-                     contentType === 'track' ? 'tracks' : null;
+                     contentType === 'track' ? 'tracks' :
+                     contentType === 'album' ? 'albums' : null;
 
     if (!tableName) {
       throw new ModerationError(
@@ -3999,6 +4326,18 @@ export interface ModerationMetrics {
     reportVolume: Array<{ date: string; count: number }>;
     resolutionRate: Array<{ date: string; rate: number }>;
   };
+  albumMetrics?: {
+    totalAlbumReports: number;
+    albumVsTrackPercentage: number;
+    topAlbumReasons: Array<{ reason: string; count: number }>;
+    averageTracksPerReportedAlbum: number;
+    cascadingActionStats: {
+      totalCascadingActions: number;
+      albumAndTracksRemoved: number;
+      albumOnlyRemoved: number;
+      cascadingPercentage: number;
+    };
+  };
 }
 
 /**
@@ -5465,6 +5804,125 @@ export async function calculateModerationMetrics(
       trends = await calculateMetricsTrends(dateRange);
     }
 
+    // Calculate album metrics
+    let albumMetrics: ModerationMetrics['albumMetrics'];
+    
+    // Fetch album reports count
+    const { count: albumReportsCount } = await supabase
+      .from('moderation_reports')
+      .select('id', { count: 'exact', head: true })
+      .eq('report_type', 'album')
+      .gte('created_at', effectiveStartDate)
+      .lte('created_at', effectiveEndDate);
+
+    // Fetch track reports count for comparison
+    const { count: trackReportsCount } = await supabase
+      .from('moderation_reports')
+      .select('id', { count: 'exact', head: true })
+      .eq('report_type', 'track')
+      .gte('created_at', effectiveStartDate)
+      .lte('created_at', effectiveEndDate);
+
+    // Calculate album vs track percentage
+    const totalAlbumAndTrackReports = (albumReportsCount || 0) + (trackReportsCount || 0);
+    const albumVsTrackPercentage = totalAlbumAndTrackReports > 0
+      ? ((albumReportsCount || 0) / totalAlbumAndTrackReports) * 100
+      : 0;
+
+    // Fetch top album report reasons
+    const { data: albumReports } = await supabase
+      .from('moderation_reports')
+      .select('reason')
+      .eq('report_type', 'album')
+      .gte('created_at', effectiveStartDate)
+      .lte('created_at', effectiveEndDate);
+
+    const albumReasonCounts: Record<string, number> = {};
+    if (albumReports) {
+      albumReports.forEach((report) => {
+        albumReasonCounts[report.reason] = (albumReasonCounts[report.reason] || 0) + 1;
+      });
+    }
+
+    const topAlbumReasons = Object.entries(albumReasonCounts)
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Calculate average tracks per reported album
+    const { data: albumReportIds } = await supabase
+      .from('moderation_reports')
+      .select('target_id')
+      .eq('report_type', 'album')
+      .gte('created_at', effectiveStartDate)
+      .lte('created_at', effectiveEndDate);
+
+    let averageTracksPerReportedAlbum = 0;
+    if (albumReportIds && albumReportIds.length > 0) {
+      const albumIds = albumReportIds.map(r => r.target_id);
+      
+      // Fetch track counts for each album
+      const { data: albumTrackCounts } = await supabase
+        .from('album_tracks')
+        .select('album_id')
+        .in('album_id', albumIds);
+
+      if (albumTrackCounts) {
+        const trackCountsByAlbum: Record<string, number> = {};
+        albumTrackCounts.forEach((at) => {
+          trackCountsByAlbum[at.album_id] = (trackCountsByAlbum[at.album_id] || 0) + 1;
+        });
+
+        const totalTracks = Object.values(trackCountsByAlbum).reduce((sum, count) => sum + count, 0);
+        const albumsWithTracks = Object.keys(trackCountsByAlbum).length;
+        averageTracksPerReportedAlbum = albumsWithTracks > 0 ? totalTracks / albumsWithTracks : 0;
+      }
+    }
+
+    // Calculate cascading action statistics
+    const { data: albumActions } = await supabase
+      .from('moderation_actions')
+      .select('metadata')
+      .eq('target_type', 'album')
+      .eq('action_type', 'content_removed')
+      .gte('created_at', effectiveStartDate)
+      .lte('created_at', effectiveEndDate);
+
+    let totalCascadingActions = 0;
+    let albumAndTracksRemoved = 0;
+    let albumOnlyRemoved = 0;
+
+    if (albumActions) {
+      albumActions.forEach((action) => {
+        const metadata = action.metadata as { cascading_action?: boolean; affected_tracks?: string[] } | null;
+        if (metadata?.cascading_action !== undefined) {
+          totalCascadingActions++;
+          if (metadata.cascading_action && metadata.affected_tracks && metadata.affected_tracks.length > 0) {
+            albumAndTracksRemoved++;
+          } else {
+            albumOnlyRemoved++;
+          }
+        }
+      });
+    }
+
+    const cascadingPercentage = totalCascadingActions > 0
+      ? (albumAndTracksRemoved / totalCascadingActions) * 100
+      : 0;
+
+    albumMetrics = {
+      totalAlbumReports: albumReportsCount || 0,
+      albumVsTrackPercentage: Math.round(albumVsTrackPercentage * 10) / 10,
+      topAlbumReasons,
+      averageTracksPerReportedAlbum: Math.round(averageTracksPerReportedAlbum * 10) / 10,
+      cascadingActionStats: {
+        totalCascadingActions,
+        albumAndTracksRemoved,
+        albumOnlyRemoved,
+        cascadingPercentage: Math.round(cascadingPercentage * 10) / 10,
+      },
+    };
+
     return {
       reportsReceived: {
         today: todayReports.count || 0,
@@ -5485,6 +5943,7 @@ export async function calculateModerationMetrics(
       moderatorPerformance,
       slaCompliance,
       trends,
+      albumMetrics,
     };
   } catch (error) {
     if (error instanceof ModerationError) {

@@ -32,6 +32,7 @@ export interface NotificationTemplateParams {
   expiresAt?: string;
   customMessage?: string;
   restrictionType?: RestrictionType;
+  albumCascadingToTracks?: boolean; // For album removals: true if tracks also removed, false if only album removed
 }
 
 /**
@@ -70,6 +71,54 @@ function generateNotificationTitle(actionType: ModerationActionType): string {
     default:
       return 'Moderation Action';
   }
+}
+
+/**
+ * Generate notification message for album removal (album + tracks)
+ * Requirements: 5.1, 5.2
+ * 
+ * @param params - Notification parameters
+ * @returns Notification message
+ */
+function generateAlbumRemovedWithTracksMessage(params: NotificationTemplateParams): string {
+  const { reason, customMessage } = params;
+  
+  let message = 'Your album and all tracks within it have been removed for violating our community guidelines.\n\n';
+  message += `Reason: ${reason}\n\n`;
+  
+  if (customMessage) {
+    message += `Additional information: ${customMessage}\n\n`;
+  }
+  
+  message += 'Both the album and all associated tracks have been permanently removed from the platform.\n\n';
+  message += 'If you believe this was done in error, you may appeal this decision. ';
+  message += 'Please review our community guidelines to avoid future violations.';
+  
+  return message;
+}
+
+/**
+ * Generate notification message for album removal (album only, tracks preserved)
+ * Requirements: 5.1, 5.3
+ * 
+ * @param params - Notification parameters
+ * @returns Notification message
+ */
+function generateAlbumRemovedOnlyMessage(params: NotificationTemplateParams): string {
+  const { reason, customMessage } = params;
+  
+  let message = 'Your album has been removed for violating our community guidelines.\n\n';
+  message += `Reason: ${reason}\n\n`;
+  
+  if (customMessage) {
+    message += `Additional information: ${customMessage}\n\n`;
+  }
+  
+  message += 'The album has been removed, but all tracks remain available as standalone tracks on your profile.\n\n';
+  message += 'If you believe this was done in error, you may appeal this decision. ';
+  message += 'Please review our community guidelines to avoid future violations.';
+  
+  return message;
 }
 
 /**
@@ -430,7 +479,7 @@ function generateRestrictionRemovedMessage(params: ReversalNotificationParams): 
 
 /**
  * Generate notification content based on moderation action
- * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7
+ * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 5.1, 5.2, 5.3
  * 
  * @param params - Notification template parameters
  * @returns Generated notification content
@@ -438,7 +487,7 @@ function generateRestrictionRemovedMessage(params: ReversalNotificationParams): 
 export function generateModerationNotification(
   params: NotificationTemplateParams
 ): NotificationContent {
-  const { actionType } = params;
+  const { actionType, targetType, albumCascadingToTracks } = params;
   
   // Generate title
   const title = generateNotificationTitle(actionType);
@@ -448,7 +497,19 @@ export function generateModerationNotification(
   
   switch (actionType) {
     case 'content_removed':
-      message = generateContentRemovedMessage(params);
+      // Check if this is an album removal with cascading options
+      if (targetType === 'album') {
+        if (albumCascadingToTracks) {
+          // Album + tracks removed
+          message = generateAlbumRemovedWithTracksMessage(params);
+        } else {
+          // Album only removed (tracks preserved)
+          message = generateAlbumRemovedOnlyMessage(params);
+        }
+      } else {
+        // Regular content removal (post, comment, track)
+        message = generateContentRemovedMessage(params);
+      }
       break;
     case 'user_warned':
       message = generateWarningMessage(params);

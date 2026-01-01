@@ -30,7 +30,7 @@ export type ReportStatus = 'pending' | 'under_review' | 'resolved' | 'dismissed'
 /**
  * Content types that can be reported
  */
-export type ReportType = 'post' | 'comment' | 'track' | 'user';
+export type ReportType = 'post' | 'comment' | 'track' | 'user' | 'album';
 
 /**
  * Complete report record from the database
@@ -93,7 +93,7 @@ export type ModerationActionType =
 /**
  * Target types for moderation actions
  */
-export type ModerationTargetType = 'post' | 'comment' | 'track' | 'user';
+export type ModerationTargetType = 'post' | 'comment' | 'track' | 'user' | 'album';
 
 /**
  * Complete moderation action record from the database
@@ -132,6 +132,7 @@ export interface ModerationActionParams {
   internalNotes?: string;
   notificationMessage?: string;
   restrictionType?: RestrictionType;
+  cascadingOptions?: CascadingActionOptions;
 }
 
 // ============================================================================
@@ -524,4 +525,46 @@ export interface ProfileContext {
     createdAt: string;
     expiresAt: string | null;
   }>;
+}
+
+// ============================================================================
+// Album Context Types
+// ============================================================================
+
+/**
+ * Album context for moderation panel
+ * Requirements: 3.2, 3.4, 3.5
+ * 
+ * This interface provides comprehensive context about an album
+ * when reviewing album reports in the moderation queue.
+ */
+export interface AlbumContext {
+  id: string;
+  name: string;
+  description: string | null;
+  cover_image_url: string | null;
+  user_id: string;
+  is_public: boolean;
+  created_at: string;
+  tracks: Array<{
+    id: string;
+    title: string;
+    duration: number | null;
+    position: number;
+  }>;
+  track_count: number;
+  total_duration: number | null;
+}
+
+/**
+ * Cascading action options for album removal
+ * Requirements: 4.2, 4.3, 4.4
+ * 
+ * When removing an album, moderators can choose to:
+ * - Remove album and all tracks (cascading deletion)
+ * - Remove album only (keep tracks as standalone)
+ */
+export interface CascadingActionOptions {
+  removeAlbum: boolean;
+  removeTracks: boolean;
 }

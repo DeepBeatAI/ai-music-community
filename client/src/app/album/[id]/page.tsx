@@ -13,6 +13,8 @@ import { cache, CACHE_KEYS } from '@/utils/cache';
 import type { AlbumWithTracks } from '@/types/album';
 import type { PlaylistWithTracks } from '@/types/playlist';
 import Image from 'next/image';
+import { ReportButton } from '@/components/moderation/ReportButton';
+import { ModeratorFlagButton } from '@/components/moderation/ModeratorFlagButton';
 
 /**
  * AlbumDetailPage Component
@@ -455,6 +457,22 @@ export default function AlbumDetailPage() {
                         size="md"
                       />
                     )}
+                    
+                    {/* Report Button for non-owners */}
+                    {!isOwner && (
+                      <ReportButton
+                        reportType="album"
+                        targetId={albumId}
+                        contentCreatorId={album.user_id}
+                      />
+                    )}
+                    
+                    {/* Moderator Flag Button */}
+                    <ModeratorFlagButton
+                      reportType="album"
+                      targetId={albumId}
+                      contentCreatorId={album.user_id}
+                    />
                     
                     {/* Owner Actions */}
                     {isOwner && (

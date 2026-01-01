@@ -421,7 +421,8 @@ describe('Album Flagging - Database Integration Tests', () => {
 
       expect(error).toBeNull();
       expect(tracks).toHaveLength(3);
-      expect(tracks[0].track_id).toBe('track-1');
+      expect(tracks).not.toBeNull();
+      expect(tracks![0].track_id).toBe('track-1');
     });
 
     it('should allow selective deletion by removing only album_tracks entries', async () => {
@@ -501,7 +502,8 @@ describe('Album Flagging - Database Integration Tests', () => {
 
       expect(error).toBeNull();
       expect(data).toHaveLength(2);
-      expect(data[0].report_type).toBe('album');
+      expect(data).not.toBeNull();
+      expect(data![0].report_type).toBe('album');
     });
 
     it('should prevent non-moderators from accessing moderation endpoints', async () => {

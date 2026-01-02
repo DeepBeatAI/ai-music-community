@@ -4321,6 +4321,8 @@ export interface ModerationMetrics {
     moderatorId: string;
     actionsCount: number;
     averageResolutionTime: number;
+    reversalRate: number;
+    accuracy: string;
   }>;
   slaCompliance?: {
     p1: { total: number; withinSLA: number; percentage: number };
@@ -5745,19 +5747,26 @@ export async function calculateModerationMetrics(
       moderatorId: string;
       actionsCount: number;
       averageResolutionTime: number;
+      reversalRate: number;
+      accuracy: string;
     }> | undefined;
 
     if (isAdminUser) {
       const { data: moderatorActions } = await supabase
         .from('moderation_actions')
-        .select('moderator_id, created_at, related_report_id')
+        .select('moderator_id, created_at, related_report_id, revoked_at')
         .gte('created_at', effectiveStartDate)
         .lte('created_at', effectiveEndDate);
 
       if (moderatorActions) {
         const moderatorStats: Record<
           string,
-          { count: number; totalResolutionTime: number; resolutionCount: number }
+          { 
+            count: number; 
+            totalResolutionTime: number; 
+            resolutionCount: number;
+            reversedCount: number;
+          }
         > = {};
 
         for (const action of moderatorActions) {
@@ -5766,10 +5775,16 @@ export async function calculateModerationMetrics(
               count: 0,
               totalResolutionTime: 0,
               resolutionCount: 0,
+              reversedCount: 0,
             };
           }
 
           moderatorStats[action.moderator_id].count++;
+
+          // Count reversed actions
+          if (action.revoked_at) {
+            moderatorStats[action.moderator_id].reversedCount++;
+          }
 
           // Calculate resolution time if related report exists
           if (action.related_report_id) {
@@ -5788,14 +5803,29 @@ export async function calculateModerationMetrics(
           }
         }
 
-        moderatorPerformance = Object.entries(moderatorStats).map(([moderatorId, stats]) => ({
-          moderatorId,
-          actionsCount: stats.count,
-          averageResolutionTime:
-            stats.resolutionCount > 0
-              ? stats.totalResolutionTime / stats.resolutionCount / (1000 * 60 * 60) // Convert to hours
-              : 0,
-        }));
+        moderatorPerformance = Object.entries(moderatorStats).map(([moderatorId, stats]) => {
+          const reversalRate = stats.count > 0 
+            ? (stats.reversedCount / stats.count) * 100 
+            : 0;
+          
+          // Calculate accuracy rating based on reversal rate
+          const accuracy = reversalRate < 10 
+            ? 'Excellent' 
+            : reversalRate < 25 
+            ? 'Good' 
+            : 'Review Needed';
+
+          return {
+            moderatorId,
+            actionsCount: stats.count,
+            averageResolutionTime:
+              stats.resolutionCount > 0
+                ? stats.totalResolutionTime / stats.resolutionCount / (1000 * 60 * 60) // Convert to hours
+                : 0,
+            reversalRate,
+            accuracy,
+          };
+        });
       }
     }
 

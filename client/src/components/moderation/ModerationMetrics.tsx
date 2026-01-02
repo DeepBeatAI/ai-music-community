@@ -24,6 +24,8 @@ interface ModeratorPerformanceWithUsername {
   moderatorUsername: string;
   actionsCount: number;
   averageResolutionTime: number;
+  reversalRate: number;
+  accuracy: string;
 }
 
 export function ModerationMetrics() {
@@ -616,6 +618,12 @@ export function ModerationMetrics() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                     Avg Resolution Time
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Reversal Rate
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Accuracy
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
@@ -635,6 +643,28 @@ export function ModerationMetrics() {
                         {mod.averageResolutionTime > 0
                           ? `${mod.averageResolutionTime.toFixed(1)}h`
                           : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          mod.reversalRate < 10 
+                            ? 'bg-green-900 text-green-200' 
+                            : mod.reversalRate < 25 
+                            ? 'bg-yellow-900 text-yellow-200' 
+                            : 'bg-red-900 text-red-200'
+                        }`}>
+                          {mod.reversalRate.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`font-semibold ${
+                          mod.reversalRate < 10 
+                            ? 'text-green-400' 
+                            : mod.reversalRate < 25 
+                            ? 'text-yellow-400' 
+                            : 'text-red-400'
+                        }`}>
+                          {mod.accuracy}
+                        </span>
                       </td>
                     </tr>
                   ))}

@@ -40,6 +40,8 @@ export function ModerationMetrics() {
   const [reversalMetrics, setReversalMetrics] = useState<ReversalMetricsSummary | null>(null);
   const [reversalLoading, setReversalLoading] = useState(true);
   const [moderatorPerformanceWithUsernames, setModeratorPerformanceWithUsernames] = useState<ModeratorPerformanceWithUsername[]>([]);
+  const [topReasonsFilter, setTopReasonsFilter] = useState<'all' | 'post' | 'comment' | 'track' | 'album' | 'user'>('all');
+  const [filteredTopReasons, setFilteredTopReasons] = useState<Array<{ reason: string; count: number }>>([]);
 
   // Check if user is admin
   useEffect(() => {
@@ -57,7 +59,19 @@ export function ModerationMetrics() {
     const fetchMetrics = async () => {
       try {
         setLoading(true);
-        const data = await calculateModerationMetrics(dateRange, includeSLA, includeTrends);
+        // Always fetch overall metrics without date range for Reports Received, Reports Resolved, and Average Resolution Time
+        // But include SLA and Trends if requested
+        const overallData = await calculateModerationMetrics(undefined, includeSLA, includeTrends);
+        // Fetch filtered metrics for other sections if date range is set
+        const filteredData = dateRange ? await calculateModerationMetrics(dateRange, includeSLA, includeTrends) : overallData;
+        
+        // Combine: use overall data for certain metrics, filtered data for others
+        const data = {
+          ...filteredData,
+          reportsReceived: overallData.reportsReceived,
+          reportsResolved: overallData.reportsResolved,
+          averageResolutionTime: overallData.averageResolutionTime,
+        };
         setMetrics(data);
 
         // Fetch usernames for moderator performance if available
@@ -148,6 +162,53 @@ export function ModerationMetrics() {
 
     fetchReversalMetrics();
   }, [dateRange]);
+
+  // Fetch and filter top reasons by report type
+  useEffect(() => {
+    const fetchFilteredTopReasons = async () => {
+      try {
+        // Calculate date range (last 30 days if not specified)
+        const endDate = dateRange?.endDate || new Date().toISOString();
+        const startDate =
+          dateRange?.startDate ||
+          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Build query
+        let query = supabase
+          .from('moderation_reports')
+          .select('reason, report_type')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate);
+
+        // Apply filter if not 'all'
+        if (topReasonsFilter !== 'all') {
+          query = query.eq('report_type', topReasonsFilter);
+        }
+
+        const { data: reports } = await query;
+
+        // Calculate reason counts
+        const reasonCounts: Record<string, number> = {};
+        if (reports) {
+          reports.forEach((report) => {
+            reasonCounts[report.reason] = (reasonCounts[report.reason] || 0) + 1;
+          });
+        }
+
+        // Get all reasons sorted by count
+        const topReasons = Object.entries(reasonCounts)
+          .map(([reason, count]) => ({ reason, count }))
+          .sort((a, b) => b.count - a.count);
+
+        setFilteredTopReasons(topReasons);
+      } catch (error) {
+        console.error('Failed to fetch filtered top reasons:', error);
+        setFilteredTopReasons([]);
+      }
+    };
+
+    fetchFilteredTopReasons();
+  }, [dateRange, topReasonsFilter]);
 
   // Loading state with skeleton
   if (loading) {
@@ -485,15 +546,29 @@ export function ModerationMetrics() {
         )}
       </div>
 
-      {/* Top Reasons for Reports */}
+      {/* Reasons for Reports */}
       <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Top Reasons for Reports</h3>
-        {metrics.topReasons.length === 0 ? (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white">Reasons for Reports</h3>
+          <select
+            value={topReasonsFilter}
+            onChange={(e) => setTopReasonsFilter(e.target.value as typeof topReasonsFilter)}
+            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All</option>
+            <option value="post">Posts</option>
+            <option value="comment">Comments</option>
+            <option value="track">Tracks</option>
+            <option value="album">Albums</option>
+            <option value="user">Users</option>
+          </select>
+        </div>
+        {filteredTopReasons.length === 0 ? (
           <p className="text-gray-400 text-center py-8">No reports in the last 30 days</p>
         ) : (
           <div className="space-y-3">
-            {metrics.topReasons.map((item, index) => {
-              const total = metrics.topReasons.reduce((sum, r) => sum + r.count, 0);
+            {filteredTopReasons.map((item, index) => {
+              const total = filteredTopReasons.reduce((sum, r) => sum + r.count, 0);
               const percentage = ((item.count / total) * 100).toFixed(1);
 
               return (
@@ -521,184 +596,6 @@ export function ModerationMetrics() {
           </div>
         )}
       </div>
-
-      {/* Album Metrics Section */}
-      {metrics.albumMetrics && (
-        <>
-          {/* Album Reports Overview */}
-          <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Album Reports Overview</h3>
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-900 text-purple-200">
-                📀 Album Metrics
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Total Album Reports */}
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <span className="text-sm text-gray-400 block mb-2">Total Album Reports</span>
-                <div className="text-3xl font-bold text-purple-400">
-                  {metrics.albumMetrics.totalAlbumReports}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">In selected period</p>
-              </div>
-
-              {/* Album vs Track Percentage */}
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <span className="text-sm text-gray-400 block mb-2">Album vs Track Reports</span>
-                <div className="text-3xl font-bold text-blue-400">
-                  {metrics.albumMetrics.albumVsTrackPercentage.toFixed(1)}%
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Albums of total audio reports</p>
-              </div>
-
-              {/* Average Tracks per Album */}
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <span className="text-sm text-gray-400 block mb-2">Avg Tracks per Album</span>
-                <div className="text-3xl font-bold text-cyan-400">
-                  {metrics.albumMetrics.averageTracksPerReportedAlbum.toFixed(1)}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Tracks in reported albums</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Top Album Report Reasons */}
-          {metrics.albumMetrics.topAlbumReasons.length > 0 && (
-            <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">
-                Most Common Album Report Reasons
-              </h3>
-              <div className="space-y-3">
-                {metrics.albumMetrics.topAlbumReasons.map((item, index) => {
-                  const total = metrics.albumMetrics!.topAlbumReasons.reduce(
-                    (sum, r) => sum + r.count,
-                    0
-                  );
-                  const percentage = ((item.count / total) * 100).toFixed(1);
-
-                  return (
-                    <div key={item.reason}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-gray-500 font-mono text-sm">#{index + 1}</span>
-                          <span className="text-gray-300">
-                            {REASON_LABELS[item.reason as keyof typeof REASON_LABELS] ||
-                              item.reason}
-                          </span>
-                        </div>
-                        <span className="text-gray-400">
-                          {item.count} ({percentage}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div
-                          className="bg-purple-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Cascading Action Statistics */}
-          <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">
-              Cascading Action Statistics
-            </h3>
-            <p className="text-gray-400 text-sm mb-4">
-              When albums are removed, moderators can choose to remove all tracks or keep them as
-              standalone tracks.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              {/* Total Cascading Actions */}
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <span className="text-sm text-gray-400 block mb-2">Total Album Removals</span>
-                <div className="text-3xl font-bold text-red-400">
-                  {metrics.albumMetrics.cascadingActionStats.totalCascadingActions}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Albums removed</p>
-              </div>
-
-              {/* Album + Tracks Removed */}
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <span className="text-sm text-gray-400 block mb-2">Album + Tracks</span>
-                <div className="text-3xl font-bold text-orange-400">
-                  {metrics.albumMetrics.cascadingActionStats.albumAndTracksRemoved}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Full cascading removals</p>
-              </div>
-
-              {/* Album Only Removed */}
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <span className="text-sm text-gray-400 block mb-2">Album Only</span>
-                <div className="text-3xl font-bold text-yellow-400">
-                  {metrics.albumMetrics.cascadingActionStats.albumOnlyRemoved}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Tracks preserved</p>
-              </div>
-
-              {/* Cascading Percentage */}
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <span className="text-sm text-gray-400 block mb-2">Cascading Rate</span>
-                <div className="text-3xl font-bold text-pink-400">
-                  {metrics.albumMetrics.cascadingActionStats.cascadingPercentage.toFixed(1)}%
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Full cascade vs selective</p>
-              </div>
-            </div>
-
-            {/* Visual breakdown */}
-            {metrics.albumMetrics.cascadingActionStats.totalCascadingActions > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-400">Removal Type Distribution</span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-4 flex overflow-hidden">
-                  <div
-                    className="bg-orange-500 h-4 transition-all duration-300"
-                    style={{
-                      width: `${metrics.albumMetrics.cascadingActionStats.cascadingPercentage}%`,
-                    }}
-                    title={`Album + Tracks: ${metrics.albumMetrics.cascadingActionStats.albumAndTracksRemoved}`}
-                  />
-                  <div
-                    className="bg-yellow-500 h-4 transition-all duration-300"
-                    style={{
-                      width: `${100 - metrics.albumMetrics.cascadingActionStats.cascadingPercentage}%`,
-                    }}
-                    title={`Album Only: ${metrics.albumMetrics.cascadingActionStats.albumOnlyRemoved}`}
-                  />
-                </div>
-                <div className="flex items-center justify-between mt-2 text-xs">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-orange-500 rounded"></div>
-                    <span className="text-gray-400">
-                      Album + Tracks (
-                      {metrics.albumMetrics.cascadingActionStats.cascadingPercentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-                    <span className="text-gray-400">
-                      Album Only (
-                      {(
-                        100 - metrics.albumMetrics.cascadingActionStats.cascadingPercentage
-                      ).toFixed(1)}
-                      %)
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      )}
 
       {/* Moderator Performance (Admin Only) */}
       {isAdminUser && moderatorPerformanceWithUsernames.length > 0 && (

@@ -303,16 +303,22 @@ export function ModerationActionPanel({
         // Set the content preview
         if (report.report_type === 'track') {
           const trackData = data as unknown as { title: string; description?: string };
-          setContentPreview(`Title: ${trackData.title}\n${trackData.description || 'No description'}`);
+          setContentPreview(`Title: ${trackData.title}`);
         } else if (report.report_type === 'user') {
-          const userData = data as unknown as { username: string };
-          setContentPreview(`Username: ${userData.username}`);
+          // Don't show content preview for user reports
+          // The user info is already shown in the "Reported User" field
+          setContentPreview(null);
         } else {
           const contentData = data as unknown as { content?: string };
           setContentPreview(contentData.content || 'No content available');
         }
       } else {
-        setContentPreview('Content has been deleted or is unavailable');
+        // Don't show "content deleted" message for user reports
+        if (report.report_type === 'user') {
+          setContentPreview(null);
+        } else {
+          setContentPreview('Content has been deleted or is unavailable');
+        }
         setContentCreatedAt(null);
       }
     } catch (error) {
@@ -724,11 +730,20 @@ export function ModerationActionPanel({
                 <span className="text-sm text-gray-400 block mb-1">
                   {report.report_type === 'user' ? 'User Profile:' : 'Content Preview:'}
                 </span>
-                <div className="bg-gray-800 rounded p-3 max-h-40 overflow-y-auto">
-                  <pre className="text-white text-sm whitespace-pre-wrap font-sans">
-                    {contentPreview}
-                  </pre>
-                </div>
+                {contentPreview === 'Content has been deleted or is unavailable' ? (
+                  <div className="bg-red-900/20 border border-red-500 rounded-md p-3">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-red-500">⚠️</span>
+                      <p className="text-red-400 text-sm">{contentPreview}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-800 rounded p-3 max-h-40 overflow-y-auto">
+                    <pre className="text-white text-sm whitespace-pre-wrap font-sans">
+                      {contentPreview}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -334,6 +334,7 @@ export const getUnreadActivityCount = async (userId: string): Promise<number> =>
 };
 
 export const updateLastActive = async (userId: string): Promise<void> => {
+  // Silently update last active - don't throw errors to user
   try {
     const now = new Date().toISOString();
     
@@ -361,9 +362,16 @@ export const updateLastActive = async (userId: string): Promise<void> => {
       );
     
     if (error) {
-      console.error('Error updating last active:', error);
+      // Log detailed error info for debugging, but don't throw
+      console.warn('Failed to update last active (non-critical):', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
     }
   } catch (error) {
-    console.error('Error updating last active:', error);
+    // Catch any unexpected errors and log them without throwing
+    console.warn('Failed to update last active (non-critical):', error instanceof Error ? error.message : String(error));
   }
 };

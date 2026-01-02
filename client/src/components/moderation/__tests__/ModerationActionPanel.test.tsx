@@ -32,6 +32,7 @@ const mockReport: Report = {
   action_taken: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  metadata: null,
 };
 
 const mockModeratorFlaggedReport: Report = {
@@ -556,6 +557,7 @@ describe('ModerationActionPanel', () => {
         reviewed_at: null,
         resolution_notes: null,
         action_taken: null,
+        metadata: null,
       };
 
       const mockAlbumContext = {
@@ -624,6 +626,7 @@ describe('ModerationActionPanel', () => {
         reviewed_at: null,
         resolution_notes: null,
         action_taken: null,
+        metadata: null,
       };
 
       const mockAlbumContext = {
@@ -693,6 +696,7 @@ describe('ModerationActionPanel', () => {
         reviewed_at: null,
         resolution_notes: null,
         action_taken: null,
+        metadata: null,
       };
 
       const mockAlbumContext = {
@@ -758,6 +762,7 @@ describe('ModerationActionPanel', () => {
         reviewed_at: null,
         resolution_notes: null,
         action_taken: null,
+        metadata: null,
       };
 
       const mockAlbumContext = {

@@ -320,6 +320,15 @@ function validateReportParams(params: ReportParams): void {
     );
   }
 
+  // Validate description minimum length (20 characters)
+  if (!params.description || params.description.trim().length < 20) {
+    throw new ModerationError(
+      'Description must be at least 20 characters',
+      MODERATION_ERROR_CODES.VALIDATION_ERROR,
+      { descriptionLength: params.description?.trim().length || 0, minimumLength: 20 }
+    );
+  }
+
   // Validate and sanitize description length if provided
   if (params.description) {
     validateTextLength(params.description, 1000, 'Description');
@@ -721,6 +730,88 @@ function handleDatabaseError(error: unknown, context: string): never {
 }
 
 // ============================================================================
+// Reporter Accuracy Functions
+// ============================================================================
+
+/**
+ * Calculate reporter accuracy based on their report history
+ * Requirements: 5.2
+ * 
+ * This function calculates a reporter's accuracy rate by analyzing their
+ * past reports. A report is considered "accurate" if it was resolved with
+ * a moderation action taken (not dismissed).
+ * 
+ * @param reporterId - Reporter user ID
+ * @returns Object with totalReports, accurateReports, and accuracyRate, or null if no reports
+ * @throws ModerationError if database query fails
+ */
+export async function calculateReporterAccuracy(
+  reporterId: string
+): Promise<{ totalReports: number; accurateReports: number; accuracyRate: number } | null> {
+  try {
+    // Validate reporter ID
+    if (!reporterId) {
+      return null;
+    }
+
+    if (!isValidUUID(reporterId)) {
+      throw new ModerationError(
+        'Invalid reporter ID format',
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        { reporterId }
+      );
+    }
+
+    // Query all reports by this reporter
+    const { data: reports, error: reportsError } = await supabase
+      .from('moderation_reports')
+      .select('id, status, action_taken')
+      .eq('reporter_id', reporterId);
+
+    if (reportsError) {
+      throw new ModerationError(
+        'Failed to fetch reporter history',
+        MODERATION_ERROR_CODES.DATABASE_ERROR,
+        { originalError: reportsError }
+      );
+    }
+
+    // Handle edge case: no reports
+    if (!reports || reports.length === 0) {
+      return null;
+    }
+
+    const totalReports = reports.length;
+
+    // Count accurate reports (resolved with action taken)
+    // A report is accurate if:
+    // 1. Status is 'resolved' (not 'dismissed')
+    // 2. action_taken is not null (some action was taken)
+    const accurateReports = reports.filter(
+      (report) => report.status === 'resolved' && report.action_taken !== null
+    ).length;
+
+    // Calculate accuracy rate as percentage
+    const accuracyRate = Math.round((accurateReports / totalReports) * 100);
+
+    return {
+      totalReports,
+      accurateReports,
+      accuracyRate,
+    };
+  } catch (error) {
+    if (error instanceof ModerationError) {
+      throw error;
+    }
+    throw new ModerationError(
+      'An unexpected error occurred while calculating reporter accuracy',
+      MODERATION_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+// ============================================================================
 // User Reporting Functions
 // ============================================================================
 
@@ -1099,6 +1190,7 @@ export async function submitReport(params: ReportParams): Promise<Report> {
         status: 'pending',
         priority,
         moderator_flagged: false,
+        metadata: params.metadata || null,
       })
       .select()
       .single();
@@ -1215,6 +1307,7 @@ export async function moderatorFlagContent(params: ModeratorFlagParams): Promise
         status: 'under_review', // Moderator flags go directly to under_review
         priority,
         moderator_flagged: true,
+        metadata: params.metadata || null,
       })
       .select()
       .single();

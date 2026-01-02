@@ -43,7 +43,12 @@ export function ModeratorFlagModal({
   const [internalNotes, setInternalNotes] = useState('');
   const [priority, setPriority] = useState<number>(3); // Default to P3 - Standard
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<{ reason?: string; internalNotes?: string }>({});
+  const [errors, setErrors] = useState<{ reason?: string; internalNotes?: string; originalWorkLink?: string; audioTimestamp?: string }>({});
+  
+  // Evidence field state variables
+  const [originalWorkLink, setOriginalWorkLink] = useState('');
+  const [proofOfOwnership, setProofOfOwnership] = useState('');
+  const [audioTimestamp, setAudioTimestamp] = useState('');
 
   // Don't render if not open
   if (!isOpen) return null;
@@ -54,11 +59,68 @@ export function ModeratorFlagModal({
   }
 
   /**
+   * Validates URL format
+   * Returns true if valid or empty, false otherwise
+   */
+  const validateURL = (url: string): boolean => {
+    if (!url.trim()) return true; // Empty is valid (optional field)
+    
+    try {
+      const urlObj = new URL(url);
+      // Check for valid protocol (http or https)
+      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Validates timestamp format (MM:SS or HH:MM:SS)
+   * Returns true if valid or empty, false otherwise
+   */
+  const validateTimestamp = (timestamp: string): boolean => {
+    if (!timestamp.trim()) return true; // Empty is valid (optional field)
+    
+    // Split by comma to support multiple timestamps
+    const timestamps = timestamp.split(',').map(t => t.trim());
+    
+    // Match MM:SS or HH:MM:SS format
+    const timestampRegex = /^(\d{1,2}):([0-5]\d)(?::([0-5]\d))?$/;
+    
+    // Validate each timestamp
+    for (const ts of timestamps) {
+      if (!ts) continue; // Skip empty entries (e.g., trailing comma)
+      
+      const match = ts.match(timestampRegex);
+      if (!match) return false;
+      
+      const hours = match[3] ? parseInt(match[1], 10) : 0;
+      const minutes = match[3] ? parseInt(match[2], 10) : parseInt(match[1], 10);
+      const seconds = match[3] ? parseInt(match[3], 10) : parseInt(match[2], 10);
+      
+      // Validate ranges
+      if (match[3]) {
+        // HH:MM:SS format
+        if (!(hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds <= 59)) {
+          return false;
+        }
+      } else {
+        // MM:SS format
+        if (!(minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds <= 59)) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  };
+
+  /**
    * Validates the form fields
    * Returns true if valid, false otherwise
    */
   const validateForm = (): boolean => {
-    const newErrors: { reason?: string; internalNotes?: string } = {};
+    const newErrors: { reason?: string; internalNotes?: string; originalWorkLink?: string; audioTimestamp?: string } = {};
 
     // Validate reason selection
     if (!reason) {
@@ -70,6 +132,16 @@ export function ModeratorFlagModal({
       newErrors.internalNotes = 'Additional details are required for moderator flags';
     } else if (internalNotes.trim().length < 10) {
       newErrors.internalNotes = 'Additional details must be at least 10 characters';
+    }
+
+    // Validate URL format if provided
+    if (originalWorkLink.trim() && !validateURL(originalWorkLink)) {
+      newErrors.originalWorkLink = 'Please enter a valid URL (e.g., https://example.com)';
+    }
+
+    // Validate timestamp format if provided
+    if (audioTimestamp.trim() && !validateTimestamp(audioTimestamp)) {
+      newErrors.audioTimestamp = 'Please use format MM:SS or HH:MM:SS. Multiple timestamps can be separated by commas (e.g., 2:35, 5:12, 8:45)';
     }
 
     setErrors(newErrors);
@@ -97,6 +169,11 @@ export function ModeratorFlagModal({
         reason: reason as ReportReason,
         internalNotes: internalNotes.trim(),
         priority,
+        metadata: {
+          originalWorkLink: originalWorkLink.trim() || undefined,
+          proofOfOwnership: proofOfOwnership.trim() || undefined,
+          audioTimestamp: audioTimestamp.trim() || undefined,
+        },
       });
 
       // Show success message
@@ -106,6 +183,9 @@ export function ModeratorFlagModal({
       setReason('');
       setInternalNotes('');
       setPriority(3);
+      setOriginalWorkLink('');
+      setProofOfOwnership('');
+      setAudioTimestamp('');
       setErrors({});
       onClose();
     } catch (error: any) {
@@ -136,6 +216,9 @@ export function ModeratorFlagModal({
       setReason('');
       setInternalNotes('');
       setPriority(3);
+      setOriginalWorkLink('');
+      setProofOfOwnership('');
+      setAudioTimestamp('');
       setErrors({});
       onClose();
     }
@@ -268,6 +351,121 @@ export function ModeratorFlagModal({
               Required. Visible to other moderators only.
             </p>
           </div>
+
+          {/* Copyright Evidence Fields */}
+          {reason === 'copyright_violation' && (
+            <div className="space-y-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-2 mb-3">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm text-blue-800 dark:text-blue-300">
+                  Providing evidence helps with faster resolution
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="originalWorkLink" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Link to original work (optional)
+                </label>
+                <input
+                  type="url"
+                  id="originalWorkLink"
+                  value={originalWorkLink}
+                  onChange={(e) => {
+                    setOriginalWorkLink(e.target.value);
+                    setErrors({ ...errors, originalWorkLink: undefined });
+                  }}
+                  onBlur={() => {
+                    if (originalWorkLink.trim() && !validateURL(originalWorkLink)) {
+                      setErrors({ ...errors, originalWorkLink: 'Please enter a valid URL (e.g., https://example.com)' });
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  placeholder="https://example.com/original-work"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 ${
+                    errors.originalWorkLink
+                      ? 'border-red-500 dark:border-red-500'
+                      : 'border-gray-300 dark:border-gray-600'
+                  }`}
+                />
+                {errors.originalWorkLink ? (
+                  <p className="mt-1 text-sm text-red-500">{errors.originalWorkLink}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    URL to the original copyrighted work
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="proofOfOwnership" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Proof of ownership (optional)
+                </label>
+                <textarea
+                  id="proofOfOwnership"
+                  value={proofOfOwnership}
+                  onChange={(e) => setProofOfOwnership(e.target.value)}
+                  disabled={isSubmitting}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Describe how ownership can be verified..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {proofOfOwnership.length}/500 characters
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Audio Timestamp Field */}
+          {(reason === 'hate_speech' || reason === 'harassment' || reason === 'inappropriate_content') && reportType === 'track' && (
+            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+              <div className="flex items-start gap-2 mb-3">
+                <svg className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm text-orange-800 dark:text-orange-300">
+                  Specify where the violation occurs in the audio
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="audioTimestamp" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Timestamp in audio (optional)
+                </label>
+                <input
+                  type="text"
+                  id="audioTimestamp"
+                  value={audioTimestamp}
+                  onChange={(e) => {
+                    setAudioTimestamp(e.target.value);
+                    setErrors({ ...errors, audioTimestamp: undefined });
+                  }}
+                  onBlur={() => {
+                    if (audioTimestamp.trim() && !validateTimestamp(audioTimestamp)) {
+                      setErrors({ ...errors, audioTimestamp: 'Please use format MM:SS or HH:MM:SS. Multiple timestamps can be separated by commas (e.g., 2:35, 5:12, 8:45)' });
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  placeholder="e.g., 2:35 or 1:23:45 (multiple: 2:35, 5:12, 8:45)"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 ${
+                    errors.audioTimestamp
+                      ? 'border-red-500 dark:border-red-500'
+                      : 'border-gray-300 dark:border-gray-600'
+                  }`}
+                />
+                {errors.audioTimestamp ? (
+                  <p className="mt-1 text-sm text-red-500">{errors.audioTimestamp}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Format: MM:SS or HH:MM:SS. Separate multiple timestamps with commas (e.g., 2:35, 5:12, 8:45)
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Info Message */}
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">

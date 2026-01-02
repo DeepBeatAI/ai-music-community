@@ -28,6 +28,7 @@ const mockReports: Report[] = [
     action_taken: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    metadata: null,
   },
   {
     id: '2',
@@ -46,6 +47,7 @@ const mockReports: Report[] = [
     action_taken: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    metadata: null,
   },
   {
     id: '3',
@@ -64,6 +66,7 @@ const mockReports: Report[] = [
     action_taken: 'content_removed',
     created_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
     updated_at: new Date().toISOString(),
+    metadata: null,
   },
 ];
 

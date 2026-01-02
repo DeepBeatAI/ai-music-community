@@ -33,6 +33,26 @@ export type ReportStatus = 'pending' | 'under_review' | 'resolved' | 'dismissed'
 export type ReportType = 'post' | 'comment' | 'track' | 'user' | 'album';
 
 /**
+ * Evidence metadata for reports
+ * Requirements: 1.1, 1.2, 2.1, 2.2, 4.1, 4.2
+ */
+export interface ReportMetadata {
+  // Copyright evidence (Requirement 1)
+  originalWorkLink?: string;
+  proofOfOwnership?: string;
+  
+  // Audio timestamp evidence (Requirement 2)
+  audioTimestamp?: string;
+  
+  // Reporter accuracy (for display in report cards - Requirement 5)
+  reporterAccuracy?: {
+    totalReports: number;
+    accurateReports: number;
+    accuracyRate: number;
+  };
+}
+
+/**
  * Complete report record from the database
  */
 export interface Report {
@@ -52,6 +72,7 @@ export interface Report {
   action_taken: string | null;
   created_at: string;
   updated_at: string;
+  metadata: ReportMetadata | null;
 }
 
 /**
@@ -62,6 +83,7 @@ export interface ReportParams {
   targetId: string;
   reason: ReportReason;
   description?: string;
+  metadata?: ReportMetadata;
 }
 
 /**
@@ -73,6 +95,7 @@ export interface ModeratorFlagParams {
   reason: ReportReason;
   internalNotes: string;
   priority?: number;
+  metadata?: ReportMetadata;
 }
 
 // ============================================================================

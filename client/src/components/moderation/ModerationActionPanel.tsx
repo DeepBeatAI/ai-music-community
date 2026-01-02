@@ -16,7 +16,7 @@ import {
   AlbumContext,
   CascadingActionOptions as CascadingOptions,
 } from '@/types/moderation';
-import { takeModerationAction, isAdmin, revokeAction, getProfileContext, fetchAlbumContext } from '@/lib/moderationService';
+import { takeModerationAction, isAdmin, revokeAction, getProfileContext, fetchAlbumContext, calculateReporterAccuracy } from '@/lib/moderationService';
 import { supabase } from '@/lib/supabase';
 import { AlbumContextDisplay } from './AlbumContextDisplay';
 import { CascadingActionOptions } from './CascadingActionOptions';
@@ -35,6 +35,22 @@ interface UserViolationHistory {
     action_type: string;
     reason: string;
     internal_notes: string;
+    created_at: string;
+  }>;
+}
+
+interface RelatedReports {
+  sameContent: Array<{
+    id: string;
+    reason: string;
+    status: string;
+    created_at: string;
+  }>;
+  sameUser: Array<{
+    id: string;
+    report_type: string;
+    reason: string;
+    status: string;
     created_at: string;
   }>;
 }
@@ -58,6 +74,12 @@ export function ModerationActionPanel({
   const [contentPreview, setContentPreview] = useState<string | null>(null);
   const [contentCreatedAt, setContentCreatedAt] = useState<string | null>(null);
   const [userHistory, setUserHistory] = useState<UserViolationHistory | null>(null);
+  const [relatedReports, setRelatedReports] = useState<RelatedReports | null>(null);
+  const [reporterAccuracy, setReporterAccuracy] = useState<{
+    totalReports: number;
+    accurateReports: number;
+    accuracyRate: number;
+  } | null>(null);
   
   // Profile context for user reports
   const [profileContext, setProfileContext] = useState<ProfileContext | null>(null);
@@ -76,6 +98,7 @@ export function ModerationActionPanel({
   const [internalNotes, setInternalNotes] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [copiedTimestamp, setCopiedTimestamp] = useState(false);
   
   // Cascading action options for album removal
   const [cascadingOptions, setCascadingOptions] = useState<CascadingOptions>({
@@ -93,6 +116,8 @@ export function ModerationActionPanel({
     checkAdminStatus();
     checkReportedUserAdminStatus();
     checkSelfModeration();
+    loadRelatedReports();
+    loadReporterAccuracy();
     
     // Load profile context for user reports
     if (report.report_type === 'user' && report.target_id) {
@@ -212,6 +237,49 @@ export function ModerationActionPanel({
       setAlbumContextError(error instanceof Error ? error.message : 'Failed to load album context');
     } finally {
       setLoadingAlbumContext(false);
+    }
+  };
+
+  const loadRelatedReports = async () => {
+    try {
+      // Query for reports with same target_id (same content)
+      const { data: sameContentReports } = await supabase
+        .from('moderation_reports')
+        .select('id, reason, status, created_at')
+        .eq('target_id', report.target_id)
+        .neq('id', report.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      // Query for reports against same user
+      const { data: sameUserReports } = await supabase
+        .from('moderation_reports')
+        .select('id, reason, status, created_at, report_type')
+        .eq('reported_user_id', report.reported_user_id)
+        .neq('id', report.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      setRelatedReports({
+        sameContent: sameContentReports || [],
+        sameUser: sameUserReports || [],
+      });
+    } catch (error) {
+      console.error('Failed to load related reports:', error);
+      // Don't set error state - related reports are supplementary information
+    }
+  };
+
+  const loadReporterAccuracy = async () => {
+    try {
+      // Only load reporter accuracy for user reports (not moderator flags)
+      if (report.reporter_id && !report.moderator_flagged) {
+        const accuracy = await calculateReporterAccuracy(report.reporter_id);
+        setReporterAccuracy(accuracy);
+      }
+    } catch (error) {
+      console.error('Failed to load reporter accuracy:', error);
+      // Don't set error state - reporter accuracy is supplementary information
     }
   };
 
@@ -651,6 +719,75 @@ export function ModerationActionPanel({
             )}
           </div>
 
+          {/* Evidence Section */}
+          {(report.metadata?.originalWorkLink || 
+            report.metadata?.proofOfOwnership || 
+            report.metadata?.audioTimestamp) && (
+            <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-4 space-y-3">
+              <h3 className="text-lg font-semibold text-blue-300">Evidence Provided</h3>
+              
+              {report.metadata.originalWorkLink && (
+                <div>
+                  <span className="text-sm text-blue-400">Link to original work:</span>
+                  <a 
+                    href={report.metadata.originalWorkLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-300 hover:text-blue-200 underline block mt-1"
+                  >
+                    {report.metadata.originalWorkLink}
+                  </a>
+                </div>
+              )}
+              
+              {report.metadata.proofOfOwnership && (
+                <div>
+                  <span className="text-sm text-blue-400">Proof of ownership:</span>
+                  <p className="text-white text-sm mt-1">{report.metadata.proofOfOwnership}</p>
+                </div>
+              )}
+              
+              {report.metadata.audioTimestamp && (
+                <div>
+                  <span className="text-sm text-blue-400">Timestamp in audio:</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-white text-sm">{report.metadata.audioTimestamp}</p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(report.metadata!.audioTimestamp!);
+                          setCopiedTimestamp(true);
+                          setTimeout(() => setCopiedTimestamp(false), 2000);
+                        } catch (err) {
+                          console.error('Failed to copy timestamp:', err);
+                          setError('Failed to copy timestamp to clipboard');
+                        }
+                      }}
+                      className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center gap-1"
+                      title="Copy timestamp"
+                    >
+                      {copiedTimestamp ? (
+                        <>
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Profile Context Section (for user reports only) */}
           {report.report_type === 'user' && profileContext && (
             <div className="bg-gray-800 rounded-lg p-4 space-y-3">
@@ -806,6 +943,21 @@ export function ModerationActionPanel({
                 </div>
               </div>
 
+              {/* Reporter Accuracy (if this is a user report) */}
+              {report.reporter_id && reporterAccuracy && !report.moderator_flagged && (
+                <div className="bg-gray-800 rounded p-3">
+                  <span className="text-sm text-gray-400 block mb-2">Reporter Accuracy:</span>
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl font-bold text-white">
+                      {reporterAccuracy.accuracyRate}%
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {reporterAccuracy.accurateReports} accurate out of {reporterAccuracy.totalReports} reports
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {userHistory.recent_actions.length > 0 && (
                 <div>
                   <span className="text-sm text-gray-400 block mb-2">Recent Actions (last 5):</span>
@@ -824,6 +976,44 @@ export function ModerationActionPanel({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Related Reports */}
+              {relatedReports && (relatedReports.sameContent.length > 0 || relatedReports.sameUser.length > 0) && (
+                <div>
+                  <span className="text-sm text-gray-400 block mb-2">Related Reports:</span>
+                  
+                  {relatedReports.sameContent.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Same content ({relatedReports.sameContent.length}):</p>
+                      <div className="space-y-1">
+                        {relatedReports.sameContent.map((r) => (
+                          <div key={r.id} className="bg-gray-800 rounded p-2 text-xs">
+                            <span className="text-orange-400">{REASON_LABELS[r.reason as keyof typeof REASON_LABELS]}</span>
+                            <span className="text-gray-500 ml-2">{STATUS_LABELS[r.status as keyof typeof STATUS_LABELS]}</span>
+                            <span className="text-gray-600 ml-2">{formatDate(r.created_at)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {relatedReports.sameUser.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Same user ({relatedReports.sameUser.length}):</p>
+                      <div className="space-y-1">
+                        {relatedReports.sameUser.map((r) => (
+                          <div key={r.id} className="bg-gray-800 rounded p-2 text-xs">
+                            <span className="text-purple-400">{r.report_type}</span>
+                            <span className="text-orange-400 ml-2">{REASON_LABELS[r.reason as keyof typeof REASON_LABELS]}</span>
+                            <span className="text-gray-500 ml-2">{STATUS_LABELS[r.status as keyof typeof STATUS_LABELS]}</span>
+                            <span className="text-gray-600 ml-2">{formatDate(r.created_at)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

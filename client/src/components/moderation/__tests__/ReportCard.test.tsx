@@ -19,6 +19,7 @@ const mockReport: Report = {
   action_taken: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  metadata: null,
 };
 
 const mockModeratorFlaggedReport: Report = {

@@ -34,6 +34,7 @@ const createMockReport = (
   resolution_notes: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  metadata: null,
   ...overrides,
 });
 

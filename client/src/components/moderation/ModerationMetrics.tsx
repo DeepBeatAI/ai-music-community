@@ -28,6 +28,15 @@ interface ModeratorPerformanceWithUsername {
   accuracy: string;
 }
 
+interface ReportQualityMetrics {
+  percentageWithEvidence: number;
+  averageDescriptionLength: number;
+  percentageMeetingMinimum: number;
+  totalReports: number;
+  reportsWithEvidence: number;
+  reportsMeetingMinimum: number;
+}
+
 export function ModerationMetrics() {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -44,6 +53,8 @@ export function ModerationMetrics() {
   const [moderatorPerformanceWithUsernames, setModeratorPerformanceWithUsernames] = useState<ModeratorPerformanceWithUsername[]>([]);
   const [topReasonsFilter, setTopReasonsFilter] = useState<'all' | 'post' | 'comment' | 'track' | 'album' | 'user'>('all');
   const [filteredTopReasons, setFilteredTopReasons] = useState<Array<{ reason: string; count: number }>>([]);
+  const [reportQualityMetrics, setReportQualityMetrics] = useState<ReportQualityMetrics | null>(null);
+  const [qualityLoading, setQualityLoading] = useState(true);
 
   // Check if user is admin
   useEffect(() => {
@@ -211,6 +222,94 @@ export function ModerationMetrics() {
 
     fetchFilteredTopReasons();
   }, [dateRange, topReasonsFilter]);
+
+  // Fetch report quality metrics
+  useEffect(() => {
+    const fetchReportQualityMetrics = async () => {
+      try {
+        setQualityLoading(true);
+
+        // Calculate date range (last 30 days if not specified)
+        const endDate = dateRange?.endDate || new Date().toISOString();
+        const startDate =
+          dateRange?.startDate ||
+          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Fetch all reports in date range
+        const { data: reports, error } = await supabase
+          .from('moderation_reports')
+          .select('description, metadata')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate);
+
+        if (error) {
+          console.error('Failed to fetch reports for quality metrics:', error);
+          throw error;
+        }
+
+        if (!reports || reports.length === 0) {
+          setReportQualityMetrics({
+            percentageWithEvidence: 0,
+            averageDescriptionLength: 0,
+            percentageMeetingMinimum: 0,
+            totalReports: 0,
+            reportsWithEvidence: 0,
+            reportsMeetingMinimum: 0,
+          });
+          return;
+        }
+
+        // Calculate metrics
+        const totalReports = reports.length;
+        let reportsWithEvidence = 0;
+        let totalDescriptionLength = 0;
+        let reportsMeetingMinimum = 0;
+
+        reports.forEach((report) => {
+          // Check if report has evidence
+          if (report.metadata) {
+            const metadata = report.metadata as any;
+            if (
+              metadata.originalWorkLink ||
+              metadata.proofOfOwnership ||
+              metadata.audioTimestamp
+            ) {
+              reportsWithEvidence++;
+            }
+          }
+
+          // Calculate description length
+          const descriptionLength = report.description?.length || 0;
+          totalDescriptionLength += descriptionLength;
+
+          // Check if meets minimum (20 characters)
+          if (descriptionLength >= 20) {
+            reportsMeetingMinimum++;
+          }
+        });
+
+        const averageDescriptionLength = Math.round(totalDescriptionLength / totalReports);
+        const percentageWithEvidence = Math.round((reportsWithEvidence / totalReports) * 100);
+        const percentageMeetingMinimum = Math.round((reportsMeetingMinimum / totalReports) * 100);
+
+        setReportQualityMetrics({
+          percentageWithEvidence,
+          averageDescriptionLength,
+          percentageMeetingMinimum,
+          totalReports,
+          reportsWithEvidence,
+          reportsMeetingMinimum,
+        });
+      } catch (error) {
+        console.error('Failed to fetch report quality metrics:', error);
+        setReportQualityMetrics(null);
+      } finally {
+        setQualityLoading(false);
+      }
+    };
+
+    fetchReportQualityMetrics();
+  }, [dateRange]);
 
   // Loading state with skeleton
   if (loading) {
@@ -598,6 +697,197 @@ export function ModerationMetrics() {
           </div>
         )}
       </div>
+
+      {/* Report Quality Metrics */}
+      {!qualityLoading && reportQualityMetrics && (
+        <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Report Quality</h3>
+            <span className="text-sm text-gray-400">
+              Based on {reportQualityMetrics.totalReports} reports
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            {/* Evidence Provision Rate */}
+            <div className="bg-gray-700/50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">Reports with Evidence</span>
+                {reportQualityMetrics.percentageWithEvidence >= 40 && (
+                  <span className="text-green-400 text-xs">✓ Good</span>
+                )}
+              </div>
+              <div
+                className={`text-3xl font-bold ${
+                  reportQualityMetrics.percentageWithEvidence >= 40
+                    ? 'text-green-400'
+                    : reportQualityMetrics.percentageWithEvidence >= 20
+                    ? 'text-yellow-400'
+                    : 'text-red-400'
+                }`}
+              >
+                {reportQualityMetrics.percentageWithEvidence}%
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {reportQualityMetrics.reportsWithEvidence} of {reportQualityMetrics.totalReports} reports
+              </p>
+              <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    reportQualityMetrics.percentageWithEvidence >= 40
+                      ? 'bg-green-500'
+                      : reportQualityMetrics.percentageWithEvidence >= 20
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
+                  }`}
+                  style={{ width: `${reportQualityMetrics.percentageWithEvidence}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Average Description Length */}
+            <div className="bg-gray-700/50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">Avg Description Length</span>
+                {reportQualityMetrics.averageDescriptionLength >= 100 && (
+                  <span className="text-green-400 text-xs">✓ Good</span>
+                )}
+              </div>
+              <div
+                className={`text-3xl font-bold ${
+                  reportQualityMetrics.averageDescriptionLength >= 100
+                    ? 'text-green-400'
+                    : reportQualityMetrics.averageDescriptionLength >= 50
+                    ? 'text-yellow-400'
+                    : 'text-red-400'
+                }`}
+              >
+                {reportQualityMetrics.averageDescriptionLength}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">characters</p>
+              <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    reportQualityMetrics.averageDescriptionLength >= 100
+                      ? 'bg-green-500'
+                      : reportQualityMetrics.averageDescriptionLength >= 50
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
+                  }`}
+                  style={{
+                    width: `${Math.min((reportQualityMetrics.averageDescriptionLength / 200) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Minimum Character Requirement */}
+            <div className="bg-gray-700/50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">Meeting Minimum (20 chars)</span>
+                {reportQualityMetrics.percentageMeetingMinimum >= 95 && (
+                  <span className="text-green-400 text-xs">✓ Good</span>
+                )}
+              </div>
+              <div
+                className={`text-3xl font-bold ${
+                  reportQualityMetrics.percentageMeetingMinimum >= 95
+                    ? 'text-green-400'
+                    : reportQualityMetrics.percentageMeetingMinimum >= 80
+                    ? 'text-yellow-400'
+                    : 'text-red-400'
+                }`}
+              >
+                {reportQualityMetrics.percentageMeetingMinimum}%
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {reportQualityMetrics.reportsMeetingMinimum} of {reportQualityMetrics.totalReports} reports
+              </p>
+              <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    reportQualityMetrics.percentageMeetingMinimum >= 95
+                      ? 'bg-green-500'
+                      : reportQualityMetrics.percentageMeetingMinimum >= 80
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
+                  }`}
+                  style={{ width: `${reportQualityMetrics.percentageMeetingMinimum}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Quality Insights */}
+          <div className="space-y-3">
+            {reportQualityMetrics.percentageWithEvidence < 40 && (
+              <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <span className="text-lg">💡</span>
+                  <div>
+                    <h5 className="text-yellow-400 font-semibold text-sm mb-1">
+                      Low Evidence Provision Rate
+                    </h5>
+                    <p className="text-gray-300 text-xs">
+                      Only {reportQualityMetrics.percentageWithEvidence}% of reports include evidence. Consider educating users about providing evidence for faster resolution.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {reportQualityMetrics.averageDescriptionLength < 50 && (
+              <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <span className="text-lg">💡</span>
+                  <div>
+                    <h5 className="text-yellow-400 font-semibold text-sm mb-1">
+                      Short Descriptions
+                    </h5>
+                    <p className="text-gray-300 text-xs">
+                      Average description length is {reportQualityMetrics.averageDescriptionLength} characters. Encourage users to provide more detailed descriptions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {reportQualityMetrics.percentageMeetingMinimum < 95 && (
+              <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <span className="text-lg">⚠️</span>
+                  <div>
+                    <h5 className="text-red-400 font-semibold text-sm mb-1">
+                      Minimum Character Requirement Not Met
+                    </h5>
+                    <p className="text-gray-300 text-xs">
+                      {100 - reportQualityMetrics.percentageMeetingMinimum}% of reports don't meet the 20-character minimum. Review validation enforcement.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {reportQualityMetrics.percentageWithEvidence >= 40 &&
+              reportQualityMetrics.averageDescriptionLength >= 100 &&
+              reportQualityMetrics.percentageMeetingMinimum >= 95 && (
+                <div className="bg-green-900/20 border border-green-500/50 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <span className="text-lg">✅</span>
+                    <div>
+                      <h5 className="text-green-400 font-semibold text-sm mb-1">
+                        Excellent Report Quality
+                      </h5>
+                      <p className="text-gray-300 text-xs">
+                        Report quality metrics are meeting or exceeding targets. Users are providing detailed, well-documented reports.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+          </div>
+        </div>
+      )}
 
       {/* Moderator Performance (Admin Only) */}
       {isAdminUser && moderatorPerformanceWithUsernames.length > 0 && (

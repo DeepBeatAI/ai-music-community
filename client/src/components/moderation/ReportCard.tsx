@@ -273,6 +273,30 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
             {STATUS_LABELS[report.status]}
           </span>
 
+          {/* Evidence Provided Badge */}
+          {(report.metadata?.originalWorkLink || 
+            report.metadata?.proofOfOwnership || 
+            report.metadata?.audioTimestamp) && (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-900/30 text-blue-400 border border-blue-500">
+              📎 Evidence Provided
+            </span>
+          )}
+
+          {/* Reporter Accuracy Badge */}
+          {report.metadata?.reporterAccuracy && (
+            <span
+              className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
+                report.metadata.reporterAccuracy.accuracyRate >= 80
+                  ? 'bg-green-900/30 text-green-400 border border-green-500'
+                  : report.metadata.reporterAccuracy.accuracyRate >= 50
+                  ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500'
+                  : 'bg-red-900/30 text-red-400 border border-red-500'
+              }`}
+            >
+              Reporter: {report.metadata.reporterAccuracy.accuracyRate}% accurate
+            </span>
+          )}
+
           {/* Previously Reversed Badge - Requirements: 15.9 */}
           {previousReversals?.hasPreviousReversals && (
             <span

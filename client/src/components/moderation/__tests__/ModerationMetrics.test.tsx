@@ -146,11 +146,15 @@ describe('ModerationMetrics', () => {
             moderatorId: 'mod-123',
             actionsCount: 50,
             averageResolutionTime: 3.5,
+            reversalRate: 8.5,
+            accuracy: 'Excellent',
           },
           {
             moderatorId: 'mod-456',
             actionsCount: 30,
             averageResolutionTime: 5.2,
+            reversalRate: 15.0,
+            accuracy: 'Good',
           },
         ],
       };
@@ -190,16 +194,22 @@ describe('ModerationMetrics', () => {
             moderatorId: 'mod-low',
             actionsCount: 10,
             averageResolutionTime: 2.0,
+            reversalRate: 5.0,
+            accuracy: 'Excellent',
           },
           {
             moderatorId: 'mod-high',
             actionsCount: 100,
             averageResolutionTime: 4.0,
+            reversalRate: 12.0,
+            accuracy: 'Good',
           },
           {
             moderatorId: 'mod-mid',
             actionsCount: 50,
             averageResolutionTime: 3.0,
+            reversalRate: 20.0,
+            accuracy: 'Good',
           },
         ],
       };
@@ -240,6 +250,8 @@ describe('ModerationMetrics', () => {
             moderatorId: 'mod-123',
             actionsCount: 5,
             averageResolutionTime: 0,
+            reversalRate: 0,
+            accuracy: 'Excellent',
           },
         ],
       };

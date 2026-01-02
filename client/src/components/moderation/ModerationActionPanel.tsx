@@ -86,11 +86,13 @@ export function ModerationActionPanel({
   // User role
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [isReportedUserAdmin, setIsReportedUserAdmin] = useState(false);
+  const [isSelfModeration, setIsSelfModeration] = useState(false);
 
   useEffect(() => {
     loadReportDetails();
     checkAdminStatus();
     checkReportedUserAdminStatus();
+    checkSelfModeration();
     
     // Load profile context for user reports
     if (report.report_type === 'user' && report.target_id) {
@@ -147,6 +149,30 @@ export function ModerationActionPanel({
       }
     } catch (error) {
       console.error('Failed to check reported user admin status:', error);
+    }
+  };
+
+  const checkSelfModeration = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check if the current user is trying to moderate their own content
+      // For user reports, check if target_id matches current user
+      if (report.report_type === 'user' && report.target_id === user.id) {
+        setIsSelfModeration(true);
+        return;
+      }
+
+      // For content reports (post, comment, track, album), check if reported_user_id matches current user
+      if (report.reported_user_id === user.id) {
+        setIsSelfModeration(true);
+        return;
+      }
+
+      setIsSelfModeration(false);
+    } catch (error) {
+      console.error('Failed to check self-moderation:', error);
     }
   };
 
@@ -564,6 +590,22 @@ export function ModerationActionPanel({
             </div>
           )}
 
+          {/* Self-Moderation Warning (for non-admin moderators) */}
+          {!isAdminUser && isSelfModeration && (
+            <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <span className="text-red-500 text-xl">⚠️</span>
+                <div>
+                  <p className="text-red-400 font-semibold mb-1">Self-Moderation Not Allowed</p>
+                  <p className="text-red-300 text-sm">
+                    This report involves your own content or account. As a moderator, you cannot take actions on reports targeting yourself. 
+                    Please have another moderator or administrator review this report.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Report Details Section */}
           <div className="bg-gray-700 rounded-lg p-4 sm:p-5 space-y-4">
             <h3 className="text-lg font-semibold text-white mb-3">Report Details</h3>
@@ -921,9 +963,11 @@ export function ModerationActionPanel({
 
           {/* Action Buttons */}
           <div className="pt-4 border-t border-gray-700">
-            {!isAdminUser && isReportedUserAdmin && (
+            {!isAdminUser && (isReportedUserAdmin || isSelfModeration) && (
               <p className="text-sm text-yellow-400 mb-3 text-center">
-                Actions are disabled because this report involves an admin account.
+                {isReportedUserAdmin 
+                  ? 'Actions are disabled because this report involves an admin account.'
+                  : 'Actions are disabled because this report involves your own content or account.'}
               </p>
             )}
             <div className="flex items-center justify-end space-x-3">
@@ -936,9 +980,9 @@ export function ModerationActionPanel({
               </button>
               <button
                 onClick={handleActionSubmit}
-                disabled={loading || success || !selectedAction || (!isAdminUser && isReportedUserAdmin)}
+                disabled={loading || success || !selectedAction || (!isAdminUser && (isReportedUserAdmin || isSelfModeration))}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                title={!isAdminUser && isReportedUserAdmin ? 'Cannot take action on admin accounts' : ''}
+                title={!isAdminUser && isReportedUserAdmin ? 'Cannot take action on admin accounts' : !isAdminUser && isSelfModeration ? 'Cannot take action on your own content' : ''}
               >
                 {loading ? 'Processing...' : 'Submit Action'}
               </button>

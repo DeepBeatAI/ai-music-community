@@ -29,12 +29,25 @@ interface ModeratorPerformanceWithUsername {
 }
 
 interface ReportQualityMetrics {
+  averageQualityScore: number;
   percentageWithEvidence: number;
+  percentageDetailedDescription: number;
   averageDescriptionLength: number;
-  percentageMeetingMinimum: number;
+  accuracyRate: number;
   totalReports: number;
   reportsWithEvidence: number;
-  reportsMeetingMinimum: number;
+  eligibleForEvidence: number;
+  reportsWithDetailedDescription: number;
+  finalizedReports: number;
+  validatedReports: number;
+  qualityByReason: Array<{
+    reason: string;
+    qualityScore: number;
+    reportCount: number;
+    evidenceRate: number;
+    avgDescriptionLength: number;
+    accuracyRate: number;
+  }>;
 }
 
 export function ModerationMetrics() {
@@ -235,10 +248,10 @@ export function ModerationMetrics() {
           dateRange?.startDate ||
           new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-        // Fetch all reports in date range
+        // Fetch all reports in date range with reason, report_type, and action_taken
         const { data: reports, error } = await supabase
           .from('moderation_reports')
-          .select('description, metadata')
+          .select('description, metadata, reason, report_type, status, action_taken')
           .gte('created_at', startDate)
           .lte('created_at', endDate);
 
@@ -249,12 +262,18 @@ export function ModerationMetrics() {
 
         if (!reports || reports.length === 0) {
           setReportQualityMetrics({
+            averageQualityScore: 0,
             percentageWithEvidence: 0,
+            percentageDetailedDescription: 0,
             averageDescriptionLength: 0,
-            percentageMeetingMinimum: 0,
+            accuracyRate: 0,
             totalReports: 0,
             reportsWithEvidence: 0,
-            reportsMeetingMinimum: 0,
+            eligibleForEvidence: 0,
+            reportsWithDetailedDescription: 0,
+            finalizedReports: 0,
+            validatedReports: 0,
+            qualityByReason: [],
           });
           return;
         }
@@ -262,19 +281,44 @@ export function ModerationMetrics() {
         // Calculate metrics
         const totalReports = reports.length;
         let reportsWithEvidence = 0;
+        let eligibleForEvidence = 0;
         let totalDescriptionLength = 0;
-        let reportsMeetingMinimum = 0;
+        let reportsWithDetailedDescription = 0;
+
+        // For accuracy calculation, we need finalized reports
+        // Accuracy = reports that resulted in action (resolved) / all finalized reports
+        const finalizedReports = reports.filter(
+          (r) => r.status === 'resolved' || r.status === 'dismissed'
+        );
+        const validatedReports = reports.filter(
+          (r) => r.status === 'resolved' // Resolved means action was taken
+        ).length;
+        const accuracyRate = finalizedReports.length > 0 
+          ? (validatedReports / finalizedReports.length) * 100 
+          : 0;
 
         reports.forEach((report) => {
-          // Check if report has evidence
-          if (report.metadata) {
-            const metadata = report.metadata as any;
-            if (
-              metadata.originalWorkLink ||
-              metadata.proofOfOwnership ||
-              metadata.audioTimestamp
-            ) {
-              reportsWithEvidence++;
+          // Check if report is eligible for evidence based on reason and type
+          const isEligibleForEvidence = 
+            report.reason === 'copyright_violation' ||
+            (report.report_type === 'track' && 
+             (report.reason === 'hate_speech' || 
+              report.reason === 'harassment' || 
+              report.reason === 'inappropriate_content'));
+
+          if (isEligibleForEvidence) {
+            eligibleForEvidence++;
+
+            // Check if report has evidence
+            if (report.metadata) {
+              const metadata = report.metadata as any;
+              if (
+                metadata.originalWorkLink ||
+                metadata.proofOfOwnership ||
+                metadata.audioTimestamp
+              ) {
+                reportsWithEvidence++;
+              }
             }
           }
 
@@ -282,23 +326,120 @@ export function ModerationMetrics() {
           const descriptionLength = report.description?.length || 0;
           totalDescriptionLength += descriptionLength;
 
-          // Check if meets minimum (20 characters)
-          if (descriptionLength >= 20) {
-            reportsMeetingMinimum++;
+          // Check if has detailed description (>100 chars)
+          if (descriptionLength > 100) {
+            reportsWithDetailedDescription++;
           }
         });
 
         const averageDescriptionLength = Math.round(totalDescriptionLength / totalReports);
-        const percentageWithEvidence = Math.round((reportsWithEvidence / totalReports) * 100);
-        const percentageMeetingMinimum = Math.round((reportsMeetingMinimum / totalReports) * 100);
+        const percentageWithEvidence = eligibleForEvidence > 0 
+          ? Math.round((reportsWithEvidence / eligibleForEvidence) * 100)
+          : 0;
+        const percentageDetailedDescription = Math.round((reportsWithDetailedDescription / totalReports) * 100);
+
+        // Calculate Average Quality Score
+        // Formula: evidence (40%) + description length (30%) + accuracy (30%)
+        const evidenceScore = percentageWithEvidence * 0.4;
+        const descriptionScore = Math.min((averageDescriptionLength / 100) * 100, 100) * 0.3;
+        const accuracyScore = accuracyRate * 0.3;
+        const averageQualityScore = Math.round(evidenceScore + descriptionScore + accuracyScore);
+
+        // Calculate quality by reason
+        const reasonMap = new Map<string, {
+          reports: any[];
+          eligibleForEvidence: number;
+          withEvidence: number;
+          totalDescLength: number;
+          finalized: number;
+          resolvedWithAction: number;
+        }>();
+
+        reports.forEach((report) => {
+          if (!reasonMap.has(report.reason)) {
+            reasonMap.set(report.reason, {
+              reports: [],
+              eligibleForEvidence: 0,
+              withEvidence: 0,
+              totalDescLength: 0,
+              finalized: 0,
+              resolvedWithAction: 0,
+            });
+          }
+
+          const reasonData = reasonMap.get(report.reason)!;
+          reasonData.reports.push(report);
+          reasonData.totalDescLength += report.description?.length || 0;
+
+          // Check if eligible for evidence
+          const isEligible = 
+            report.reason === 'copyright_violation' ||
+            (report.report_type === 'track' && 
+             (report.reason === 'hate_speech' || 
+              report.reason === 'harassment' || 
+              report.reason === 'inappropriate_content'));
+
+          if (isEligible) {
+            reasonData.eligibleForEvidence++;
+            if (report.metadata?.originalWorkLink || 
+                report.metadata?.proofOfOwnership || 
+                report.metadata?.audioTimestamp) {
+              reasonData.withEvidence++;
+            }
+          }
+
+          // Track finalized and validated (resolved = action taken)
+          if (report.status === 'resolved' || report.status === 'dismissed') {
+            reasonData.finalized++;
+            if (report.status === 'resolved') {
+              reasonData.resolvedWithAction++;
+            }
+          }
+        });
+
+        // Calculate quality score for each reason
+        const qualityByReason = Array.from(reasonMap.entries())
+          .map(([reason, data]) => {
+            const reportCount = data.reports.length;
+            const avgDescLength = Math.round(data.totalDescLength / reportCount);
+            const evidenceRate = data.eligibleForEvidence > 0 
+              ? (data.withEvidence / data.eligibleForEvidence) * 100 
+              : 0;
+            const accuracyRate = data.finalized > 0 
+              ? (data.resolvedWithAction / data.finalized) * 100 
+              : 0;
+
+            // Calculate quality score for this reason
+            const evidenceScore = evidenceRate * 0.4;
+            const descScore = Math.min((avgDescLength / 100) * 100, 100) * 0.3;
+            const accScore = accuracyRate * 0.3;
+            const qualityScore = Math.round(evidenceScore + descScore + accScore);
+
+            return {
+              reason,
+              qualityScore,
+              reportCount,
+              evidenceRate: Math.round(evidenceRate),
+              avgDescriptionLength: avgDescLength,
+              accuracyRate: Math.round(accuracyRate),
+            };
+          })
+          .filter(item => item.reportCount >= 3) // Only include reasons with 3+ reports
+          .sort((a, b) => b.qualityScore - a.qualityScore); // Sort by quality score
 
         setReportQualityMetrics({
+          averageQualityScore,
           percentageWithEvidence,
+          percentageDetailedDescription,
           averageDescriptionLength,
-          percentageMeetingMinimum,
+          accuracyRate,
           totalReports,
           reportsWithEvidence,
-          reportsMeetingMinimum,
+          eligibleForEvidence,
+          reportsWithDetailedDescription,
+          finalizedReports: finalizedReports.length,
+          validatedReports: validatedReports,
+          qualityByReason,
         });
       } catch (error) {
         console.error('Failed to fetch report quality metrics:', error);
@@ -708,20 +849,59 @@ export function ModerationMetrics() {
             </span>
           </div>
 
+          {/* Average Quality Score - New */}
+          <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/50 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-300 font-semibold">Average Quality Score</span>
+                <span 
+                  className="text-gray-400 cursor-help text-xs" 
+                  title="Calculated as: Evidence Provision (40%) + Description Quality (30%) + Reporter Accuracy (30%). Higher scores indicate better report quality."
+                >
+                  ℹ️
+                </span>
+              </div>
+              {reportQualityMetrics.averageQualityScore >= 70 && (
+                <span className="text-green-400 text-xs">✓ Excellent</span>
+              )}
+            </div>
+            <div
+              className={`text-4xl font-bold ${
+                reportQualityMetrics.averageQualityScore >= 70
+                  ? 'text-green-400'
+                  : reportQualityMetrics.averageQualityScore >= 50
+                  ? 'text-yellow-400'
+                  : 'text-red-400'
+              }`}
+            >
+              {reportQualityMetrics.averageQualityScore}
+              <span className="text-2xl text-gray-400">/100</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Evidence (40%) + Description (30%) + Accuracy (30%)
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            {/* Evidence Provision Rate */}
+            {/* Evidence Score (40% weight) */}
             <div className="bg-gray-700/50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">Reports with Evidence</span>
-                {reportQualityMetrics.percentageWithEvidence >= 40 && (
-                  <span className="text-green-400 text-xs">✓ Good</span>
-                )}
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-gray-400">Evidence Score</span>
+                  <span 
+                    className="text-gray-500 cursor-help text-xs" 
+                    title="Percentage of eligible reports that include evidence (copyright links, timestamps, etc.). Contributes 40% to overall quality score. Only counts reports that can have evidence based on reason and type."
+                  >
+                    ℹ️
+                  </span>
+                </div>
+                <span className="text-xs text-purple-400 font-medium">40% weight</span>
               </div>
               <div
                 className={`text-3xl font-bold ${
-                  reportQualityMetrics.percentageWithEvidence >= 40
+                  reportQualityMetrics.percentageWithEvidence >= 60
                     ? 'text-green-400'
-                    : reportQualityMetrics.percentageWithEvidence >= 20
+                    : reportQualityMetrics.percentageWithEvidence >= 40
                     ? 'text-yellow-400'
                     : 'text-red-400'
                 }`}
@@ -729,14 +909,14 @@ export function ModerationMetrics() {
                 {reportQualityMetrics.percentageWithEvidence}%
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                {reportQualityMetrics.reportsWithEvidence} of {reportQualityMetrics.totalReports} reports
+                {reportQualityMetrics.reportsWithEvidence} of {reportQualityMetrics.eligibleForEvidence} eligible
               </p>
               <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    reportQualityMetrics.percentageWithEvidence >= 40
+                    reportQualityMetrics.percentageWithEvidence >= 60
                       ? 'bg-green-500'
-                      : reportQualityMetrics.percentageWithEvidence >= 20
+                      : reportQualityMetrics.percentageWithEvidence >= 40
                       ? 'bg-yellow-500'
                       : 'bg-red-500'
                   }`}
@@ -745,74 +925,90 @@ export function ModerationMetrics() {
               </div>
             </div>
 
-            {/* Average Description Length */}
+            {/* Description Score (30% weight) */}
             <div className="bg-gray-700/50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">Avg Description Length</span>
-                {reportQualityMetrics.averageDescriptionLength >= 100 && (
-                  <span className="text-green-400 text-xs">✓ Good</span>
-                )}
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-gray-400">Description Score</span>
+                  <span 
+                    className="text-gray-500 cursor-help text-xs" 
+                    title="Average description length normalized to 0-100 scale (100 chars = 100%). Contributes 30% to overall quality score. Longer, detailed descriptions help moderators make better decisions."
+                  >
+                    ℹ️
+                  </span>
+                </div>
+                <span className="text-xs text-purple-400 font-medium">30% weight</span>
               </div>
               <div
                 className={`text-3xl font-bold ${
                   reportQualityMetrics.averageDescriptionLength >= 100
                     ? 'text-green-400'
-                    : reportQualityMetrics.averageDescriptionLength >= 50
+                    : reportQualityMetrics.averageDescriptionLength >= 60
                     ? 'text-yellow-400'
                     : 'text-red-400'
                 }`}
               >
-                {reportQualityMetrics.averageDescriptionLength}
+                {Math.min(Math.round((reportQualityMetrics.averageDescriptionLength / 100) * 100), 100)}%
               </div>
-              <p className="text-xs text-gray-500 mt-1">characters</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Avg: {reportQualityMetrics.averageDescriptionLength} chars
+              </p>
               <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
                     reportQualityMetrics.averageDescriptionLength >= 100
                       ? 'bg-green-500'
-                      : reportQualityMetrics.averageDescriptionLength >= 50
+                      : reportQualityMetrics.averageDescriptionLength >= 60
                       ? 'bg-yellow-500'
                       : 'bg-red-500'
                   }`}
                   style={{
-                    width: `${Math.min((reportQualityMetrics.averageDescriptionLength / 200) * 100, 100)}%`,
+                    width: `${Math.min((reportQualityMetrics.averageDescriptionLength / 100) * 100, 100)}%`,
                   }}
                 />
               </div>
             </div>
 
-            {/* Minimum Character Requirement */}
+            {/* Accuracy Score (30% weight) */}
             <div className="bg-gray-700/50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">Meeting Minimum (20 chars)</span>
-                {reportQualityMetrics.percentageMeetingMinimum >= 95 && (
-                  <span className="text-green-400 text-xs">✓ Good</span>
-                )}
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-gray-400">Accuracy Score</span>
+                  <span 
+                    className="text-gray-500 cursor-help text-xs" 
+                    title="Validation Rate: Percentage of reviewed reports where a violation was confirmed (status = 'resolved'). Dismissed reports mean no violation was found. Formula: (resolved reports ÷ total reviewed) × 100. Contributes 30% to overall quality score."
+                  >
+                    ℹ️
+                  </span>
+                </div>
+                <span className="text-xs text-purple-400 font-medium">30% weight</span>
               </div>
               <div
                 className={`text-3xl font-bold ${
-                  reportQualityMetrics.percentageMeetingMinimum >= 95
+                  reportQualityMetrics.accuracyRate >= 70
                     ? 'text-green-400'
-                    : reportQualityMetrics.percentageMeetingMinimum >= 80
+                    : reportQualityMetrics.accuracyRate >= 50
                     ? 'text-yellow-400'
                     : 'text-red-400'
                 }`}
               >
-                {reportQualityMetrics.percentageMeetingMinimum}%
+                {Math.round(reportQualityMetrics.accuracyRate)}%
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                {reportQualityMetrics.reportsMeetingMinimum} of {reportQualityMetrics.totalReports} reports
+                {reportQualityMetrics.validatedReports} validated of {reportQualityMetrics.finalizedReports} reviewed
               </p>
               <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    reportQualityMetrics.percentageMeetingMinimum >= 95
+                    reportQualityMetrics.accuracyRate >= 70
                       ? 'bg-green-500'
-                      : reportQualityMetrics.percentageMeetingMinimum >= 80
+                      : reportQualityMetrics.accuracyRate >= 50
                       ? 'bg-yellow-500'
                       : 'bg-red-500'
                   }`}
-                  style={{ width: `${reportQualityMetrics.percentageMeetingMinimum}%` }}
+                  style={{
+                    width: `${Math.round(reportQualityMetrics.accuracyRate)}%`,
+                  }}
                 />
               </div>
             </div>
@@ -829,7 +1025,7 @@ export function ModerationMetrics() {
                       Low Evidence Provision Rate
                     </h5>
                     <p className="text-gray-300 text-xs">
-                      Only {reportQualityMetrics.percentageWithEvidence}% of reports include evidence. Consider educating users about providing evidence for faster resolution.
+                      Only {reportQualityMetrics.percentageWithEvidence}% of eligible reports include evidence. Consider educating users about providing evidence for faster resolution.
                     </p>
                   </div>
                 </div>
@@ -852,40 +1048,97 @@ export function ModerationMetrics() {
               </div>
             )}
 
-            {reportQualityMetrics.percentageMeetingMinimum < 95 && (
-              <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3">
-                <div className="flex items-start space-x-2">
-                  <span className="text-lg">⚠️</span>
-                  <div>
-                    <h5 className="text-red-400 font-semibold text-sm mb-1">
-                      Minimum Character Requirement Not Met
-                    </h5>
-                    <p className="text-gray-300 text-xs">
-                      {100 - reportQualityMetrics.percentageMeetingMinimum}% of reports don't meet the 20-character minimum. Review validation enforcement.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {reportQualityMetrics.percentageWithEvidence >= 40 &&
-              reportQualityMetrics.averageDescriptionLength >= 100 &&
-              reportQualityMetrics.percentageMeetingMinimum >= 95 && (
+            {reportQualityMetrics.averageQualityScore >= 70 &&
+              reportQualityMetrics.percentageWithEvidence >= 40 &&
+              reportQualityMetrics.percentageDetailedDescription >= 60 && (
                 <div className="bg-green-900/20 border border-green-500/50 rounded-lg p-3">
                   <div className="flex items-start space-x-2">
-                    <span className="text-lg">✅</span>
+                    <span className="text-lg">✨</span>
                     <div>
                       <h5 className="text-green-400 font-semibold text-sm mb-1">
                         Excellent Report Quality
                       </h5>
                       <p className="text-gray-300 text-xs">
-                        Report quality metrics are meeting or exceeding targets. Users are providing detailed, well-documented reports.
+                        Your community is submitting high-quality reports with good evidence and detailed descriptions. Keep up the great work!
                       </p>
                     </div>
                   </div>
                 </div>
               )}
           </div>
+
+          {/* Accuracy Breakdown by Report Reason */}
+          {reportQualityMetrics.qualityByReason.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-700">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-md font-semibold text-white">Accuracy Scores by Report Reason</h4>
+                <span 
+                  className="text-gray-400 cursor-help text-xs" 
+                  title="Shows validation rate for each report reason. This measures how often reports for each reason result in confirmed violations (status = 'resolved'). Only includes reasons with 3+ reports for statistical significance."
+                >
+                  ℹ️
+                </span>
+              </div>
+              
+              <div className="space-y-2">
+                {reportQualityMetrics.qualityByReason
+                  .sort((a, b) => b.accuracyRate - a.accuracyRate) // Sort by accuracy (highest first)
+                  .map((item, index) => (
+                    <div key={item.reason} className="bg-gray-700/50 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <span className="text-gray-500 font-mono text-xs w-6">#{index + 1}</span>
+                          <div className="flex-1">
+                            <span className="text-gray-200 text-sm font-medium">
+                              {REASON_LABELS[item.reason as keyof typeof REASON_LABELS] || item.reason}
+                            </span>
+                            <span className="text-xs text-gray-400 ml-2">({item.reportCount} reports)</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-4">
+                          {/* Accuracy Percentage */}
+                          <div className="text-right">
+                            <div className={`text-2xl font-bold ${
+                              item.accuracyRate >= 70 ? 'text-green-400' :
+                              item.accuracyRate >= 50 ? 'text-yellow-400' : 'text-red-400'
+                            }`}>
+                              {item.accuracyRate}%
+                            </div>
+                            <div className="text-xs text-gray-500">Accuracy</div>
+                          </div>
+                          
+                          {/* Progress Bar */}
+                          <div className="w-32">
+                            <div className="w-full bg-gray-700 rounded-full h-3">
+                              <div
+                                className={`h-3 rounded-full transition-all duration-300 ${
+                                  item.accuracyRate >= 70 ? 'bg-green-500' :
+                                  item.accuracyRate >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${item.accuracyRate}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              
+              {/* Explanation */}
+              <div className="mt-4 bg-blue-900/20 border border-blue-500/30 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <span className="text-sm">💡</span>
+                  <p className="text-gray-300 text-xs">
+                    <strong>Accuracy Rate</strong> measures how often reports for each reason result in confirmed violations. 
+                    Higher accuracy means reports for that reason are more likely to identify real violations. 
+                    This helps identify which violation types are well-understood by reporters and which may need better guidance.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

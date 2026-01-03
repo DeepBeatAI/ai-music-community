@@ -36,6 +36,7 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
       moderatorId: string;
     } | null;
   } | null>(null);
+  const [multipleReportsCount, setMultipleReportsCount] = useState<number>(0);
 
   const loadRelatedAction = useCallback(async () => {
     try {
@@ -69,6 +70,26 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
       setPreviousReversals(null);
     }
   }, [report]);
+
+  const loadMultipleReportsCount = useCallback(async () => {
+    try {
+      // Count reports with the same target_id (same content)
+      // Requirements: 7.6
+      if (report.target_id) {
+        const { count } = await supabase
+          .from('moderation_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('target_id', report.target_id);
+        
+        // Set count (will be 0 if only this report exists, or 1+ if multiple reports)
+        setMultipleReportsCount(count || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load multiple reports count:', error);
+      // Don't block the UI if this fails
+      setMultipleReportsCount(0);
+    }
+  }, [report.target_id]);
 
   const loadReportDetails = useCallback(async () => {
     setLoading(true);
@@ -182,7 +203,8 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
     loadReportDetails();
     loadRelatedAction();
     loadPreviousReversals();
-  }, [loadReportDetails, loadRelatedAction, loadPreviousReversals]);
+    loadMultipleReportsCount();
+  }, [loadReportDetails, loadRelatedAction, loadPreviousReversals, loadMultipleReportsCount]);
 
   // Color coding: Requirements 15.4
   // Priority colors remain as-is for priority badges
@@ -285,15 +307,23 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
           {/* Reporter Accuracy Badge */}
           {report.metadata?.reporterAccuracy && (
             <span
-              className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
+              className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold cursor-help ${
                 report.metadata.reporterAccuracy.accuracyRate >= 80
                   ? 'bg-green-900/30 text-green-400 border border-green-500'
                   : report.metadata.reporterAccuracy.accuracyRate >= 50
                   ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500'
                   : 'bg-red-900/30 text-red-400 border border-red-500'
               }`}
+              title={`Validation Rate: ${report.metadata.reporterAccuracy.accurateReports} validated out of ${report.metadata.reporterAccuracy.totalReports} finalized reports. This measures how often this reporter's reports result in moderation action. Pending reports are not included until reviewed.`}
             >
               Reporter: {report.metadata.reporterAccuracy.accuracyRate}% accurate
+            </span>
+          )}
+
+          {/* Multiple Reports Badge - Requirements: 7.6 */}
+          {multipleReportsCount >= 2 && (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-900/30 text-orange-400 border border-orange-500">
+              🔔 Multiple Reports ({multipleReportsCount})
             </span>
           )}
 

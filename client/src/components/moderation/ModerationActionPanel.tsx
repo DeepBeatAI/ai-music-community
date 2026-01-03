@@ -887,8 +887,33 @@ export function ModerationActionPanel({
             
             <div className="space-y-2">
               <div>
-                <span className="text-sm text-gray-400">Reporter:</span>
-                <p className="text-white text-sm">{reporterUsername}</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm text-gray-400">Reporter:</span>
+                    <p className="text-white text-sm">{reporterUsername}</p>
+                  </div>
+                  {/* Reporter Accuracy (if this is a user report) */}
+                  {report.reporter_id && reporterAccuracy && !report.moderator_flagged && (
+                    <div 
+                      className="flex items-center gap-2 cursor-help" 
+                      title={`Validation Rate: ${reporterAccuracy.accurateReports} validated out of ${reporterAccuracy.totalReports} finalized reports. This measures how often this reporter's reports result in moderation action. Pending reports are not included until reviewed.`}
+                    >
+                      <span className="text-xs text-gray-400">Accuracy:</span>
+                      <span className={`text-sm font-semibold ${
+                        reporterAccuracy.accuracyRate >= 80
+                          ? 'text-green-400'
+                          : reporterAccuracy.accuracyRate >= 50
+                          ? 'text-yellow-400'
+                          : 'text-red-400'
+                      }`}>
+                        {reporterAccuracy.accuracyRate}%
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        ({reporterAccuracy.accurateReports}/{reporterAccuracy.totalReports})
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
               {reportedUsername && (
                 <div>
@@ -942,21 +967,6 @@ export function ModerationActionPanel({
                   <p className="text-white text-lg font-semibold">{userHistory.total_actions}</p>
                 </div>
               </div>
-
-              {/* Reporter Accuracy (if this is a user report) */}
-              {report.reporter_id && reporterAccuracy && !report.moderator_flagged && (
-                <div className="bg-gray-800 rounded p-3">
-                  <span className="text-sm text-gray-400 block mb-2">Reporter Accuracy:</span>
-                  <div className="flex items-center gap-3">
-                    <div className="text-2xl font-bold text-white">
-                      {reporterAccuracy.accuracyRate}%
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      {reporterAccuracy.accurateReports} accurate out of {reporterAccuracy.totalReports} reports
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {userHistory.recent_actions.length > 0 && (
                 <div>

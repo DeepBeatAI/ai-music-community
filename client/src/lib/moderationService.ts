@@ -781,13 +781,24 @@ export async function calculateReporterAccuracy(
       return null;
     }
 
-    const totalReports = reports.length;
+    // Filter to only finalized reports (resolved or dismissed)
+    // Exclude pending and under_review reports as they haven't been evaluated yet
+    const finalizedReports = reports.filter(
+      (report) => report.status === 'resolved' || report.status === 'dismissed'
+    );
+
+    // If no finalized reports, return null (can't calculate accuracy yet)
+    if (finalizedReports.length === 0) {
+      return null;
+    }
+
+    const totalReports = finalizedReports.length;
 
     // Count accurate reports (resolved with action taken)
     // A report is accurate if:
     // 1. Status is 'resolved' (not 'dismissed')
     // 2. action_taken is not null (some action was taken)
-    const accurateReports = reports.filter(
+    const accurateReports = finalizedReports.filter(
       (report) => report.status === 'resolved' && report.action_taken !== null
     ).length;
 

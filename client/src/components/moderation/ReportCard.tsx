@@ -482,8 +482,20 @@ export function ReportCard({ report, onSelect, showActions = true, onReversalReq
             ID: {report.id}
           </div>
           <div className="flex items-center space-x-2">
-            {/* Show reversal button if action exists and hasn't been reversed */}
-            {relatedAction && !relatedAction.revoked_at && onReversalRequested && (
+            {/* Show reversal button if action exists, hasn't been reversed, and is reversible */}
+            {relatedAction && !relatedAction.revoked_at && onReversalRequested && (() => {
+              // Only show button for specific action types
+              const reversibleActionTypes = ['restriction_applied', 'user_suspended'];
+              
+              // For user_banned (permanent suspension), only show if current user is admin
+              // Note: We can't check admin status here without async, so we show the button
+              // and let the reversal modal handle the admin check
+              if (relatedAction.action_type === 'user_banned') {
+                return true; // Show button, modal will check admin status
+              }
+              
+              return reversibleActionTypes.includes(relatedAction.action_type);
+            })() && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();

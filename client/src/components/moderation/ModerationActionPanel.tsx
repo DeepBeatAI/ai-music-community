@@ -291,9 +291,17 @@ export function ModerationActionPanel({
         .from('tracks')
         .select('file_url, duration')
         .eq('id', report.target_id)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to handle deleted tracks
       
       if (error) {
+        // Handle specific error cases
+        if (error.code === 'PGRST116') {
+          // No rows returned - track was deleted
+          setTrackAudioError('Track has been deleted or is no longer available');
+          setTrackAudioUrl(null);
+          setTrackDuration(null);
+          return;
+        }
         throw error;
       }
       
@@ -314,7 +322,10 @@ export function ModerationActionPanel({
       setTrackAudioUrl(track.file_url);
       setTrackDuration(track.duration);
     } catch (error) {
-      console.error('Failed to load track audio URL:', error);
+      // Only log meaningful errors (not empty objects)
+      if (error && (error instanceof Error || Object.keys(error).length > 0)) {
+        console.error('Failed to load track audio URL:', error);
+      }
       setTrackAudioError(error instanceof Error ? error.message : 'Failed to load audio');
       setTrackAudioUrl(null);
       setTrackDuration(null);
@@ -1199,7 +1210,23 @@ export function ModerationActionPanel({
               {reportedUsername && (
                 <div>
                   <span className="text-sm text-gray-400">Reported User:</span>
-                  <p className="text-white text-sm">{reportedUsername}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-white text-sm">{reportedUsername}</p>
+                    {report.reported_user_id && (
+                      <a
+                        href={`/moderation?tab=userStatus&userId=${report.reported_user_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 text-xs flex items-center gap-1"
+                        title="View user status"
+                      >
+                        View Status
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
               {contentCreatedAt && (

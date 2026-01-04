@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { isUserModeratorOrAdmin } from '@/lib/userTypeService';
 import { isAdmin } from '@/lib/moderationService';
@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 export default function ModerationPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,19 @@ export default function ModerationPage() {
   const [searchedUserId, setSearchedUserId] = useState<string | null>(null);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
   const [userSearchError, setUserSearchError] = useState<string | null>(null);
+
+  // Handle URL parameters on mount
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const userId = searchParams.get('userId');
+    
+    if (tab === 'userStatus' && userId) {
+      setActiveTab('userStatus');
+      setSearchedUserId(userId);
+    } else if (tab && ['queue', 'logs', 'userStatus', 'metrics'].includes(tab)) {
+      setActiveTab(tab as 'queue' | 'logs' | 'userStatus' | 'metrics');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const checkAccess = async () => {

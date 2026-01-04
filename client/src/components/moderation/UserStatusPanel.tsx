@@ -33,6 +33,8 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
   const [fullHistory, setFullHistory] = useState<ModerationHistoryEntry[]>([]); // Store full history for stats and display
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [username, setUsername] = useState<string>('');
+  const [userProfileId, setUserProfileId] = useState<string>('');
 
   useEffect(() => {
     loadUserStatus();
@@ -56,6 +58,18 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
     try {
       setLoading(true);
       setError(null);
+
+      // Load user profile to get username
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('username, user_id')
+        .eq('user_id', userId)
+        .single();
+      
+      if (profile) {
+        setUsername(profile.username);
+        setUserProfileId(profile.user_id);
+      }
 
       // Load suspension status
       const suspension = await getUserSuspensionStatus(userId);
@@ -123,7 +137,25 @@ export function UserStatusPanel({ userId, onActionComplete }: UserStatusPanelPro
     <div className="bg-white rounded-lg shadow">
       {/* Header */}
       <div className="border-b border-gray-200 px-6 py-4">
-        <h2 className="text-xl font-semibold text-gray-900">User Status</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-gray-900">User Status</h2>
+          {username && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">User:</span>
+              <a
+                href={`/profile/${username}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+              >
+                {username}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="p-6 space-y-6">

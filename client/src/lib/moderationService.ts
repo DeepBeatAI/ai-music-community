@@ -1408,8 +1408,12 @@ export async function fetchModerationQueue(filters: QueueFilters = {}): Promise<
       query = query.lte('created_at', filters.endDate);
     }
 
-    // Apply sorting
-    // Moderator-flagged reports appear first, then sort by priority (ascending), then by date (ascending)
+    // Requirement 8.7: Filter by "Has Evidence"
+    // Note: We can't filter by JSONB content directly in the query efficiently,
+    // so we'll filter in-memory after fetching
+
+    // Apply basic sorting (we'll do hybrid sorting in-memory)
+    // Moderator-flagged reports appear first, then sort by priority (ascending)
     query = query
       .order('moderator_flagged', { ascending: false })
       .order('priority', { ascending: true })
@@ -1422,7 +1426,130 @@ export async function fetchModerationQueue(filters: QueueFilters = {}): Promise<
       handleDatabaseError(error, 'fetch moderation queue');
     }
 
-    return (data as Report[]) || [];
+    let reports = (data as Report[]) || [];
+
+    // Requirement 8.7: Filter by evidence if requested
+    if (filters.hasEvidence !== undefined) {
+      reports = reports.filter((report) => {
+        const hasEvidence = !!(
+          report.metadata &&
+          (report.metadata.originalWorkLink ||
+            report.metadata.proofOfOwnership ||
+            report.metadata.audioTimestamp)
+        );
+        return filters.hasEvidence ? hasEvidence : !hasEvidence;
+      });
+    }
+
+    // Fetch multiple reports counts for all reports in a single query (performance optimization)
+    // This avoids N+1 query problem
+    const targetIds = [...new Set(reports.map(r => r.target_id).filter(Boolean))];
+    const multipleReportsMap = new Map<string, number>();
+    
+    if (targetIds.length > 0) {
+      // Group by target_id and count
+      const { data: counts, error: countsError } = await supabase
+        .from('moderation_reports')
+        .select('target_id')
+        .in('target_id', targetIds);
+
+      if (!countsError && counts) {
+        // Count occurrences of each target_id
+        counts.forEach((item) => {
+          if (item.target_id) {
+            multipleReportsMap.set(
+              item.target_id,
+              (multipleReportsMap.get(item.target_id) || 0) + 1
+            );
+          }
+        });
+      }
+    }
+
+    // Add multipleReportsCount to each report
+    reports = reports.map(report => ({
+      ...report,
+      multipleReportsCount: report.target_id ? (multipleReportsMap.get(report.target_id) || 0) : 0,
+    }));
+
+    // Requirement 8.6: Improved queue sorting algorithm
+    // Sorting priority:
+    // 1. Status (pending > under_review > resolved/dismissed)
+    // 2. Priority level (P1 > P2 > P3 > P4 > P5)
+    // 3. Multiple reports count (higher count first)
+    // 4. Hybrid age/evidence sort:
+    //    - Reports >24h old: sort by age (oldest first) - FAIRNESS
+    //    - Reports <24h old: sort by evidence (has evidence first), then age - QUALITY
+    const now = Date.now();
+    const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+
+    reports.sort((a, b) => {
+      // 1. Status (pending > under_review > resolved/dismissed)
+      const statusPriority: Record<string, number> = {
+        pending: 1,
+        under_review: 2,
+        resolved: 3,
+        dismissed: 3,
+      };
+      const aStatusPriority = statusPriority[a.status] || 999;
+      const bStatusPriority = statusPriority[b.status] || 999;
+      
+      if (aStatusPriority !== bStatusPriority) {
+        return aStatusPriority - bStatusPriority;
+      }
+
+      // 2. Priority level (P1 > P2 > P3 > P4 > P5)
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+
+      // 3. Multiple reports count (higher count first)
+      const aCount = (a as any).multipleReportsCount || 0;
+      const bCount = (b as any).multipleReportsCount || 0;
+      if (aCount !== bCount) {
+        return bCount - aCount; // Higher count first
+      }
+
+      // 4. Hybrid age/evidence sort
+      const aAge = now - new Date(a.created_at).getTime();
+      const bAge = now - new Date(b.created_at).getTime();
+      const aIsOld = aAge > twentyFourHoursMs;
+      const bIsOld = bAge > twentyFourHoursMs;
+
+      // Both old (>24h): sort by age (oldest first)
+      if (aIsOld && bIsOld) {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+
+      // One old, one fresh: old first (fairness)
+      if (aIsOld !== bIsOld) {
+        return aIsOld ? -1 : 1;
+      }
+
+      // Both fresh (<24h): evidence first, then age
+      const aHasEvidence = !!(
+        a.metadata &&
+        (a.metadata.originalWorkLink ||
+          a.metadata.proofOfOwnership ||
+          a.metadata.audioTimestamp)
+      );
+      const bHasEvidence = !!(
+        b.metadata &&
+        (b.metadata.originalWorkLink ||
+          b.metadata.proofOfOwnership ||
+          b.metadata.audioTimestamp)
+      );
+
+      // Evidence first
+      if (aHasEvidence !== bHasEvidence) {
+        return aHasEvidence ? -1 : 1;
+      }
+
+      // Both same evidence status: oldest first
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+
+    return reports;
   } catch (error) {
     if (error instanceof ModerationError) {
       throw error;

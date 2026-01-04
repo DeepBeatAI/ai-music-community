@@ -201,6 +201,7 @@ export interface QueueFilters {
   reportType?: ReportType;
   startDate?: string;
   endDate?: string;
+  hasEvidence?: boolean; // Requirement 8.7: Filter by "Has Evidence"
 }
 
 /**

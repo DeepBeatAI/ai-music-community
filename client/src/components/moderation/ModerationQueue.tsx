@@ -85,6 +85,14 @@ export function ModerationQueue({ onReportSelect }: ModerationQueueProps) {
     setCurrentPage(1);
   };
 
+  const handleEvidenceFilter = (hasEvidence: boolean | '') => {
+    setFilters((prev) => ({
+      ...prev,
+      hasEvidence: hasEvidence === '' ? undefined : hasEvidence,
+    }));
+    setCurrentPage(1);
+  };
+
   const clearFilters = () => {
     setFilters({});
     setSelectedTimeframe('');
@@ -128,7 +136,7 @@ export function ModerationQueue({ onReportSelect }: ModerationQueueProps) {
       {/* Filter Controls */}
       <div className="bg-gray-700 rounded-lg p-4 sm:p-6">
         <h3 className="text-lg font-semibold text-white mb-4 sm:hidden">Filters</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {/* Status Filter */}
           <div>
             <label htmlFor="status-filter" className="block text-sm font-medium text-gray-300 mb-1">
@@ -261,6 +269,26 @@ export function ModerationQueue({ onReportSelect }: ModerationQueueProps) {
               <option value="week">Last 7 Days</option>
               <option value="month">Last 30 Days</option>
               <option value="3months">Last 3 Months</option>
+            </select>
+          </div>
+
+          {/* Evidence Filter - Requirement 8.7 */}
+          <div>
+            <label htmlFor="evidence-filter" className="block text-sm font-medium text-gray-300 mb-1">
+              Evidence
+            </label>
+            <select
+              id="evidence-filter"
+              value={filters.hasEvidence === undefined ? '' : filters.hasEvidence.toString()}
+              onChange={(e) =>
+                handleEvidenceFilter(e.target.value === '' ? '' : e.target.value === 'true')
+              }
+              className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title="Filter reports by evidence provision. Reports with evidence include copyright links, timestamps, or detailed descriptions."
+            >
+              <option value="">All Reports</option>
+              <option value="true">📎 Has Evidence</option>
+              <option value="false">No Evidence</option>
             </select>
           </div>
 

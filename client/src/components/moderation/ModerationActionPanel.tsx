@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Report,
   ModerationActionType,
@@ -16,10 +16,12 @@ import {
   AlbumContext,
   CascadingActionOptions as CascadingOptions,
 } from '@/types/moderation';
-import { takeModerationAction, isAdmin, revokeAction, getProfileContext, fetchAlbumContext, calculateReporterAccuracy } from '@/lib/moderationService';
+import { takeModerationAction, isAdmin, revokeAction, getProfileContext, fetchAlbumContext, calculateReporterAccuracy, detectRepeatOffender, calculateViolationTimeline } from '@/lib/moderationService';
 import { supabase } from '@/lib/supabase';
 import { AlbumContextDisplay } from './AlbumContextDisplay';
 import { CascadingActionOptions } from './CascadingActionOptions';
+import WavesurferPlayer, { WavesurferPlayerRef } from '@/components/WavesurferPlayer';
+import { parseTimestamps, parseTimestampToSeconds } from '@/utils/format';
 
 interface ModerationActionPanelProps {
   report: Report;
@@ -36,6 +38,14 @@ interface UserViolationHistory {
     reason: string;
     internal_notes: string;
     created_at: string;
+    metadata?: {
+      evidence_verification?: {
+        verified: boolean;
+        notes: string | null;
+        verified_at: string;
+        verified_by: string;
+      };
+    };
   }>;
 }
 
@@ -80,6 +90,22 @@ export function ModerationActionPanel({
     accurateReports: number;
     accuracyRate: number;
   } | null>(null);
+  const [isRepeatOffender, setIsRepeatOffender] = useState<boolean>(false);
+  const [violationTimeline, setViolationTimeline] = useState<{
+    last7Days: number;
+    last30Days: number;
+    last90Days: number;
+    message: string | null;
+  } | null>(null);
+  
+  // Track audio URL for audio review (Requirement 10.1)
+  const [trackAudioUrl, setTrackAudioUrl] = useState<string | null>(null);
+  const [loadingTrackAudio, setLoadingTrackAudio] = useState(false);
+  const [trackAudioError, setTrackAudioError] = useState<string | null>(null);
+  const [trackDuration, setTrackDuration] = useState<number | null>(null);
+  
+  // Ref for WavesurferPlayer to control seeking (Requirement 10.2, 10.3)
+  const wavesurferPlayerRef = useRef<WavesurferPlayerRef>(null);
   
   // Profile context for user reports
   const [profileContext, setProfileContext] = useState<ProfileContext | null>(null);
@@ -100,6 +126,10 @@ export function ModerationActionPanel({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [copiedTimestamp, setCopiedTimestamp] = useState(false);
   
+  // Evidence verification state (Requirements 9.6, 9.7)
+  const [evidenceVerified, setEvidenceVerified] = useState(false);
+  const [verificationNotes, setVerificationNotes] = useState('');
+  
   // Cascading action options for album removal
   const [cascadingOptions, setCascadingOptions] = useState<CascadingOptions>({
     removeAlbum: true,
@@ -118,6 +148,8 @@ export function ModerationActionPanel({
     checkSelfModeration();
     loadRelatedReports();
     loadReporterAccuracy();
+    loadRepeatOffenderStatus();
+    loadViolationTimeline();
     
     // Load profile context for user reports
     if (report.report_type === 'user' && report.target_id) {
@@ -127,6 +159,11 @@ export function ModerationActionPanel({
     // Load album context for album reports
     if (report.report_type === 'album' && report.target_id) {
       loadAlbumContext();
+    }
+    
+    // Load track audio URL for all track reports (Requirement 10.1)
+    if (report.report_type === 'track') {
+      loadTrackAudioUrl();
     }
     
     // If actionIdToReverse is provided, load that action and show reversal dialog
@@ -227,7 +264,7 @@ export function ModerationActionPanel({
       
       if (context === null) {
         // Album not found (likely deleted by user)
-        setAlbumContextError('Album not found');
+        setAlbumContextError('Album has been deleted or is no longer available');
         setAlbumContext(null);
       } else {
         setAlbumContext(context);
@@ -237,6 +274,52 @@ export function ModerationActionPanel({
       setAlbumContextError(error instanceof Error ? error.message : 'Failed to load album context');
     } finally {
       setLoadingAlbumContext(false);
+    }
+  };
+
+  const loadTrackAudioUrl = async () => {
+    // Load audio URL for all track reports (Requirement 10.1)
+    if (report.report_type !== 'track' || !report.target_id) {
+      return;
+    }
+    
+    try {
+      setLoadingTrackAudio(true);
+      setTrackAudioError(null);
+      
+      const { data: track, error } = await supabase
+        .from('tracks')
+        .select('file_url, duration')
+        .eq('id', report.target_id)
+        .single();
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (!track) {
+        setTrackAudioError('Track has been deleted or is no longer available');
+        setTrackAudioUrl(null);
+        setTrackDuration(null);
+        return;
+      }
+      
+      if (!track.file_url) {
+        setTrackAudioError('Audio file not available');
+        setTrackAudioUrl(null);
+        setTrackDuration(null);
+        return;
+      }
+      
+      setTrackAudioUrl(track.file_url);
+      setTrackDuration(track.duration);
+    } catch (error) {
+      console.error('Failed to load track audio URL:', error);
+      setTrackAudioError(error instanceof Error ? error.message : 'Failed to load audio');
+      setTrackAudioUrl(null);
+      setTrackDuration(null);
+    } finally {
+      setLoadingTrackAudio(false);
     }
   };
 
@@ -280,6 +363,32 @@ export function ModerationActionPanel({
     } catch (error) {
       console.error('Failed to load reporter accuracy:', error);
       // Don't set error state - reporter accuracy is supplementary information
+    }
+  };
+
+  const loadRepeatOffenderStatus = async () => {
+    try {
+      // Only check repeat offender status if there's a reported user
+      if (report.reported_user_id) {
+        const isRepeat = await detectRepeatOffender(report.reported_user_id);
+        setIsRepeatOffender(isRepeat);
+      }
+    } catch (error) {
+      console.error('Failed to load repeat offender status:', error);
+      // Don't set error state - repeat offender status is supplementary information
+    }
+  };
+
+  const loadViolationTimeline = async () => {
+    try {
+      // Only load violation timeline if there's a reported user
+      if (report.reported_user_id) {
+        const timeline = await calculateViolationTimeline(report.reported_user_id);
+        setViolationTimeline(timeline);
+      }
+    } catch (error) {
+      console.error('Failed to load violation timeline:', error);
+      // Don't set error state - violation timeline is supplementary information
     }
   };
 
@@ -338,7 +447,7 @@ export function ModerationActionPanel({
       // Fetch recent moderation actions (limited to 5)
       const { data: actions } = await supabase
         .from('moderation_actions')
-        .select('action_type, reason, internal_notes, created_at')
+        .select('action_type, reason, internal_notes, created_at, metadata')
         .eq('target_user_id', userId)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -467,6 +576,8 @@ export function ModerationActionPanel({
         durationDays?: number;
         restrictionType?: RestrictionType;
         cascadingOptions?: CascadingOptions;
+        evidenceVerified?: boolean;
+        verificationNotes?: string;
       } = {
         reportId: report.id,
         actionType: selectedAction,
@@ -495,7 +606,20 @@ export function ModerationActionPanel({
         actionParams.cascadingOptions = cascadingOptions;
       }
 
+      // Add evidence verification data if evidence exists and was verified
+      if ((report.metadata?.originalWorkLink || 
+           report.metadata?.proofOfOwnership || 
+           report.metadata?.audioTimestamp) && evidenceVerified) {
+        actionParams.evidenceVerified = evidenceVerified;
+        actionParams.verificationNotes = verificationNotes || undefined;
+      }
+
       await takeModerationAction(actionParams);
+
+      // Reload user history to show the new action immediately
+      if (report.reported_user_id) {
+        await loadUserHistory(report.reported_user_id);
+      }
 
       setSuccess(true);
       setTimeout(() => {
@@ -788,6 +912,163 @@ export function ModerationActionPanel({
             </div>
           )}
 
+          {/* Evidence Verification Section (Requirements 9.6, 9.7) */}
+          {(report.metadata?.originalWorkLink || 
+            report.metadata?.proofOfOwnership || 
+            report.metadata?.audioTimestamp) && (
+            <div className="bg-gray-700 rounded-lg p-4 space-y-4">
+              <h3 className="text-lg font-semibold text-white">Evidence Verification</h3>
+              
+              {/* Evidence Verified Checkbox */}
+              <div className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  id="evidence-verified"
+                  checked={evidenceVerified}
+                  onChange={(e) => setEvidenceVerified(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                  disabled={loading || success}
+                />
+                <label htmlFor="evidence-verified" className="text-sm text-gray-300 cursor-pointer">
+                  <span className="font-medium">Evidence Verified</span>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Check this box if you have reviewed and verified the provided evidence
+                  </p>
+                </label>
+              </div>
+
+              {/* Verification Notes Textarea */}
+              <div>
+                <label htmlFor="verification-notes" className="block text-sm font-medium text-gray-300 mb-2">
+                  Verification Notes (optional, max 500 characters)
+                </label>
+                <textarea
+                  id="verification-notes"
+                  value={verificationNotes}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= 500) {
+                      setVerificationNotes(value);
+                    }
+                  }}
+                  rows={3}
+                  placeholder="Add notes about your evidence verification (e.g., confirmed original work link, verified ownership documentation)..."
+                  className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                  disabled={loading || success}
+                  maxLength={500}
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-xs text-gray-400">
+                    Optional notes about the evidence verification process
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {verificationNotes.length}/500
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Audio Review Section (Requirement 10.1) */}
+          {report.report_type === 'track' && (
+            <div className="bg-gray-700 rounded-lg p-4 sm:p-5 space-y-3">
+              <h3 className="text-lg font-semibold text-white">Audio Review</h3>
+              {report.metadata?.audioTimestamp && (
+                <p className="text-sm text-gray-400">
+                  Review the reported audio at the specified timestamp: {report.metadata.audioTimestamp}
+                </p>
+              )}
+              
+              {/* Loading State */}
+              {loadingTrackAudio && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex items-center gap-3">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                    <span className="text-gray-400 text-sm">Loading audio player...</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Error State */}
+              {!loadingTrackAudio && trackAudioError && (
+                <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
+                  <div className="flex items-start space-x-3">
+                    <span className="text-red-500 text-xl">⚠️</span>
+                    <div>
+                      <p className="text-red-400 font-semibold mb-1">Unable to Load Audio</p>
+                      <p className="text-red-300 text-sm">{trackAudioError}</p>
+                      <button
+                        onClick={loadTrackAudioUrl}
+                        className="mt-2 px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Audio Player */}
+              {!loadingTrackAudio && !trackAudioError && trackAudioUrl && (
+                <>
+                  <WavesurferPlayer
+                    ref={wavesurferPlayerRef}
+                    audioUrl={trackAudioUrl}
+                    trackId={report.target_id}
+                    theme="ai_music"
+                    showWaveform={true}
+                  />
+                  
+                  {/* Jump to Timestamp Buttons (Requirements 10.2, 10.5, 10.6) - Only show if timestamps exist */}
+                  {report.metadata?.audioTimestamp && (() => {
+                    const timestamps = parseTimestamps(report.metadata?.audioTimestamp);
+                    if (timestamps.length === 0) return null;
+                    
+                    // Sort timestamps chronologically
+                    const sortedTimestamps = [...timestamps].sort((a, b) => {
+                      const secondsA = parseTimestampToSeconds(a);
+                      const secondsB = parseTimestampToSeconds(b);
+                      return secondsA - secondsB;
+                    });
+                    
+                    return (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {sortedTimestamps.map((timestamp, index) => {
+                          const seconds = parseTimestampToSeconds(timestamp);
+                          
+                          // Skip invalid timestamps (format validation)
+                          if (seconds === 0 && timestamp !== '0:00') {
+                            return null;
+                          }
+                          
+                          // Skip timestamps that exceed track duration
+                          if (trackDuration && seconds > trackDuration) {
+                            return null;
+                          }
+                          
+                          return (
+                            <button
+                              key={`${timestamp}-${index}`}
+                              onClick={() => {
+                                if (wavesurferPlayerRef.current) {
+                                  wavesurferPlayerRef.current.seekTo(seconds);
+                                }
+                              }}
+                              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors"
+                              title={`Jump to ${timestamp}`}
+                            >
+                              Jump to {timestamp}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Profile Context Section (for user reports only) */}
           {report.report_type === 'user' && profileContext && (
             <div className="bg-gray-800 rounded-lg p-4 space-y-3">
@@ -968,6 +1249,26 @@ export function ModerationActionPanel({
                 </div>
               </div>
 
+              {/* Repeat Offender Badge */}
+              {isRepeatOffender && (
+                <div 
+                  className="bg-orange-900/30 border border-orange-500 rounded-md p-3 flex items-center gap-2"
+                  title="3+ violations in last 30 days"
+                >
+                  <span className="text-orange-400 text-lg">⚠️</span>
+                  <span className="text-orange-400 font-semibold">Repeat Offender</span>
+                  <span className="text-orange-300 text-sm">(3+ violations in last 30 days)</span>
+                </div>
+              )}
+
+              {/* Violation Timeline Indicator */}
+              {violationTimeline && violationTimeline.message && (
+                <div className="bg-gray-800 rounded-md p-3">
+                  <span className="text-sm text-gray-400">Violation Timeline:</span>
+                  <p className="text-white text-sm mt-1">{violationTimeline.message}</p>
+                </div>
+              )}
+
               {userHistory.recent_actions.length > 0 && (
                 <div>
                   <span className="text-sm text-gray-400 block mb-2">Recent Actions (last 5):</span>
@@ -975,14 +1276,36 @@ export function ModerationActionPanel({
                     {userHistory.recent_actions.map((action, index) => (
                       <div key={index} className="bg-gray-800 rounded p-2 text-sm">
                         <div className="flex items-center justify-between">
-                          <span className="text-orange-400 font-medium">
-                            {ACTION_TYPE_LABELS[action.action_type as ModerationActionType]}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-orange-400 font-medium">
+                              {ACTION_TYPE_LABELS[action.action_type as ModerationActionType]}
+                            </span>
+                            {/* Evidence Verified Badge - Requirements: 9.7 */}
+                            {action.metadata?.evidence_verification?.verified && (
+                              <span 
+                                className="px-2 py-0.5 text-xs font-medium bg-green-900/30 text-green-400 rounded flex items-center gap-1"
+                                title={action.metadata.evidence_verification.notes || 'Evidence was verified'}
+                              >
+                                ✓ Evidence Verified
+                              </span>
+                            )}
+                          </div>
                           <span className="text-gray-400 text-xs">
                             {formatDate(action.created_at)}
                           </span>
                         </div>
                         <p className="text-gray-300 text-xs mt-1">{action.internal_notes}</p>
+                        {/* Verification Notes - Requirements: 9.7 */}
+                        {action.metadata?.evidence_verification?.notes && (
+                          <details className="mt-2">
+                            <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300">
+                              View verification notes
+                            </summary>
+                            <p className="text-gray-400 text-xs mt-1 pl-2 border-l-2 border-blue-500">
+                              {action.metadata.evidence_verification.notes}
+                            </p>
+                          </details>
+                        )}
                       </div>
                     ))}
                   </div>

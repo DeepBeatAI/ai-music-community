@@ -156,6 +156,8 @@ export interface ModerationActionParams {
   notificationMessage?: string;
   restrictionType?: RestrictionType;
   cascadingOptions?: CascadingActionOptions;
+  evidenceVerified?: boolean; // Requirements: 9.6
+  verificationNotes?: string; // Requirements: 9.7
 }
 
 // ============================================================================

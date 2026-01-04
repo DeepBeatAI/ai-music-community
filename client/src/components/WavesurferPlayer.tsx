@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { formatDuration } from '@/utils/audio';
 import { getCachedAudioUrl } from '@/utils/audioCache';
@@ -24,7 +24,11 @@ interface WavesurferPlayerProps {
   showWaveform?: boolean;
 }
 
-export default function WavesurferPlayer({ 
+export interface WavesurferPlayerRef {
+  seekTo: (timeInSeconds: number) => void;
+}
+
+const WavesurferPlayer = forwardRef<WavesurferPlayerRef, WavesurferPlayerProps>(({ 
   audioUrl,
   trackId, // NEW: Track ID for play count tracking
   fileName, 
@@ -32,7 +36,7 @@ export default function WavesurferPlayer({
   className = '',
   theme = 'ai_music',
   showWaveform = true
-}: WavesurferPlayerProps) {
+}, ref) => {
   // CRITICAL: Separate volume from initialization dependencies
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -56,6 +60,35 @@ export default function WavesurferPlayer({
   const initializationRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const checkPlayIntervalRef = useRef<NodeJS.Timeout | null>(null); // NEW: For play tracking
+
+  // Expose seekTo method via ref
+  useImperativeHandle(ref, () => ({
+    seekTo: (timeInSeconds: number) => {
+      if (!wavesurferRef.current || !totalDuration) {
+        console.warn('⚠️ Cannot seek: wavesurfer not ready or duration unknown');
+        return;
+      }
+
+      try {
+        // Calculate position as a fraction (0 to 1)
+        const position = timeInSeconds / totalDuration;
+        
+        // Clamp position to valid range [0, 1]
+        const clampedPosition = Math.max(0, Math.min(1, position));
+        
+        console.log(`🎯 Seeking to ${timeInSeconds}s (position: ${clampedPosition})`);
+        
+        // Update state immediately for responsive UI
+        setCurrentTime(timeInSeconds);
+        timeManager.updateTime(timeInSeconds);
+        
+        // Seek wavesurfer
+        wavesurferRef.current.seekTo(clampedPosition);
+      } catch (error) {
+        console.error('❌ Error seeking:', error);
+      }
+    }
+  }), [totalDuration, timeManager]);
 
   // STEP 1: Process audio URL with smart caching and analytics tracking
   useEffect(() => {
@@ -667,4 +700,8 @@ export default function WavesurferPlayer({
       </div>
     </div>
   );
-}
+});
+
+WavesurferPlayer.displayName = 'WavesurferPlayer';
+
+export default WavesurferPlayer;

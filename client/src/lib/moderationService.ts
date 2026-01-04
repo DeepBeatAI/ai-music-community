@@ -822,6 +822,176 @@ export async function calculateReporterAccuracy(
   }
 }
 
+/**
+ * Detect if a user is a repeat offender
+ * Requirements: 6.2
+ * 
+ * This function checks if a user has 3 or more violations (moderation actions)
+ * in the last 30 days. A user is considered a repeat offender if they have
+ * accumulated multiple violations in a short time period.
+ * 
+ * @param userId - User ID to check
+ * @returns True if user has 3+ violations in last 30 days, false otherwise
+ * @throws ModerationError if database query fails
+ */
+export async function detectRepeatOffender(userId: string): Promise<boolean> {
+  try {
+    // Validate user ID
+    if (!userId) {
+      return false;
+    }
+
+    if (!isValidUUID(userId)) {
+      throw new ModerationError(
+        'Invalid user ID format',
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        { userId }
+      );
+    }
+
+    // Calculate date 30 days ago
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Query moderation_actions for this user in the last 30 days
+    // Exclude dismissed reports (only count actual violations)
+    const { data: actions, error } = await supabase
+      .from('moderation_actions')
+      .select('id')
+      .eq('target_user_id', userId)
+      .gte('created_at', thirtyDaysAgo);
+
+    if (error) {
+      throw new ModerationError(
+        'Failed to check repeat offender status',
+        MODERATION_ERROR_CODES.DATABASE_ERROR,
+        { originalError: error }
+      );
+    }
+
+    // Count violations (all moderation actions are violations)
+    const violationCount = actions?.length || 0;
+
+    // Return true if 3 or more violations
+    return violationCount >= 3;
+  } catch (error) {
+    if (error instanceof ModerationError) {
+      throw error;
+    }
+    throw new ModerationError(
+      'An unexpected error occurred while detecting repeat offender',
+      MODERATION_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
+/**
+ * Calculate violation timeline for a user
+ * Requirements: 6.4
+ * 
+ * This function calculates the number of violations (moderation actions) a user
+ * has received in different timeframes: last 7 days, last 30 days, and last 90 days.
+ * This helps moderators understand the frequency and recency of violations.
+ * 
+ * @param userId - User ID to check
+ * @returns Object with counts for each timeframe and formatted message
+ * @throws ModerationError if database query fails
+ */
+export async function calculateViolationTimeline(
+  userId: string
+): Promise<{
+  last7Days: number;
+  last30Days: number;
+  last90Days: number;
+  message: string | null;
+} | null> {
+  try {
+    // Validate user ID
+    if (!userId) {
+      return null;
+    }
+
+    if (!isValidUUID(userId)) {
+      throw new ModerationError(
+        'Invalid user ID format',
+        MODERATION_ERROR_CODES.VALIDATION_ERROR,
+        { userId }
+      );
+    }
+
+    // Calculate dates for each timeframe
+    const now = Date.now();
+    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const ninetyDaysAgo = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Query moderation_actions for each timeframe
+    // We'll fetch all actions from the last 90 days and filter in memory for efficiency
+    const { data: actions, error } = await supabase
+      .from('moderation_actions')
+      .select('id, created_at')
+      .eq('target_user_id', userId)
+      .gte('created_at', ninetyDaysAgo)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new ModerationError(
+        'Failed to calculate violation timeline',
+        MODERATION_ERROR_CODES.DATABASE_ERROR,
+        { originalError: error }
+      );
+    }
+
+    // Handle edge case: no actions
+    if (!actions || actions.length === 0) {
+      return {
+        last7Days: 0,
+        last30Days: 0,
+        last90Days: 0,
+        message: null,
+      };
+    }
+
+    // Count violations in each timeframe
+    const last7Days = actions.filter(
+      (action) => new Date(action.created_at).getTime() >= new Date(sevenDaysAgo).getTime()
+    ).length;
+
+    const last30Days = actions.filter(
+      (action) => new Date(action.created_at).getTime() >= new Date(thirtyDaysAgo).getTime()
+    ).length;
+
+    const last90Days = actions.length; // All actions are within 90 days
+
+    // Format message showing most relevant timeframe
+    // Priority: 7 days > 30 days > 90 days
+    let message: string | null = null;
+    if (last7Days > 0) {
+      message = `${last7Days} violation${last7Days === 1 ? '' : 's'} in last 7 days`;
+    } else if (last30Days > 0) {
+      message = `${last30Days} violation${last30Days === 1 ? '' : 's'} in last 30 days`;
+    } else if (last90Days > 0) {
+      message = `${last90Days} violation${last90Days === 1 ? '' : 's'} in last 90 days`;
+    }
+
+    return {
+      last7Days,
+      last30Days,
+      last90Days,
+      message,
+    };
+  } catch (error) {
+    if (error instanceof ModerationError) {
+      throw error;
+    }
+    throw new ModerationError(
+      'An unexpected error occurred while calculating violation timeline',
+      MODERATION_ERROR_CODES.DATABASE_ERROR,
+      { originalError: error }
+    );
+  }
+}
+
 // ============================================================================
 // User Reporting Functions
 // ============================================================================
@@ -1900,6 +2070,13 @@ function validateModerationActionParams(params: ModerationActionParams): void {
     validateTextLength(params.notificationMessage, 2000, 'Notification message');
     params.notificationMessage = sanitizeText(params.notificationMessage);
   }
+
+  // Validate and sanitize verification notes if provided
+  // Requirements: 9.7
+  if (params.verificationNotes) {
+    validateTextLength(params.verificationNotes, 500, 'Verification notes');
+    params.verificationNotes = sanitizeText(params.verificationNotes);
+  }
 }
 
 /**
@@ -2291,6 +2468,18 @@ export async function takeModerationAction(
     
     if (needsActionFirst) {
       // Create moderation action record first
+      // Build metadata object with evidence verification if provided
+      // Requirements: 9.6, 9.7
+      const metadata: Record<string, any> = {};
+      if (params.evidenceVerified !== undefined || params.verificationNotes) {
+        metadata.evidence_verification = {
+          verified: params.evidenceVerified || false,
+          notes: params.verificationNotes || null,
+          verified_at: new Date().toISOString(),
+          verified_by: user.id,
+        };
+      }
+
       const { data: createdAction, error: actionError } = await supabase
         .from('moderation_actions')
         .insert({
@@ -2306,6 +2495,7 @@ export async function takeModerationAction(
           internal_notes: params.internalNotes || null,
           notification_sent: false,
           notification_message: params.notificationMessage || null,
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
         })
         .select()
         .single();
@@ -2329,6 +2519,18 @@ export async function takeModerationAction(
       // Execute the action first for other action types
       await executeAction(params);
 
+      // Build metadata object with evidence verification if provided
+      // Requirements: 9.6, 9.7
+      const metadata: Record<string, any> = {};
+      if (params.evidenceVerified !== undefined || params.verificationNotes) {
+        metadata.evidence_verification = {
+          verified: params.evidenceVerified || false,
+          notes: params.verificationNotes || null,
+          verified_at: new Date().toISOString(),
+          verified_by: user.id,
+        };
+      }
+
       // Create moderation action record
       const { data: createdAction, error: actionError } = await supabase
         .from('moderation_actions')
@@ -2345,6 +2547,7 @@ export async function takeModerationAction(
           internal_notes: params.internalNotes || null,
           notification_sent: false,
           notification_message: params.notificationMessage || null,
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
         })
         .select()
         .single();

@@ -325,6 +325,30 @@ function TimelineEntry({ entry, isLast }: TimelineEntryProps) {
                 <span className="font-medium">Notes:</span> {action.internal_notes}
               </p>
             )}
+
+            {/* Evidence Verification Badge - Requirements: 9.7 */}
+            {action.metadata?.evidence_verification?.verified && (
+              <div className="flex items-center gap-2 mt-2">
+                <span 
+                  className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded"
+                  title={action.metadata.evidence_verification.notes || 'Evidence was verified'}
+                >
+                  ✓ Evidence Verified
+                </span>
+              </div>
+            )}
+
+            {/* Verification Notes - Requirements: 9.7 */}
+            {action.metadata?.evidence_verification?.notes && (
+              <details className="mt-2">
+                <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-700 font-medium">
+                  View verification notes
+                </summary>
+                <p className="text-gray-600 text-xs mt-1 pl-2 border-l-2 border-blue-500 bg-blue-50 p-2 rounded">
+                  {action.metadata.evidence_verification.notes}
+                </p>
+              </details>
+            )}
           </div>
 
           {/* Reversal information - inside the action card */}

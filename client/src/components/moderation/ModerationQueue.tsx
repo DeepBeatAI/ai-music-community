@@ -210,8 +210,8 @@ export function ModerationQueue({ onReportSelect }: ModerationQueueProps) {
               <option value="post">Post</option>
               <option value="comment">Comment</option>
               <option value="track">Track</option>
-              <option value="user">User</option>
               <option value="album">Album</option>
+              <option value="user">User</option>
             </select>
           </div>
 

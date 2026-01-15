@@ -207,11 +207,19 @@ export async function getPlaylistWithTracks(
       .single();
 
     if (error) {
-      console.error('Error fetching playlist with tracks:', error);
+      console.error('Error fetching playlist with tracks:', {
+        playlistId,
+        error,
+        errorCode: error.code,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+      });
       return null;
     }
 
     if (!data) {
+      console.warn('No playlist data returned for ID:', playlistId);
       return null;
     }
 
@@ -247,7 +255,13 @@ export async function getPlaylistWithTracks(
       track_count,
     } as PlaylistWithTracks;
   } catch (error) {
-    console.error('Unexpected error fetching playlist with tracks:', error);
+    console.error('Unexpected error fetching playlist with tracks:', {
+      playlistId,
+      error,
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    });
     return null;
   }
 }
@@ -666,6 +680,162 @@ export async function reorderPlaylistTracks(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to reorder tracks',
+    };
+  }
+}
+
+/**
+ * Toggle playlist like status
+ * @param playlistId - The ID of the playlist to like/unlike
+ * @param userId - The ID of the user performing the action
+ * @param isCurrentlyLiked - Current like status
+ * @returns Promise with liked status and like count
+ */
+export async function togglePlaylistLike(
+  playlistId: string,
+  userId: string,
+  isCurrentlyLiked: boolean
+): Promise<{ data: { liked: boolean; likeCount: number } | null; error: string | null }> {
+  const requestId = Math.random().toString(36).substr(2, 9);
+  console.log(`[PLAYLIST-LIKE-${requestId}] Starting togglePlaylistLike:`, { playlistId, userId, isCurrentlyLiked });
+
+  try {
+    // Check if user is authenticated
+    if (!userId) {
+      return {
+        data: null,
+        error: 'Authentication required',
+      };
+    }
+
+    if (isCurrentlyLiked) {
+      // Unlike: delete the like record
+      console.log(`[PLAYLIST-LIKE-${requestId}] Attempting DELETE from playlist_likes`);
+      const { error } = await supabase
+        .from('playlist_likes')
+        .delete()
+        .eq('playlist_id', playlistId)
+        .eq('user_id', userId);
+
+      console.log(`[PLAYLIST-LIKE-${requestId}] DELETE result:`, { error });
+      if (error) throw error;
+    } else {
+      // Like: insert a new like record
+      console.log(`[PLAYLIST-LIKE-${requestId}] Attempting INSERT into playlist_likes`);
+      const { error } = await supabase
+        .from('playlist_likes')
+        .insert({ playlist_id: playlistId, user_id: userId });
+
+      console.log(`[PLAYLIST-LIKE-${requestId}] INSERT result:`, { error });
+      if (error) {
+        // Check for unique constraint violation (duplicate like)
+        if (error.code === '23505') {
+          console.log(`[PLAYLIST-LIKE-${requestId}] Duplicate like detected, treating as success`);
+          // Already liked, just return current status
+          const { count } = await supabase
+            .from('playlist_likes')
+            .select('*', { count: 'exact', head: true })
+            .eq('playlist_id', playlistId);
+
+          return {
+            data: { liked: true, likeCount: count || 0 },
+            error: null,
+          };
+        }
+        throw error;
+      }
+    }
+
+    // Get updated like count
+    console.log(`[PLAYLIST-LIKE-${requestId}] Getting updated count`);
+    const { count, error: countError } = await supabase
+      .from('playlist_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('playlist_id', playlistId);
+
+    console.log(`[PLAYLIST-LIKE-${requestId}] Count result:`, { count, countError });
+    if (countError) throw countError;
+
+    console.log(`[PLAYLIST-LIKE-${requestId}] SUCCESS - Returning result`);
+    return {
+      data: { liked: !isCurrentlyLiked, likeCount: count || 0 },
+      error: null,
+    };
+  } catch (error) {
+    console.error(`[PLAYLIST-LIKE-${requestId}] ERROR CAUGHT:`, error);
+    console.error(`[PLAYLIST-LIKE-${requestId}] Error object details:`, {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      name: error instanceof Error ? error.name : 'Unknown',
+    });
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error);
+    return {
+      data: null,
+      error: `Failed to update like status: ${errorMessage}`,
+    };
+  }
+}
+
+/**
+ * Get playlist like status for a user
+ * @param playlistId - The ID of the playlist
+ * @param userId - The ID of the user (optional for unauthenticated users)
+ * @returns Promise with liked status and like count
+ */
+export async function getPlaylistLikeStatus(
+  playlistId: string,
+  userId?: string
+): Promise<{ data: { liked: boolean; likeCount: number } | null; error: string | null }> {
+  try {
+    // If no user, return not liked with count
+    if (!userId) {
+      const { count } = await supabase
+        .from('playlist_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('playlist_id', playlistId);
+
+      return {
+        data: {
+          liked: false,
+          likeCount: count || 0,
+        },
+        error: null,
+      };
+    }
+
+    // Fetch like status and count in parallel
+    const [likeStatus, likeCount] = await Promise.all([
+      supabase
+        .from('playlist_likes')
+        .select('id')
+        .eq('playlist_id', playlistId)
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('playlist_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('playlist_id', playlistId),
+    ]);
+
+    return {
+      data: {
+        liked: !likeStatus.error && !!likeStatus.data,
+        likeCount: likeCount.count || 0,
+      },
+      error: null,
+    };
+  } catch (error) {
+    console.error('Error getting playlist like status:', error);
+    return {
+      data: { liked: false, likeCount: 0 },
+      error: null,
     };
   }
 }

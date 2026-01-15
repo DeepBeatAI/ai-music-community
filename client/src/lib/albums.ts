@@ -515,3 +515,159 @@ export async function reorderAlbumTracks(
     };
   }
 }
+
+/**
+ * Toggle album like status
+ * @param albumId - The ID of the album to like/unlike
+ * @param userId - The ID of the user performing the action
+ * @param isCurrentlyLiked - Current like status
+ * @returns Promise with liked status and like count
+ */
+export async function toggleAlbumLike(
+  albumId: string,
+  userId: string,
+  isCurrentlyLiked: boolean
+): Promise<{ data: { liked: boolean; likeCount: number } | null; error: string | null }> {
+  const requestId = Math.random().toString(36).substr(2, 9);
+  console.log(`[ALBUM-LIKE-${requestId}] Starting toggleAlbumLike:`, { albumId, userId, isCurrentlyLiked });
+
+  try {
+    // Check if user is authenticated
+    if (!userId) {
+      return {
+        data: null,
+        error: 'Authentication required',
+      };
+    }
+
+    if (isCurrentlyLiked) {
+      // Unlike: delete the like record
+      console.log(`[ALBUM-LIKE-${requestId}] Attempting DELETE from album_likes`);
+      const { error } = await supabase
+        .from('album_likes')
+        .delete()
+        .eq('album_id', albumId)
+        .eq('user_id', userId);
+
+      console.log(`[ALBUM-LIKE-${requestId}] DELETE result:`, { error });
+      if (error) throw error;
+    } else {
+      // Like: insert a new like record
+      console.log(`[ALBUM-LIKE-${requestId}] Attempting INSERT into album_likes`);
+      const { error } = await supabase
+        .from('album_likes')
+        .insert({ album_id: albumId, user_id: userId });
+
+      console.log(`[ALBUM-LIKE-${requestId}] INSERT result:`, { error });
+      if (error) {
+        // Check for unique constraint violation (duplicate like)
+        if (error.code === '23505') {
+          console.log(`[ALBUM-LIKE-${requestId}] Duplicate like detected, treating as success`);
+          // Already liked, just return current status
+          const { count } = await supabase
+            .from('album_likes')
+            .select('*', { count: 'exact', head: true })
+            .eq('album_id', albumId);
+
+          return {
+            data: { liked: true, likeCount: count || 0 },
+            error: null,
+          };
+        }
+        throw error;
+      }
+    }
+
+    // Get updated like count
+    console.log(`[ALBUM-LIKE-${requestId}] Getting updated count`);
+    const { count, error: countError } = await supabase
+      .from('album_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('album_id', albumId);
+
+    console.log(`[ALBUM-LIKE-${requestId}] Count result:`, { count, countError });
+    if (countError) throw countError;
+
+    console.log(`[ALBUM-LIKE-${requestId}] SUCCESS - Returning result`);
+    return {
+      data: { liked: !isCurrentlyLiked, likeCount: count || 0 },
+      error: null,
+    };
+  } catch (error) {
+    console.error(`[ALBUM-LIKE-${requestId}] ERROR CAUGHT:`, error);
+    console.error(`[ALBUM-LIKE-${requestId}] Error object details:`, {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      name: error instanceof Error ? error.name : 'Unknown',
+    });
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error);
+    return {
+      data: null,
+      error: `Failed to update like status: ${errorMessage}`,
+    };
+  }
+}
+
+/**
+ * Get album like status for a user
+ * @param albumId - The ID of the album
+ * @param userId - The ID of the user (optional for unauthenticated users)
+ * @returns Promise with liked status and like count
+ */
+export async function getAlbumLikeStatus(
+  albumId: string,
+  userId?: string
+): Promise<{ data: { liked: boolean; likeCount: number } | null; error: string | null }> {
+  try {
+    // If no user, return not liked with count
+    if (!userId) {
+      const { count } = await supabase
+        .from('album_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('album_id', albumId);
+
+      return {
+        data: {
+          liked: false,
+          likeCount: count || 0,
+        },
+        error: null,
+      };
+    }
+
+    // Fetch like status and count in parallel
+    const [likeStatus, likeCount] = await Promise.all([
+      supabase
+        .from('album_likes')
+        .select('id')
+        .eq('album_id', albumId)
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('album_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('album_id', albumId),
+    ]);
+
+    return {
+      data: {
+        liked: !likeStatus.error && !!likeStatus.data,
+        likeCount: likeCount.count || 0,
+      },
+      error: null,
+    };
+  } catch (error) {
+    console.error('Error getting album like status:', error);
+    return {
+      data: { liked: false, likeCount: 0 },
+      error: null,
+    };
+  }
+}

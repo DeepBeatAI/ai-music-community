@@ -8,7 +8,9 @@ import { useToast } from '@/contexts/ToastContext';
 import { getPublicPlaylists } from '@/lib/profileService';
 import { getBulkSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_TTL } from '@/utils/cache';
+import { onLikeEvent } from '@/utils/likeEventEmitter';
 import SaveButton from './SaveButton';
+import PlaylistLikeButton from '@/components/playlists/PlaylistLikeButton';
 import type { Playlist } from '@/types/playlist';
 
 /**
@@ -117,10 +119,23 @@ function CreatorPlaylistCard({ playlist, isSaved, onSaveToggle, isOwnProfile = f
         )}
         
         {/* Metadata */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
           <span>
             {new Date(playlist.created_at).toLocaleDateString()}
           </span>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {/* Like Button */}
+          <div className="flex-1">
+            <PlaylistLikeButton
+              playlistId={playlist.id}
+              size="sm"
+            />
+          </div>
+          
+          {/* Save Button */}
           {!isOwnProfile && (
             <SaveButton
               itemId={playlist.id}
@@ -261,6 +276,24 @@ export default function CreatorPlaylistsSection({
     fetchPlaylists();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, initialLimit]);
+
+  // Listen for like events to update like counts
+  useEffect(() => {
+    const cleanup = onLikeEvent((detail) => {
+      if (detail.itemType === 'playlist') {
+        // Update the playlist in the list with new like count
+        setPlaylists(prevPlaylists =>
+          prevPlaylists.map(playlist =>
+            playlist.id === detail.itemId
+              ? { ...playlist, like_count: detail.likeCount }
+              : playlist
+          )
+        );
+      }
+    });
+
+    return cleanup;
+  }, []);
 
   // Save collapse state to localStorage
   useEffect(() => {

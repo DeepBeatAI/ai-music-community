@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSavedAlbums } from '@/lib/library';
 import { cache, CACHE_KEYS, CACHE_TTL } from '@/utils/cache';
+import { onLikeEvent } from '@/utils/likeEventEmitter';
 import SaveButton from '@/components/profile/SaveButton';
+import AlbumLikeButton from '@/components/albums/AlbumLikeButton';
 import CreatorLink from '@/components/common/CreatorLink';
 import type { SavedAlbumWithCreator } from '@/types/library';
 
@@ -118,7 +120,7 @@ function SavedAlbumCard({ album, onSaveToggle }: SavedAlbumCardProps) {
         )}
         
         {/* Metadata */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
           <span>
             {new Date(album.created_at).toLocaleDateString()}
           </span>
@@ -129,6 +131,11 @@ function SavedAlbumCard({ album, onSaveToggle }: SavedAlbumCardProps) {
             onToggle={onSaveToggle}
             size="sm"
           />
+        </div>
+        
+        {/* Like Button */}
+        <div className="mt-2">
+          <AlbumLikeButton albumId={album.id} size="sm" />
         </div>
       </div>
     </div>
@@ -221,6 +228,24 @@ export default function SavedAlbumsSection({
   useEffect(() => {
     fetchAlbums();
   }, [fetchAlbums]);
+
+  // Listen for like events to update like counts
+  useEffect(() => {
+    const cleanup = onLikeEvent((detail) => {
+      if (detail.itemType === 'album') {
+        // Update the album in the list with new like count
+        setAlbums(prevAlbums =>
+          prevAlbums.map(album =>
+            album.id === detail.itemId
+              ? { ...album, like_count: detail.likeCount }
+              : album
+          )
+        );
+      }
+    });
+
+    return cleanup;
+  }, []);
 
   // Restore collapsed state from localStorage on mount
   useEffect(() => {

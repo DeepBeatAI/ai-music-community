@@ -7,6 +7,7 @@ import { usePlayback } from '@/contexts/PlaybackContext';
 import MainLayout from '@/components/layout/MainLayout';
 import SaveButton from '@/components/profile/SaveButton';
 import CreatorLink from '@/components/common/CreatorLink';
+import AlbumLikeButton from '@/components/albums/AlbumLikeButton';
 import { getAlbumWithTracks, deleteAlbum, reorderAlbumTracks, updateAlbum } from '@/lib/albums';
 import { getSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_KEYS } from '@/utils/cache';
@@ -447,6 +448,11 @@ export default function AlbumDetailPage() {
 
                   {/* Actions */}
                   <div className="flex gap-2 flex-shrink-0">
+                    {/* Like Button for non-owners */}
+                    {!isOwner && user && (
+                      <AlbumLikeButton albumId={albumId} size="md" />
+                    )}
+                    
                     {/* Save Button for non-owners */}
                     {!isOwner && user && (
                       <SaveButton

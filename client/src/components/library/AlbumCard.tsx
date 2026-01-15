@@ -4,6 +4,7 @@ import { useState, memo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { deleteAlbum } from '@/lib/albums';
+import AlbumLikeButton from '@/components/albums/AlbumLikeButton';
 import type { Album, AlbumWithOwner } from '@/types/album';
 
 interface AlbumCardProps {
@@ -148,6 +149,13 @@ export const AlbumCard = memo(function AlbumCard({ album, onDelete, isOwner }: A
               </span>
             )}
           </div>
+
+          {/* Like Button for public albums */}
+          {album.is_public && !isOwner && (
+            <div className="mt-3">
+              <AlbumLikeButton albumId={album.id} size="sm" />
+            </div>
+          )}
 
           {/* Action Buttons (Owner Only) */}
           {isOwner && (

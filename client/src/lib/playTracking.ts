@@ -180,3 +180,181 @@ if (typeof window !== 'undefined') {
     console.error('[PlayTracker] Failed to retry plays on load:', error);
   });
 }
+
+/**
+ * Album Play Tracking
+ * 
+ * Records play events for albums when users play tracks from albums.
+ * Implements debouncing to prevent duplicate counts within 30 seconds.
+ */
+
+interface AlbumPlayEvent {
+  album_id: string;
+  user_id: string;
+  timestamp: number;
+}
+
+class AlbumPlayTracker {
+  private lastPlayTimes: Map<string, number> = new Map();
+  private readonly DEBOUNCE_DURATION = 30000; // 30 seconds
+
+  /**
+   * Record album play event
+   * @param albumId - The album ID
+   * @param userId - The user ID
+   * @returns Promise with success status
+   */
+  async recordPlay(albumId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Check debouncing - prevent recording same album play within 30 seconds
+      const playKey = `${albumId}-${userId}`;
+      const lastPlayTime = this.lastPlayTimes.get(playKey);
+      const now = Date.now();
+
+      if (lastPlayTime && (now - lastPlayTime) < this.DEBOUNCE_DURATION) {
+        console.log(`[AlbumPlayTracker] Debounced play for album ${albumId} (last play was ${now - lastPlayTime}ms ago)`);
+        return { success: true }; // Return success but don't record
+      }
+
+      // Call database function to increment play count
+      const { error } = await supabase.rpc('increment_album_play_count', {
+        album_uuid: albumId,
+        user_uuid: userId,
+      });
+
+      if (error) {
+        console.error('[AlbumPlayTracker] Failed to record album play:', error);
+        // Log but don't block playback
+        return { success: false, error: error.message };
+      }
+
+      // Update last play time
+      this.lastPlayTimes.set(playKey, now);
+      console.log(`[AlbumPlayTracker] Successfully recorded play for album: ${albumId}`);
+
+      // Clean up old entries after debounce duration
+      setTimeout(() => {
+        this.lastPlayTimes.delete(playKey);
+      }, this.DEBOUNCE_DURATION);
+
+      return { success: true };
+    } catch (error) {
+      console.error('[AlbumPlayTracker] Error recording album play:', error);
+      // Log but don't block playback
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Clear all tracking state (useful for testing)
+   */
+  reset(): void {
+    this.lastPlayTimes.clear();
+    console.log('[AlbumPlayTracker] Reset complete');
+  }
+}
+
+// Export singleton instance
+export const albumPlayTracker = new AlbumPlayTracker();
+
+/**
+ * Record album play (public API)
+ * @param albumId - The album ID
+ * @param userId - The user ID
+ * @returns Promise with success status
+ */
+export async function recordAlbumPlay(
+  albumId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  return albumPlayTracker.recordPlay(albumId, userId);
+}
+
+/**
+ * Playlist Play Tracking
+ * 
+ * Records play events for playlists when users play tracks from playlists.
+ * Implements debouncing to prevent duplicate counts within 30 seconds.
+ */
+
+interface PlaylistPlayEvent {
+  playlist_id: string;
+  user_id: string;
+  timestamp: number;
+}
+
+class PlaylistPlayTracker {
+  private lastPlayTimes: Map<string, number> = new Map();
+  private readonly DEBOUNCE_DURATION = 30000; // 30 seconds
+
+  /**
+   * Record playlist play event
+   * @param playlistId - The playlist ID
+   * @param userId - The user ID
+   * @returns Promise with success status
+   */
+  async recordPlay(playlistId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Check debouncing - prevent recording same playlist play within 30 seconds
+      const playKey = `${playlistId}-${userId}`;
+      const lastPlayTime = this.lastPlayTimes.get(playKey);
+      const now = Date.now();
+
+      if (lastPlayTime && (now - lastPlayTime) < this.DEBOUNCE_DURATION) {
+        console.log(`[PlaylistPlayTracker] Debounced play for playlist ${playlistId} (last play was ${now - lastPlayTime}ms ago)`);
+        return { success: true }; // Return success but don't record
+      }
+
+      // Call database function to increment play count
+      const { error } = await supabase.rpc('increment_playlist_play_count', {
+        playlist_uuid: playlistId,
+        user_uuid: userId,
+      });
+
+      if (error) {
+        console.error('[PlaylistPlayTracker] Failed to record playlist play:', error);
+        // Log but don't block playback
+        return { success: false, error: error.message };
+      }
+
+      // Update last play time
+      this.lastPlayTimes.set(playKey, now);
+      console.log(`[PlaylistPlayTracker] Successfully recorded play for playlist: ${playlistId}`);
+
+      // Clean up old entries after debounce duration
+      setTimeout(() => {
+        this.lastPlayTimes.delete(playKey);
+      }, this.DEBOUNCE_DURATION);
+
+      return { success: true };
+    } catch (error) {
+      console.error('[PlaylistPlayTracker] Error recording playlist play:', error);
+      // Log but don't block playback
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Clear all tracking state (useful for testing)
+   */
+  reset(): void {
+    this.lastPlayTimes.clear();
+    console.log('[PlaylistPlayTracker] Reset complete');
+  }
+}
+
+// Export singleton instance
+export const playlistPlayTracker = new PlaylistPlayTracker();
+
+/**
+ * Record playlist play (public API)
+ * @param playlistId - The playlist ID
+ * @param userId - The user ID
+ * @returns Promise with success status
+ */
+export async function recordPlaylistPlay(
+  playlistId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  return playlistPlayTracker.recordPlay(playlistId, userId);
+}

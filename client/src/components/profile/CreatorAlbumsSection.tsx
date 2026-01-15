@@ -8,7 +8,9 @@ import { useToast } from '@/contexts/ToastContext';
 import { getPublicAlbums } from '@/lib/profileService';
 import { getBulkSavedStatus } from '@/lib/saveService';
 import { cache, CACHE_TTL } from '@/utils/cache';
+import { onLikeEvent } from '@/utils/likeEventEmitter';
 import SaveButton from './SaveButton';
+import AlbumLikeButton from '@/components/albums/AlbumLikeButton';
 import type { Album } from '@/types/album';
 
 /**
@@ -110,10 +112,23 @@ function CreatorAlbumCard({ album, isSaved, onSaveToggle, isOwnProfile = false }
         )}
         
         {/* Metadata */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
           <span>
             {new Date(album.created_at).toLocaleDateString()}
           </span>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {/* Like Button */}
+          <div className="flex-1">
+            <AlbumLikeButton
+              albumId={album.id}
+              size="sm"
+            />
+          </div>
+          
+          {/* Save Button */}
           {!isOwnProfile && (
             <SaveButton
               itemId={album.id}
@@ -254,6 +269,24 @@ export default function CreatorAlbumsSection({
     fetchAlbums();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, initialLimit]);
+
+  // Listen for like events to update like counts
+  useEffect(() => {
+    const cleanup = onLikeEvent((detail) => {
+      if (detail.itemType === 'album') {
+        // Update the album in the list with new like count
+        setAlbums(prevAlbums =>
+          prevAlbums.map(album =>
+            album.id === detail.itemId
+              ? { ...album, like_count: detail.likeCount }
+              : album
+          )
+        );
+      }
+    });
+
+    return cleanup;
+  }, []);
 
   // Save collapse state to localStorage
   useEffect(() => {

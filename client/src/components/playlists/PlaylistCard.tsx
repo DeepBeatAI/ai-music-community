@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { deletePlaylist } from '@/lib/playlists';
+import PlaylistLikeButton from '@/components/playlists/PlaylistLikeButton';
 import type { Playlist, PlaylistWithOwner } from '@/types/playlist';
 
 interface PlaylistCardProps {
@@ -148,6 +149,13 @@ export function PlaylistCard({ playlist, onDelete, isOwner }: PlaylistCardProps)
               </span>
             )}
           </div>
+
+          {/* Like Button for public playlists */}
+          {playlist.is_public && !isOwner && (
+            <div className="mt-3">
+              <PlaylistLikeButton playlistId={playlist.id} size="sm" />
+            </div>
+          )}
 
           {/* Action Buttons (Owner Only) */}
           {isOwner && (

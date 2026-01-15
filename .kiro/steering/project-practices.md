@@ -118,6 +118,128 @@
 - ✅ Code has been tested
 - ✅ User has confirmed or testing validates success
 
+## Testing Standards
+
+### Console Output Analysis
+
+**CRITICAL: Always read and analyze console output carefully.**
+
+**When user says "this is pending" or shares console output:**
+
+1. **Read the actual output carefully:**
+   - Look for test pass/fail counts: "Test Suites: X passed, Tests: Y passed"
+   - Distinguish between errors and warnings
+   - Identify the specific issue (failure vs. warning vs. timeout)
+
+2. **Understand what "passing" means:**
+   - "Tests: 8 passed, 8 total" = **ALL TESTS PASSED**
+   - "Jest did not exit one second after the test run" = **WARNING, NOT FAILURE**
+   - Warnings about open handles don't mean tests failed
+
+3. **Take appropriate action:**
+   - If tests pass but Jest shows warnings → Mark task complete, note the warning
+   - If tests fail → Fix the actual test failures
+   - If tests timeout → Investigate the root cause
+   - **Never repeat the same fix attempt multiple times without analyzing why it didn't work**
+
+4. **Ask clarifying questions:**
+   - If unsure about the output, ask user to paste the full console output
+   - Don't assume what "pending" means without seeing the actual output
+
+**Anti-patterns to avoid:**
+```
+❌ Saying "understood" without reading console output
+❌ Treating warnings as failures
+❌ Repeating the same fix attempt without analyzing results
+❌ Not distinguishing between test failures and Jest exit warnings
+❌ Trying to "fix" tests that are already passing
+```
+
+**Correct approach:**
+```
+✅ Read console output carefully before taking action
+✅ Recognize "X passed, X total" means success
+✅ Distinguish between test failures and warnings
+✅ Mark tasks complete when tests pass, even with warnings
+✅ Try different approaches if first attempt doesn't work
+✅ Ask for console output if unclear
+```
+
+### Open Handles Prevention
+
+**CRITICAL: Prevent open handles in tests to avoid Jest exit warnings.**
+
+**Common causes of open handles:**
+1. **Timers** - `setTimeout`, `setInterval` not cleared
+2. **Event listeners** - Not removed in cleanup
+3. **Async operations** - Promises or async functions still running after test completes
+4. **React components** - Components with useEffect hooks that don't cleanup properly
+5. **Mock timers** - `jest.useFakeTimers()` without `jest.useRealTimers()` in cleanup
+
+**Best practices for writing tests:**
+
+1. **Always cleanup after each test:**
+   ```typescript
+   import { cleanup } from '@testing-library/react';
+   
+   afterEach(() => {
+     cleanup();
+     jest.clearAllMocks();
+   });
+   ```
+
+2. **Clear timers if using fake timers:**
+   ```typescript
+   afterAll(() => {
+     jest.clearAllTimers();
+     jest.useRealTimers();
+   });
+   ```
+
+3. **Wait for async operations to complete:**
+   ```typescript
+   await waitFor(() => {
+     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+   });
+   ```
+
+4. **Mock components with timers:**
+   - Mock audio players, video players, or any component with intervals
+   - Ensure mocked components don't create real timers
+
+5. **Use proper cleanup in components:**
+   - Ensure useEffect hooks return cleanup functions
+   - Clear intervals and timeouts in cleanup
+   - Remove event listeners in cleanup
+
+**When open handles occur:**
+- If tests pass but Jest shows "did not exit" warning → Acceptable for now, but note for future improvement
+- If tests fail due to open handles → Must fix before marking complete
+- Run with `--detectOpenHandles` flag to identify the source if needed
+
+**Example of proper test structure:**
+```typescript
+describe('Component Tests', () => {
+  afterEach(() => {
+    cleanup();
+    jest.clearAllMocks();
+  });
+
+  afterAll(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  it('should render correctly', async () => {
+    render(<Component />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Expected Text')).toBeInTheDocument();
+    });
+  });
+});
+```
+
 ## Documentation Standards
 
 ### Documentation Minimalism Principle
@@ -218,9 +340,11 @@
 1. **Remote database only** - Use Supabase MCP tools, never assume local database
 2. **Investigate first** - Understand existing code before changing anything
 3. **Quality gates** - Fix all errors before marking tasks complete
-4. **Documentation minimalism** - Write only necessary docs, avoid duplication
-5. **Automated testing first** - Automate tests where possible, clearly separate manual tests
-6. **Documentation standards** - Follow file-organization.md conventions
+4. **Console output analysis** - Read test output carefully, distinguish failures from warnings
+5. **Open handles prevention** - Write tests with proper cleanup to avoid Jest warnings
+6. **Documentation minimalism** - Write only necessary docs, avoid duplication
+7. **Automated testing first** - Automate tests where possible, clearly separate manual tests
+8. **Documentation standards** - Follow file-organization.md conventions
 
 **When in doubt:**
 - Ask the user for clarification
@@ -228,6 +352,8 @@
 - Verify assumptions explicitly
 - Don't assume or guess
 - Check if documentation already exists before creating new files
+- Read console output carefully before taking action
+- Don't repeat the same approach if it's not working
 
 ---
 

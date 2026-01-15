@@ -7,6 +7,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { getCreatorByUsername, getCreatorById, getPublicAlbums } from '@/lib/profileService';
 import { getBulkSavedStatus } from '@/lib/saveService';
 import SaveButton from '@/components/profile/SaveButton';
+import AlbumLikeButton from '@/components/albums/AlbumLikeButton';
 import type { Album } from '@/types/album';
 import type { CreatorProfile } from '@/types';
 
@@ -81,10 +82,23 @@ function CreatorAlbumCard({ album, isSaved, onSaveToggle, isOwnProfile = false }
         )}
         
         {/* Metadata */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
           <span>
             {new Date(album.created_at).toLocaleDateString()}
           </span>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {/* Like Button */}
+          <div className="flex-1">
+            <AlbumLikeButton
+              albumId={album.id}
+              size="sm"
+            />
+          </div>
+          
+          {/* Save Button */}
           {!isOwnProfile && (
             <SaveButton
               itemId={album.id}

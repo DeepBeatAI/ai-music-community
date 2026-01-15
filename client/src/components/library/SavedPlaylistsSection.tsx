@@ -6,7 +6,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getSavedPlaylists } from '@/lib/library';
 import { cache, CACHE_KEYS, CACHE_TTL } from '@/utils/cache';
 import { unsavePlaylist } from '@/lib/saveService';
+import { onLikeEvent } from '@/utils/likeEventEmitter';
 import SaveButton from '@/components/profile/SaveButton';
+import PlaylistLikeButton from '@/components/playlists/PlaylistLikeButton';
 import CreatorLink from '@/components/common/CreatorLink';
 import type { SavedPlaylistWithCreator } from '@/types/library';
 
@@ -134,7 +136,7 @@ function SavedPlaylistCard({ playlist, onRemove }: SavedPlaylistCardProps) {
         )}
         
         {/* Metadata */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
           <span>
             {new Date(playlist.created_at).toLocaleDateString()}
           </span>
@@ -145,6 +147,11 @@ function SavedPlaylistCard({ playlist, onRemove }: SavedPlaylistCardProps) {
             onToggle={handleSaveToggle}
             size="sm"
           />
+        </div>
+        
+        {/* Like Button */}
+        <div className="mt-2">
+          <PlaylistLikeButton playlistId={playlist.id} size="sm" />
         </div>
       </div>
     </div>
@@ -236,6 +243,24 @@ export default function SavedPlaylistsSection({
   useEffect(() => {
     fetchPlaylists();
   }, [fetchPlaylists]);
+
+  // Listen for like events to update like counts
+  useEffect(() => {
+    const cleanup = onLikeEvent((detail) => {
+      if (detail.itemType === 'playlist') {
+        // Update the playlist in the list with new like count
+        setPlaylists(prevPlaylists =>
+          prevPlaylists.map(playlist =>
+            playlist.id === detail.itemId
+              ? { ...playlist, like_count: detail.likeCount }
+              : playlist
+          )
+        );
+      }
+    });
+
+    return cleanup;
+  }, []);
 
   // Restore collapsed state from localStorage on mount
   useEffect(() => {

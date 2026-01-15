@@ -5,7 +5,7 @@ import type { PlaylistWithTracks, PlaylistTrackDisplay } from '@/types/playlist'
 import { AudioManager } from '@/lib/audio/AudioManager';
 import * as queueUtils from '@/lib/audio/queueUtils';
 import { getCachedAudioUrl } from '@/utils/audioCache';
-import { playTracker } from '@/lib/playTracking';
+import { playTracker, recordAlbumPlay, recordPlaylistPlay } from '@/lib/playTracking';
 import { useAuth } from '@/contexts/AuthContext';
 
 /**
@@ -305,6 +305,22 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
             const userId = userRef.current?.id;
             if (userId && currentTrackId) {
               playTracker.checkAndRecordPlay(currentTrackId, userId);
+              
+              // Also record album/playlist play if applicable
+              if (activePlaylist?.id && activePlaylist.id !== 'single-track' && activePlaylist.id !== 'temp-single-track') {
+                // Check if this is an album (ID format: album-{album_id})
+                if (activePlaylist.id.startsWith('album-')) {
+                  const albumId = activePlaylist.id.replace('album-', '');
+                  recordAlbumPlay(albumId, userId).catch(error => {
+                    console.error('[PlaybackContext] Failed to record album play:', error);
+                  });
+                } else {
+                  // Regular playlist
+                  recordPlaylistPlay(activePlaylist.id, userId).catch(error => {
+                    console.error('[PlaybackContext] Failed to record playlist play:', error);
+                  });
+                }
+              }
             }
           }, 5000);
         }
@@ -462,6 +478,22 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
             const userId = userRef.current?.id;
             if (userId && trackToPlay.id) {
               playTracker.checkAndRecordPlay(trackToPlay.id, userId);
+              
+              // Also record album/playlist play if applicable
+              if (playlist.id && playlist.id !== 'single-track' && playlist.id !== 'temp-single-track') {
+                // Check if this is an album (ID format: album-{album_id})
+                if (playlist.id.startsWith('album-')) {
+                  const albumId = playlist.id.replace('album-', '');
+                  recordAlbumPlay(albumId, userId).catch(error => {
+                    console.error('[PlaybackContext] Failed to record album play:', error);
+                  });
+                } else {
+                  // Regular playlist
+                  recordPlaylistPlay(playlist.id, userId).catch(error => {
+                    console.error('[PlaybackContext] Failed to record playlist play:', error);
+                  });
+                }
+              }
             }
           }, 5000);
         }
@@ -558,6 +590,22 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
           const userId = userRef.current?.id;
           if (userId && currentTrack?.id) {
             playTracker.checkAndRecordPlay(currentTrack.id, userId);
+            
+            // Also record album/playlist play if applicable
+            if (activePlaylist?.id && activePlaylist.id !== 'single-track' && activePlaylist.id !== 'temp-single-track') {
+              // Check if this is an album (ID format: album-{album_id})
+              if (activePlaylist.id.startsWith('album-')) {
+                const albumId = activePlaylist.id.replace('album-', '');
+                recordAlbumPlay(albumId, userId).catch(error => {
+                  console.error('[PlaybackContext] Failed to record album play:', error);
+                });
+              } else {
+                // Regular playlist
+                recordPlaylistPlay(activePlaylist.id, userId).catch(error => {
+                  console.error('[PlaybackContext] Failed to record playlist play:', error);
+                });
+              }
+            }
           }
         }, 5000);
       }
@@ -674,6 +722,22 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
                   const userId = userRef.current?.id;
                   if (userId && firstTrack.id) {
                     playTracker.checkAndRecordPlay(firstTrack.id, userId);
+                    
+                    // Also record album/playlist play if applicable
+                    if (activePlaylist?.id && activePlaylist.id !== 'single-track' && activePlaylist.id !== 'temp-single-track') {
+                      // Check if this is an album (ID format: album-{album_id})
+                      if (activePlaylist.id.startsWith('album-')) {
+                        const albumId = activePlaylist.id.replace('album-', '');
+                        recordAlbumPlay(albumId, userId).catch(error => {
+                          console.error('[PlaybackContext] Failed to record album play:', error);
+                        });
+                      } else {
+                        // Regular playlist
+                        recordPlaylistPlay(activePlaylist.id, userId).catch(error => {
+                          console.error('[PlaybackContext] Failed to record playlist play:', error);
+                        });
+                      }
+                    }
                   }
                 }, 5000);
               }
@@ -737,6 +801,22 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
                 const userId = userRef.current?.id;
                 if (userId && nextTrack.id) {
                   playTracker.checkAndRecordPlay(nextTrack.id, userId);
+                  
+                  // Also record album/playlist play if applicable
+                  if (activePlaylist?.id && activePlaylist.id !== 'single-track' && activePlaylist.id !== 'temp-single-track') {
+                    // Check if this is an album (ID format: album-{album_id})
+                    if (activePlaylist.id.startsWith('album-')) {
+                      const albumId = activePlaylist.id.replace('album-', '');
+                      recordAlbumPlay(albumId, userId).catch(error => {
+                        console.error('[PlaybackContext] Failed to record album play:', error);
+                      });
+                    } else {
+                      // Regular playlist
+                      recordPlaylistPlay(activePlaylist.id, userId).catch(error => {
+                        console.error('[PlaybackContext] Failed to record playlist play:', error);
+                      });
+                    }
+                  }
                 }
               }, 5000);
             }
@@ -830,6 +910,22 @@ export function PlaybackProvider({ children }: PlaybackProviderProps): React.Rea
               const userId = userRef.current?.id;
               if (userId && prevTrack.id) {
                 playTracker.checkAndRecordPlay(prevTrack.id, userId);
+                
+                // Also record album/playlist play if applicable
+                if (activePlaylist?.id && activePlaylist.id !== 'single-track' && activePlaylist.id !== 'temp-single-track') {
+                  // Check if this is an album (ID format: album-{album_id})
+                  if (activePlaylist.id.startsWith('album-')) {
+                    const albumId = activePlaylist.id.replace('album-', '');
+                    recordAlbumPlay(albumId, userId).catch(error => {
+                      console.error('[PlaybackContext] Failed to record album play:', error);
+                    });
+                  } else {
+                    // Regular playlist
+                    recordPlaylistPlay(activePlaylist.id, userId).catch(error => {
+                      console.error('[PlaybackContext] Failed to record playlist play:', error);
+                    });
+                  }
+                }
               }
             }, 5000);
           }

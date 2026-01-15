@@ -7,6 +7,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { getCreatorByUsername, getCreatorById, getPublicPlaylists } from '@/lib/profileService';
 import { getBulkSavedStatus } from '@/lib/saveService';
 import SaveButton from '@/components/profile/SaveButton';
+import PlaylistLikeButton from '@/components/playlists/PlaylistLikeButton';
 import type { Playlist } from '@/types/playlist';
 import type { CreatorProfile } from '@/types';
 
@@ -89,10 +90,23 @@ function CreatorPlaylistCard({ playlist, isSaved, onSaveToggle, isOwnProfile = f
         )}
         
         {/* Metadata */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
           <span>
             {new Date(playlist.created_at).toLocaleDateString()}
           </span>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {/* Like Button */}
+          <div className="flex-1">
+            <PlaylistLikeButton
+              playlistId={playlist.id}
+              size="sm"
+            />
+          </div>
+          
+          {/* Save Button */}
           {!isOwnProfile && (
             <SaveButton
               itemId={playlist.id}

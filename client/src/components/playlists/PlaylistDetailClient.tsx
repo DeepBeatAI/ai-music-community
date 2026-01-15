@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import MainLayout from '@/components/layout/MainLayout';
 import SaveButton from '@/components/profile/SaveButton';
+import PlaylistLikeButton from '@/components/playlists/PlaylistLikeButton';
 import CreatorLink from '@/components/common/CreatorLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { removeTrackFromPlaylist, reorderPlaylistTracks, getPlaylistWithTracks } from '@/lib/playlists';
@@ -230,8 +231,8 @@ export function PlaylistDetailClient({
 
           {/* Playlist Info */}
           <div className="flex-1">
-            <div className="flex items-start justify-between mb-4">
-              <div>
+            <div className="flex items-start justify-between mb-4 gap-4">
+              <div className="flex-1 min-w-0">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
                   {playlist.name}
                 </h1>
@@ -253,26 +254,34 @@ export function PlaylistDetailClient({
                 )}
               </div>
 
-              {/* Save Button for non-owners */}
-              {!isOwner && user && (
-                <SaveButton
-                  itemId={playlist.id}
-                  itemType="playlist"
-                  isSaved={isSaved}
-                  onToggle={() => setIsSaved(!isSaved)}
-                  size="md"
-                />
-              )}
-              
-              {/* Edit Button for owners */}
-              {isOwner && (
-                <button
-                  onClick={() => router.push(`/playlists/${playlist.id}/edit`)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Edit
-                </button>
-              )}
+              {/* Actions */}
+              <div className="flex gap-2 flex-shrink-0">
+                {/* Like Button for non-owners */}
+                {!isOwner && user && (
+                  <PlaylistLikeButton playlistId={playlist.id} size="md" />
+                )}
+                
+                {/* Save Button for non-owners */}
+                {!isOwner && user && (
+                  <SaveButton
+                    itemId={playlist.id}
+                    itemType="playlist"
+                    isSaved={isSaved}
+                    onToggle={() => setIsSaved(!isSaved)}
+                    size="md"
+                  />
+                )}
+                
+                {/* Edit Button for owners */}
+                {isOwner && (
+                  <button
+                    onClick={() => router.push(`/playlists/${playlist.id}/edit`)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Creator Name - Only show for other users' playlists */}

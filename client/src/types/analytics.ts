@@ -115,3 +115,39 @@ export interface MetricCollectionLog {
   error_details: Record<string, unknown> | null;
   created_at: string;
 }
+
+/**
+ * TrendingAlbum interface
+ * Represents a trending album with popularity metrics
+ * Used for displaying trending albums in the Discover page
+ */
+export interface TrendingAlbum {
+  album_id: string;
+  name: string;
+  creator_username: string;
+  creator_user_id: string;
+  play_count: number;
+  like_count: number;
+  trending_score: number;
+  created_at: string;
+  cover_image_url: string | null;
+  track_count: number;
+}
+
+/**
+ * TrendingPlaylist interface
+ * Represents a trending playlist with popularity metrics
+ * Used for displaying trending playlists in the Discover page
+ */
+export interface TrendingPlaylist {
+  playlist_id: string;
+  name: string;
+  creator_username: string;
+  creator_user_id: string;
+  play_count: number;
+  like_count: number;
+  trending_score: number;
+  created_at: string;
+  cover_image_url: string | null;
+  track_count: number;
+}

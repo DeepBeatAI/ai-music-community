@@ -205,3 +205,6 @@ export * from './playlist';
 
 // Re-export moderation types
 export * from './moderation';
+
+// Re-export analytics types (including TrendingAlbum and TrendingPlaylist)
+export * from './analytics';

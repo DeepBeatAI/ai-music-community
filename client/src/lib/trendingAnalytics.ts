@@ -54,6 +54,7 @@
  */
 
 import { supabase } from './supabase';
+import { TrendingAlbum, TrendingPlaylist } from '@/types/analytics';
 
 /**
  * TrendingTrack Interface
@@ -220,6 +221,146 @@ export async function getPopularCreatorsAllTime(): Promise<PopularCreator[]> {
     return data || [];
   } catch (error) {
     console.error('Error fetching popular creators (all time):', error);
+    return [];
+  }
+}
+
+/**
+ * Get trending albums for last 7 days
+ * 
+ * Fetches albums created in the last 7 days sorted by trending score.
+ * Uses database function get_trending_albums() which applies:
+ * - Time filter: created_at >= NOW() - INTERVAL '7 days'
+ * - Public filter: is_public = true
+ * - Score calculation: (play_count × 0.7) + (like_count × 0.3)
+ * - Sorting: ORDER BY trending_score DESC
+ * 
+ * CACHING: Results are cached internally by getCachedAnalytics wrapper.
+ * Use with getCachedAnalytics for page-specific cache keys.
+ * 
+ * USAGE:
+ * const albums = await getTrendingAlbums7Days();
+ * // Returns up to 10 albums sorted by trending score
+ * 
+ * // With caching wrapper
+ * const albums = await getCachedAnalytics('discover_albums_7d', getTrendingAlbums7Days);
+ * 
+ * @returns Array of TrendingAlbum objects, empty array on error
+ */
+export async function getTrendingAlbums7Days(): Promise<TrendingAlbum[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_trending_albums', {
+      days_back: 7,
+      result_limit: 10,
+    });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching trending albums (7d):', error);
+    return []; // Return empty array instead of throwing
+  }
+}
+
+/**
+ * Get trending albums for all time
+ * 
+ * Fetches all public albums sorted by trending score, regardless of age.
+ * Uses database function get_trending_albums() with days_back = 0.
+ * 
+ * GOTCHA: days_back = 0 is a special value meaning "all time".
+ * This is handled by the database function, not by this code.
+ * 
+ * USAGE:
+ * const allTimeAlbums = await getTrendingAlbumsAllTime();
+ * // Returns up to 10 albums of any age sorted by trending score
+ * 
+ * // With caching wrapper
+ * const albums = await getCachedAnalytics('discover_albums_all', getTrendingAlbumsAllTime);
+ * 
+ * @returns Array of TrendingAlbum objects, empty array on error
+ */
+export async function getTrendingAlbumsAllTime(): Promise<TrendingAlbum[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_trending_albums', {
+      days_back: 0, // 0 means all time
+      result_limit: 10,
+    });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching trending albums (all time):', error);
+    return [];
+  }
+}
+
+/**
+ * Get trending playlists for last 7 days
+ * 
+ * Fetches playlists created in the last 7 days sorted by trending score.
+ * Uses database function get_trending_playlists() which applies:
+ * - Time filter: created_at >= NOW() - INTERVAL '7 days'
+ * - Public filter: is_public = true
+ * - Score calculation: (play_count × 0.7) + (like_count × 0.3)
+ * - Sorting: ORDER BY trending_score DESC
+ * 
+ * CACHING: Results are cached internally by getCachedAnalytics wrapper.
+ * Use with getCachedAnalytics for page-specific cache keys.
+ * 
+ * USAGE:
+ * const playlists = await getTrendingPlaylists7Days();
+ * // Returns up to 10 playlists sorted by trending score
+ * 
+ * // With caching wrapper
+ * const playlists = await getCachedAnalytics('discover_playlists_7d', getTrendingPlaylists7Days);
+ * 
+ * @returns Array of TrendingPlaylist objects, empty array on error
+ */
+export async function getTrendingPlaylists7Days(): Promise<TrendingPlaylist[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_trending_playlists', {
+      days_back: 7,
+      result_limit: 10,
+    });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching trending playlists (7d):', error);
+    return []; // Return empty array instead of throwing
+  }
+}
+
+/**
+ * Get trending playlists for all time
+ * 
+ * Fetches all public playlists sorted by trending score, regardless of age.
+ * Uses database function get_trending_playlists() with days_back = 0.
+ * 
+ * GOTCHA: days_back = 0 is a special value meaning "all time".
+ * This is handled by the database function, not by this code.
+ * 
+ * USAGE:
+ * const allTimePlaylists = await getTrendingPlaylistsAllTime();
+ * // Returns up to 10 playlists of any age sorted by trending score
+ * 
+ * // With caching wrapper
+ * const playlists = await getCachedAnalytics('discover_playlists_all', getTrendingPlaylistsAllTime);
+ * 
+ * @returns Array of TrendingPlaylist objects, empty array on error
+ */
+export async function getTrendingPlaylistsAllTime(): Promise<TrendingPlaylist[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_trending_playlists', {
+      days_back: 0, // 0 means all time
+      result_limit: 10,
+    });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching trending playlists (all time):', error);
     return [];
   }
 }

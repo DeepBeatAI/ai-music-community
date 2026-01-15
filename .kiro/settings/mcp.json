@@ -26,7 +26,8 @@
         "apply_migration",
         "generate_typescript_types",
         "list_projects",
-        "get_logs"
+        "get_logs",
+        "get_organization"
       ]
     }
   }

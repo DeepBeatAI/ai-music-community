@@ -3,10 +3,13 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { TrendingAlbum } from '@/types/analytics';
 import AlbumLikeButton from '@/components/albums/AlbumLikeButton';
+import SaveButton from '@/components/profile/SaveButton';
 import { AlbumCardErrorBoundary } from './DiscoverErrorBoundaries';
 import { usePlayback } from '@/contexts/PlaybackContext';
+import { useAuth } from '@/contexts/AuthContext';
 import type { PlaylistWithTracks } from '@/types/playlist';
 import { getAlbumWithTracks } from '@/lib/albums';
+import { getSavedStatus } from '@/lib/saveService';
 import { onLikeEvent } from '@/utils/likeEventEmitter';
 
 interface TrendingAlbumCardProps {
@@ -21,9 +24,12 @@ export default function TrendingAlbumCard({
   showDate = false 
 }: TrendingAlbumCardProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const { playPlaylist } = usePlayback();
   const [likeCount, setLikeCount] = useState(album.like_count);
   const [isLoadingPlay, setIsLoadingPlay] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(true);
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't navigate if clicking on the like button or play button
@@ -36,6 +42,33 @@ export default function TrendingAlbumCard({
   const handleLikeChange = (liked: boolean, newLikeCount: number) => {
     setLikeCount(newLikeCount);
   };
+
+  const handleSaveToggle = () => {
+    setIsSaved(!isSaved);
+  };
+
+  // Fetch saved status on mount
+  useEffect(() => {
+    const fetchSavedStatus = async () => {
+      if (!user) {
+        setIsLoadingSaved(false);
+        return;
+      }
+
+      try {
+        const result = await getSavedStatus(user.id, album.album_id, 'album');
+        if (result.data !== null) {
+          setIsSaved(result.data);
+        }
+      } catch (error) {
+        console.error('Error fetching saved status:', error);
+      } finally {
+        setIsLoadingSaved(false);
+      }
+    };
+
+    fetchSavedStatus();
+  }, [user, album.album_id]);
 
   // Listen for like events from other instances to sync like count
   useEffect(() => {
@@ -253,6 +286,19 @@ export default function TrendingAlbumCard({
           >
             {isLoadingPlay ? 'Loading...' : 'Play'}
           </button>
+          
+          {/* Save Button - only show if not own content */}
+          {!isLoadingSaved && user && user.id !== album.creator_user_id && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <SaveButton
+                itemId={album.album_id}
+                itemType="album"
+                isSaved={isSaved}
+                onToggle={handleSaveToggle}
+                size="md"
+              />
+            </div>
+          )}
           
           {/* Like Button */}
           <div onClick={(e) => e.stopPropagation()}>

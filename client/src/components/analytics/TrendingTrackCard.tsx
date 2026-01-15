@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePlayback } from '@/contexts/PlaybackContext';
+import { useAuth } from '@/contexts/AuthContext';
+import SaveButton from '@/components/profile/SaveButton';
 import type { TrendingTrack } from '@/lib/trendingAnalytics';
 import type { PlaylistTrackDisplay } from '@/types/playlist';
+import { getSavedStatus } from '@/lib/saveService';
 
 interface TrendingTrackCardProps {
   track: TrendingTrack;
@@ -17,7 +20,10 @@ interface TrendingTrackCardProps {
  */
 export function TrendingTrackCard({ track, rank, showDate }: TrendingTrackCardProps) {
   const { playTrack, currentTrack, isPlaying, pause } = usePlayback();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(true);
   
   // Check if this track is currently playing
   const isCurrentTrack = currentTrack?.id === track.track_id;
@@ -58,6 +64,33 @@ export function TrendingTrackCard({ track, rank, showDate }: TrendingTrackCardPr
       setIsLoading(false);
     }
   };
+
+  const handleSaveToggle = () => {
+    setIsSaved(!isSaved);
+  };
+
+  // Fetch saved status on mount
+  useEffect(() => {
+    const fetchSavedStatus = async () => {
+      if (!user) {
+        setIsLoadingSaved(false);
+        return;
+      }
+
+      try {
+        const result = await getSavedStatus(user.id, track.track_id, 'track');
+        if (result.data !== null) {
+          setIsSaved(result.data);
+        }
+      } catch (error) {
+        console.error('Error fetching saved status:', error);
+      } finally {
+        setIsLoadingSaved(false);
+      }
+    };
+
+    fetchSavedStatus();
+  }, [user, track.track_id]);
   
   // Determine button text based on state
   const buttonText = isCurrentlyPlaying ? 'Pause' : 'Play';
@@ -97,13 +130,26 @@ export function TrendingTrackCard({ track, rank, showDate }: TrendingTrackCardPr
       </div>
 
       {/* Actions */}
-      <button 
-        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-        onClick={handlePlay}
-        disabled={isLoading || !track.file_url}
-      >
-        {isLoading ? 'Loading...' : buttonText}
-      </button>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button 
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handlePlay}
+          disabled={isLoading || !track.file_url}
+        >
+          {isLoading ? 'Loading...' : buttonText}
+        </button>
+
+        {/* Save Button - only show if not own content */}
+        {!isLoadingSaved && user && user.id !== track.user_id && (
+          <SaveButton
+            itemId={track.track_id}
+            itemType="track"
+            isSaved={isSaved}
+            onToggle={handleSaveToggle}
+            size="md"
+          />
+        )}
+      </div>
     </div>
   );
 }

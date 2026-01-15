@@ -1,13 +1,16 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import { DiscoverTabs } from '@/components/discover/DiscoverTabs';
 
 /**
  * DiscoverPage Component
  * 
- * Public discovery page for finding trending content and popular creators.
- * Works for both authenticated and unauthenticated users.
+ * Discovery page for finding trending content and popular creators.
+ * Requires authentication to access.
  * 
  * LAYOUT:
  * Tabbed interface with four tabs:
@@ -42,7 +45,7 @@ import { DiscoverTabs } from '@/components/discover/DiscoverTabs';
  * └─────────────────────────────────────────────────────────────────┘
  * 
  * IMPORTANT NOTES:
- * - This page is PUBLIC - works without authentication
+ * - This page requires authentication
  * - Trending/Popular sections use OBJECTIVE metrics (no personalization)
  * - "Suggested for You" section only shows for authenticated users
  * - Tracks tab is active by default
@@ -58,6 +61,35 @@ import { DiscoverTabs } from '@/components/discover/DiscoverTabs';
  * - 11.1, 11.2, 11.3: Creators tab displays suggested users and popular creators
  */
 export default function DiscoverPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login?redirect=/discover');
+    }
+  }, [user, loading, router]);
+
+  // Show loading state while checking authentication
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="max-w-7xl mx-auto p-6 h-full flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-gray-400">Loading...</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Don't render content if not authenticated (will redirect)
+  if (!user) {
+    return null;
+  }
+
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto p-6 h-full flex flex-col">

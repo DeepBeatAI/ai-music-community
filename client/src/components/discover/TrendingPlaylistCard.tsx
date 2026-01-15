@@ -3,9 +3,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { TrendingPlaylist } from '@/types/analytics';
 import PlaylistLikeButton from '@/components/playlists/PlaylistLikeButton';
+import SaveButton from '@/components/profile/SaveButton';
 import { PlaylistCardErrorBoundary } from './DiscoverErrorBoundaries';
 import { usePlayback } from '@/contexts/PlaybackContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { getPlaylistWithTracks } from '@/lib/playlists';
+import { getSavedStatus } from '@/lib/saveService';
 import { onLikeEvent } from '@/utils/likeEventEmitter';
 
 interface TrendingPlaylistCardProps {
@@ -20,9 +23,12 @@ export default function TrendingPlaylistCard({
   showDate = false 
 }: TrendingPlaylistCardProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const { playPlaylist } = usePlayback();
   const [likeCount, setLikeCount] = useState(playlist.like_count);
   const [isLoadingPlay, setIsLoadingPlay] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(true);
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't navigate if clicking on the like button or play button
@@ -35,6 +41,33 @@ export default function TrendingPlaylistCard({
   const handleLikeChange = (liked: boolean, newLikeCount: number) => {
     setLikeCount(newLikeCount);
   };
+
+  const handleSaveToggle = () => {
+    setIsSaved(!isSaved);
+  };
+
+  // Fetch saved status on mount
+  useEffect(() => {
+    const fetchSavedStatus = async () => {
+      if (!user) {
+        setIsLoadingSaved(false);
+        return;
+      }
+
+      try {
+        const result = await getSavedStatus(user.id, playlist.playlist_id, 'playlist');
+        if (result.data !== null) {
+          setIsSaved(result.data);
+        }
+      } catch (error) {
+        console.error('Error fetching saved status:', error);
+      } finally {
+        setIsLoadingSaved(false);
+      }
+    };
+
+    fetchSavedStatus();
+  }, [user, playlist.playlist_id]);
 
   // Listen for like events from other instances to sync like count
   useEffect(() => {
@@ -210,6 +243,19 @@ export default function TrendingPlaylistCard({
           >
             {isLoadingPlay ? 'Loading...' : 'Play'}
           </button>
+          
+          {/* Save Button - only show if not own content */}
+          {!isLoadingSaved && user && user.id !== playlist.creator_user_id && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <SaveButton
+                itemId={playlist.playlist_id}
+                itemType="playlist"
+                isSaved={isSaved}
+                onToggle={handleSaveToggle}
+                size="md"
+              />
+            </div>
+          )}
           
           {/* Like Button */}
           <div onClick={(e) => e.stopPropagation()}>

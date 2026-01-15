@@ -69,6 +69,7 @@ export interface TrendingTrack {
   track_id: string;
   title: string;
   author: string;
+  user_id: string;
   play_count: number;
   like_count: number;
   trending_score: number;

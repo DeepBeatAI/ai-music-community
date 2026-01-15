@@ -29,11 +29,38 @@ jest.mock('@/contexts/ToastContext', () => ({
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { User } from '@supabase/supabase-js';
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
 
 const mockShowToast = jest.fn();
+
+// Create a mock user that satisfies the Supabase User type
+const createMockUser = (id: string = 'test-user'): User => ({
+  id,
+  email: 'test@example.com',
+  app_metadata: {},
+  user_metadata: {},
+  aud: 'authenticated',
+  created_at: new Date().toISOString(),
+});
+
+// Create a complete mock auth context
+const createMockAuthContext = (user: User | null = createMockUser()) => ({
+  user,
+  session: null,
+  profile: null,
+  userTypeInfo: null,
+  isAdmin: false,
+  loading: false,
+  userTypeLoading: false,
+  userTypeError: null,
+  signIn: jest.fn(),
+  signUp: jest.fn(),
+  signOut: jest.fn(),
+  refreshProfile: jest.fn(),
+});
 
 describe('AlbumLikeButton', () => {
   beforeEach(() => {
@@ -47,14 +74,7 @@ describe('AlbumLikeButton', () => {
 
   describe('Rendering with initial state', () => {
     it('should render with initial like count', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 42 },
@@ -68,14 +88,7 @@ describe('AlbumLikeButton', () => {
     });
 
     it('should render with liked state', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: true, likeCount: 10 },
@@ -90,14 +103,7 @@ describe('AlbumLikeButton', () => {
     });
 
     it('should render with unliked state', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 5 },
@@ -114,14 +120,7 @@ describe('AlbumLikeButton', () => {
 
   describe('Click handling and optimistic updates', () => {
     it('should perform optimistic update on like', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 5 },
@@ -148,14 +147,7 @@ describe('AlbumLikeButton', () => {
     });
 
     it('should perform optimistic update on unlike', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: true, likeCount: 10 },
@@ -184,14 +176,7 @@ describe('AlbumLikeButton', () => {
 
   describe('Error handling and toast notifications', () => {
     it('should show error toast on API failure', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 5 },
@@ -217,14 +202,7 @@ describe('AlbumLikeButton', () => {
     });
 
     it('should revert optimistic update on error', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 5 },
@@ -249,14 +227,7 @@ describe('AlbumLikeButton', () => {
 
   describe('Sign-in prompt for unauthenticated users', () => {
     it('should show disabled button with sign-in title for unauthenticated users', () => {
-      mockUseAuth.mockReturnValue({
-        user: null,
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext(null));
 
       (albumsLib.getAlbumLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 5 },
@@ -284,14 +255,7 @@ describe('PlaylistLikeButton', () => {
 
   describe('Rendering with initial state', () => {
     it('should render with initial like count', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (playlistsLib.getPlaylistLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 15 },
@@ -305,14 +269,7 @@ describe('PlaylistLikeButton', () => {
     });
 
     it('should render with liked state', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (playlistsLib.getPlaylistLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: true, likeCount: 20 },
@@ -329,14 +286,7 @@ describe('PlaylistLikeButton', () => {
 
   describe('Click handling and optimistic updates', () => {
     it('should perform optimistic update on like', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (playlistsLib.getPlaylistLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 8 },
@@ -365,14 +315,7 @@ describe('PlaylistLikeButton', () => {
 
   describe('Error handling and toast notifications', () => {
     it('should show error toast on API failure', async () => {
-      mockUseAuth.mockReturnValue({
-        user: { id: 'test-user', email: 'test@example.com' },
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext());
 
       (playlistsLib.getPlaylistLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 12 },
@@ -400,14 +343,7 @@ describe('PlaylistLikeButton', () => {
 
   describe('Sign-in prompt for unauthenticated users', () => {
     it('should show disabled button with sign-in title for unauthenticated users', () => {
-      mockUseAuth.mockReturnValue({
-        user: null,
-        loading: false,
-        signIn: jest.fn(),
-        signUp: jest.fn(),
-        signOut: jest.fn(),
-        updateUserProfile: jest.fn(),
-      });
+      mockUseAuth.mockReturnValue(createMockAuthContext(null));
 
       (playlistsLib.getPlaylistLikeStatus as jest.Mock).mockResolvedValue({
         data: { liked: false, likeCount: 7 },
